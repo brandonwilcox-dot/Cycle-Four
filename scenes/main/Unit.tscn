@@ -2,6 +2,5 @@
 
 [ext_resource type="Script" path="res://src/entities/Unit.gd" id="1"]
 
-[node name="Unit" type="PathFollow2D"]
-rotates = false
+[node name="Unit" type="Node2D"]
 script = ExtResource("1")

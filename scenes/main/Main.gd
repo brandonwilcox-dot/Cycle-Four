@@ -8,9 +8,9 @@ const GRID_SIZE: int = 64   ## Pixels per grid cell for tower snapping
 
 @onready var faction_select: Control = $UILayer/FactionSelectScreen
 @onready var hud: Control            = $UILayer/HUD
-@onready var unit_path: Path2D       = $WorldMap/UnitPath
 @onready var tower_layer: Node2D     = $WorldMap/TowerLayer
 @onready var world_map: Node2D       = $WorldMap
+@onready var _map_grid: Node2D       = $WorldMap/MapGrid
 
 ## Placement state
 var _placement_mode: bool     = false
@@ -21,7 +21,6 @@ func _ready() -> void:
 	hud.hide()
 	faction_select.selection_confirmed.connect(_on_faction_confirmed)
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
-	_build_default_path()
 	if not GameState.current_faction.is_empty():
 		## Restore FactionManager state from save so HUD and tower button initialise
 		## correctly without resetting the economy (SaveManager already did that).
@@ -66,18 +65,30 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func _try_place_tower(screen_pos: Vector2) -> void:
-	## Snap to grid and validate before spending resources
+	## Snap click position to the nearest grid cell
 	var cell := Vector2i(
 		int(floor(screen_pos.x / GRID_SIZE)),
 		int(floor(screen_pos.y / GRID_SIZE))
 	)
 	if _occupied_cells.has(cell):
-		return   ## Cell already occupied
+		return   ## Cell already has a tower
+
+	## Phase C: reject placement that would disconnect any spawn from the base.
+	## Also blocks placement directly on spawn or base cells.
+	if not _map_grid.can_place_at(cell.x, cell.y):
+		return
+
 	var cost: Dictionary = {FactionManager.get_primary_resource(): _pending_tower.primary_cost}
 	if not EconomyManager.can_afford(cost):
-		return   ## Not enough resources
+		return
 	EconomyManager.spend(cost)
+
+	## Commit path change BEFORE placing the tower node so rerouted units
+	## get valid waypoints on the same frame the tower appears.
+	var route_changed : bool = _map_grid.mark_tower_placed(cell.x, cell.y)
 	_place_tower(cell)
+	if route_changed:
+		EventBus.path_changed.emit()
 
 func _place_tower(cell: Vector2i) -> void:
 	_occupied_cells[cell] = true
@@ -96,29 +107,5 @@ func _cancel_placement() -> void:
 	_pending_tower  = null
 	hud.end_placement_mode()
 
-## -- Map path --
-
-func _build_default_path() -> void:
-	## Placeholder S-curve path across the screen.
-	## Replace with designed map paths per biome (core/17).
-	var points: Array[Vector2] = [
-		Vector2(50.0,   300.0),
-		Vector2(400.0,  300.0),
-		Vector2(600.0,  500.0),
-		Vector2(900.0,  500.0),
-		Vector2(1100.0, 250.0),
-		Vector2(1400.0, 250.0),
-		Vector2(1600.0, 540.0),
-		Vector2(1860.0, 540.0),
-	]
-	var curve := Curve2D.new()
-	for p in points:
-		curve.add_point(p)
-	unit_path.curve = curve
-
-	## Draw the path so the player can see where units will walk.
-	var line := Line2D.new()
-	line.points = curve.tessellate()
-	line.width  = 6.0
-	line.default_color = Color(0.35, 0.35, 0.50, 0.85)
-	world_map.add_child(line)
+## Map path is now owned by MapGrid (res://src/core/map/MapGrid.gd).
+## Main.gd no longer builds or holds a Path2D reference.

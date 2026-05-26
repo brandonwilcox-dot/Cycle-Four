@@ -26,7 +26,10 @@ func _process(delta: float) -> void:
 # -- Public API --
 
 func begin_waves() -> void:
-	if state != WaveState.IDLE:
+	## Accept both IDLE and RESULTS so a player press during the post-wave
+	## grace period isn't silently dropped and doesn't soft-lock the HUD button.
+	## The _on_wave_ended await will find state != RESULTS and do nothing.
+	if state not in [WaveState.IDLE, WaveState.RESULTS]:
 		return
 	state = WaveState.COUNTDOWN
 	countdown_timer = WAVE_COUNTDOWN

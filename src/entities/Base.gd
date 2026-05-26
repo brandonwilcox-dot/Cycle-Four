@@ -5,10 +5,12 @@
 ## Design ref: core/17_units-maps-buildings.md (FOB concept)
 extends Node2D
 
-## Turret stats -- strong enough to handle early waves solo, not trivial past wave 5.
-const RANGE: float        = 200.0  ## pixels
-const DAMAGE: float       = 14.0   ## per shot
-const ATTACK_SPEED: float = 1.2    ## shots per second
+## Turret stats -- strong enough to carry early waves solo, challenged past wave 5.
+## Phase B: base moved to map centre (992, 544); range kept in world-space pixels.
+## Phase A balance pass will tune these against procedural wave scaling.
+const RANGE: float        = 256.0  ## pixels -- covers ~4 grid cells
+const DAMAGE: float       = 18.0   ## per shot
+const ATTACK_SPEED: float = 1.5    ## shots per second
 
 var _attack_timer: float = 0.0
 

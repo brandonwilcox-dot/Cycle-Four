@@ -86,10 +86,12 @@ func _initialize_faction_economy() -> void:
 	## Base rates -- buildings add on top of these
 	EconomyManager.set_production_rate(primary,   1.0)
 	EconomyManager.set_production_rate(secondary, 0.2)
-	## Use add_resource() so resource_changed fires immediately and HUD shows correct values
-	EconomyManager.add_resource(primary,   50.0)
+	## Use add_resource() so resource_changed fires immediately and HUD shows correct values.
+	## 75 primary gives the player 3 × T1 towers before wave 1 without waiting on income.
+	EconomyManager.add_resource(primary,   75.0)
 	EconomyManager.add_resource(secondary, 10.0)
 
 func _default_enemy_count(wave: int) -> int:
 	## Fallback scaling before wave tables are authored.
-	return 5 + (wave * 2)
+	## Starts at 6 and grows by 2 per wave (matches WaveSpawner procedural defaults).
+	return 4 + (wave * 2)

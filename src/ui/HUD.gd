@@ -68,8 +68,8 @@ func _on_resource_changed(faction_id: String, resource_id: String, amount: float
 
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	wave_label.text  = "Wave %d" % wave_number
-	wave_status.text = "ACTIVE"
-	wave_status.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	wave_status.text = "INCOMING"
+	wave_status.add_theme_color_override("font_color", Color(1.0, 0.55, 0.1))
 	start_wave_btn.disabled = true
 
 func _on_wave_ended(_wave_number: int, result: String) -> void:
@@ -86,10 +86,13 @@ func _on_placement_started(_tower_data: Resource) -> void:
 	place_tower_btn.disabled = true
 
 func _on_start_wave_pressed() -> void:
+	## Do NOT touch the button or status here.
+	## begin_waves() may still be in COUNTDOWN from a rapid re-press;
+	## wave_started fires ~1 s later and disables the button correctly.
+	## Driving state from the press handler caused a soft-lock when the
+	## request was silently dropped (RESULTS state) but the button was
+	## already disabled with nothing left to re-enable it.
 	WaveManager.begin_waves()
-	start_wave_btn.disabled = true
-	wave_status.text = "INCOMING..."
-	wave_status.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
 
 func _on_place_tower_pressed() -> void:
 	if _starter_tower == null:

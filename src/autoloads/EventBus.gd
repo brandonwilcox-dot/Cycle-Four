@@ -19,6 +19,7 @@ signal base_damaged(amount: float, attacker_data: Dictionary)
 # -- Tower Defense --
 signal tower_placement_requested(tower_data: Resource)  ## HUD -> Main: enter placement mode
 signal tower_placed(tower_data: Resource, grid_pos: Vector2i)
+signal path_changed  ## Emitted by Main when a tower blocks a PATH cell; units reroute
 signal building_placed(building_data: Dictionary, grid_pos: Vector2i)
 signal building_sold(building_data: Dictionary, grid_pos: Vector2i)
 signal building_upgraded(building_data: Dictionary, tier: int)
