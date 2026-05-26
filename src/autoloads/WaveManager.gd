@@ -69,8 +69,8 @@ func _end_wave(victory: bool) -> void:
 	EventBus.wave_ended.emit(current_wave, result)
 
 func _on_wave_ended(_wave_num: int, _result: String) -> void:
-	## Wait briefly then arm the countdown for the next wave.
+	## Wait briefly then return to IDLE so the player must press Begin Waves again.
+	## Auto-advancing waves will be a toggle once difficulty tuning is in place.
 	await get_tree().create_timer(3.0).timeout
-	if state == WaveState.RESULTS:   ## Guard against double-fires
-		state = WaveState.COUNTDOWN
-		countdown_timer = WAVE_COUNTDOWN
+	if state == WaveState.RESULTS:
+		state = WaveState.IDLE
