@@ -7,6 +7,7 @@ extends Node
 @onready var faction_select: Control = $UILayer/FactionSelectScreen
 @onready var hud: Control            = $UILayer/HUD
 @onready var unit_path: Path2D       = $WorldMap/UnitPath
+@onready var world_map: Node2D       = $WorldMap
 
 func _ready() -> void:
 	hud.hide()
@@ -25,13 +26,25 @@ func _start_game_world() -> void:
 func _build_default_path() -> void:
 	## Placeholder S-curve path across the screen.
 	## Replace with designed map paths per biome (core/17).
+	var points: Array[Vector2] = [
+		Vector2(50.0,   300.0),
+		Vector2(400.0,  300.0),
+		Vector2(600.0,  500.0),
+		Vector2(900.0,  500.0),
+		Vector2(1100.0, 250.0),
+		Vector2(1400.0, 250.0),
+		Vector2(1600.0, 540.0),
+		Vector2(1860.0, 540.0),
+	]
 	var curve := Curve2D.new()
-	curve.add_point(Vector2(50.0,   300.0))
-	curve.add_point(Vector2(400.0,  300.0))
-	curve.add_point(Vector2(600.0,  500.0))
-	curve.add_point(Vector2(900.0,  500.0))
-	curve.add_point(Vector2(1100.0, 250.0))
-	curve.add_point(Vector2(1400.0, 250.0))
-	curve.add_point(Vector2(1600.0, 540.0))
-	curve.add_point(Vector2(1860.0, 540.0))
+	for p in points:
+		curve.add_point(p)
 	unit_path.curve = curve
+
+	## Draw the path so the player can see where units will walk.
+	## Uses tessellate() so the line follows the curve smoothly.
+	var line := Line2D.new()
+	line.points = curve.tessellate()
+	line.width = 6.0
+	line.default_color = Color(0.35, 0.35, 0.50, 0.85)
+	world_map.add_child(line)

@@ -10,7 +10,7 @@ var current_wave: int = 0
 var enemies_remaining: int = 0
 var countdown_timer: float = 0.0
 
-const WAVE_COUNTDOWN: float = 5.0   # seconds between waves
+const WAVE_COUNTDOWN: float = 1.0   # seconds between waves (keep short during dev)
 
 signal _spawn_timer_done()
 

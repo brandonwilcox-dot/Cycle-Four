@@ -75,8 +75,18 @@ func _spawn_unit() -> void:
 	})
 
 func _start_procedural_wave(wave_number: int) -> void:
-	## No wave table: use plain counts with no UnitData (units show as gray)
-	_current_unit_data = null
+	## No wave table: synthesise a minimal UnitData so units are visible and move.
+	var fallback := UnitData.new()
+	fallback.unit_name        = "Remnant"
+	fallback.faction_id       = "unknown"
+	fallback.tier             = 1
+	fallback.max_health       = 40.0 + wave_number * 10.0
+	fallback.move_speed       = 80.0
+	fallback.damage_on_arrival = 1.0
+	fallback.armor            = 0.0
+	fallback.resource_reward  = 1.0
+	fallback.color_hint       = Color(0.6, 0.6, 0.6, 1.0)
+	_current_unit_data = fallback
 	_units_to_spawn    = 5 + wave_number * 2
 	_spawn_interval    = 1.2
 	_spawn_timer       = 0.0

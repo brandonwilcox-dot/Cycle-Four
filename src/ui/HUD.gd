@@ -63,6 +63,8 @@ func _on_wave_ended(_wave_number: int, result: String) -> void:
 func _on_start_wave_pressed() -> void:
 	WaveManager.begin_waves()
 	start_wave_btn.disabled = true
+	wave_status.text = "INCOMING..."
+	wave_status.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
 
 # -- Internal --
 
