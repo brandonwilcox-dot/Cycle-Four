@@ -5,20 +5,23 @@
 extends Node
 
 const WaveTableClass = preload("res://src/core/waves/WaveTable.gd")
-
-## Assigned in the WorldMap scene inspector
-@export var unit_path: Path2D = null
-@export var unit_scene: PackedScene = null
+const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
 
 ## Active wave table -- loaded when faction is confirmed
 var _wave_table: Resource = null   ## WaveTable instance; typed as Resource to avoid load-order issues
+var _unit_path: Path2D = null      ## Resolved in _ready(); sibling node in WorldMap
 var _spawn_timer: float = 0.0
 var _units_to_spawn: int = 0
 var _current_unit_data: UnitData = null
-var _spawn_interval: float = 1.0
+var _spawn_interval: float = 1.2
 var _spawning: bool = false
 
 func _ready() -> void:
+	## Locate UnitPath as a sibling node rather than relying on exported NodePath.
+	_unit_path = get_node_or_null("../UnitPath") as Path2D
+	if _unit_path == null:
+		push_error("WaveSpawner: could not find ../UnitPath -- check WorldMap scene tree.")
+
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.wave_started.connect(_on_wave_started)
 	EventBus.wave_ended.connect(_on_wave_ended)
@@ -41,7 +44,7 @@ func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
 	if ResourceLoader.exists(path):
 		_wave_table = load(path)
 	else:
-		_wave_table = null  ## Procedural fallback handled by WaveManager
+		_wave_table = null  ## Procedural fallback
 
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	if _wave_table == null:
@@ -61,13 +64,13 @@ func _on_wave_ended(_wave_number: int, _result: String) -> void:
 ## -- Spawn logic --
 
 func _spawn_unit() -> void:
-	if unit_path == null or unit_scene == null:
-		push_error("WaveSpawner: unit_path or unit_scene not set.")
+	if _unit_path == null:
+		push_error("WaveSpawner: _unit_path is null -- cannot spawn.")
 		return
-	var unit: PathFollow2D = unit_scene.instantiate()
-	if unit.has_method("setup") and _current_unit_data != null:
+	var unit: PathFollow2D = UNIT_SCENE.instantiate()
+	if _current_unit_data != null:
 		unit.call("setup", _current_unit_data)
-	unit_path.add_child(unit)
+	_unit_path.add_child(unit)
 	unit.progress = 0.0
 	EventBus.unit_spawned.emit({
 		"unit": _current_unit_data.unit_name if _current_unit_data else "unknown",
@@ -77,15 +80,15 @@ func _spawn_unit() -> void:
 func _start_procedural_wave(wave_number: int) -> void:
 	## No wave table: synthesise a minimal UnitData so units are visible and move.
 	var fallback := UnitData.new()
-	fallback.unit_name        = "Remnant"
-	fallback.faction_id       = "unknown"
-	fallback.tier             = 1
-	fallback.max_health       = 40.0 + wave_number * 10.0
-	fallback.move_speed       = 80.0
+	fallback.unit_name         = "Remnant"
+	fallback.faction_id        = "unknown"
+	fallback.tier              = 1
+	fallback.max_health        = 40.0 + wave_number * 10.0
+	fallback.move_speed        = 80.0
 	fallback.damage_on_arrival = 1.0
-	fallback.armor            = 0.0
-	fallback.resource_reward  = 1.0
-	fallback.color_hint       = Color(0.6, 0.6, 0.6, 1.0)
+	fallback.armor             = 0.0
+	fallback.resource_reward   = 1.0
+	fallback.color_hint        = Color(0.6, 0.6, 0.6, 1.0)
 	_current_unit_data = fallback
 	_units_to_spawn    = 5 + wave_number * 2
 	_spawn_interval    = 1.2

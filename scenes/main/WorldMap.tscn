@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://src/core/waves/WaveSpawner.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/main/Unit.tscn" id="2"]
 
 [node name="WorldMap" type="Node2D"]
 
@@ -27,5 +26,3 @@ theme_override_font_sizes/font_size = 12
 
 [node name="WaveSpawner" type="Node" parent="."]
 script = ExtResource("1")
-unit_path = NodePath("../UnitPath")
-unit_scene = ExtResource("2")
