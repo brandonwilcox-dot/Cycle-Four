@@ -1,6 +1,10 @@
 ; Engine configuration file.
 ; It's best edited using the editor UI and not directly,
-; following the guidelines.
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -23,16 +27,10 @@ FactionManager="*res://src/autoloads/FactionManager.gd"
 GalaxyManager="*res://src/autoloads/GalaxyManager.gd"
 SaveManager="*res://src/autoloads/SaveManager.gd"
 
-[debug]
-
-gdscript/warnings/unused_variable=1
-gdscript/warnings/return_value_discarded=0
-
 [display]
 
 window/size/viewport_width=1920
 window/size/viewport_height=1080
-window/size/mode=0
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
