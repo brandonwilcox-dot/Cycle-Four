@@ -32,8 +32,8 @@ func apply_save_data(data: Dictionary) -> void:
 	collapse_count     = data.get("collapse_count", 0)
 	memory_tier        = data.get("memory_tier", 0)
 	mark_progress      = data.get("mark_progress", 0.0)
-	fragments_collected = data.get("fragments_collected", [])
-	milestones_reached  = data.get("milestones_reached", [])
+	fragments_collected.assign(data.get("fragments_collected", []))
+	milestones_reached.assign(data.get("milestones_reached", []))
 	galaxy_run_number  = data.get("galaxy_run_number", 0)
 	tutorial_complete  = data.get("tutorial_complete", false)
 
