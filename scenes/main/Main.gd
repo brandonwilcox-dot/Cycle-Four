@@ -41,22 +41,29 @@ func _on_placement_requested(tower_data: Resource) -> void:
 	_pending_tower  = tower_data
 	_placement_mode = true
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if not _placement_mode:
 		return
-	if event is InputEventMouseButton and event.pressed:
-		match event.button_index:
-			MOUSE_BUTTON_LEFT:
-				_try_place_tower(event.position)
-				get_viewport().set_input_as_handled()
-			MOUSE_BUTTON_RIGHT:
-				_cancel_placement()
-				get_viewport().set_input_as_handled()
-
-func _unhandled_key_input(event: InputEvent) -> void:
-	if _placement_mode and event is InputEventKey and event.pressed:
+	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_ESCAPE:
 			_cancel_placement()
+			get_viewport().set_input_as_handled()
+		return
+	if not (event is InputEventMouseButton and event.pressed):
+		return
+	## Ignore clicks inside the HUD bars so buttons still work normally.
+	## TopBar occupies the top 48px; BottomBar the bottom 48px.
+	var y: float    = event.position.y
+	var height: float = get_viewport().get_visible_rect().size.y
+	if y < 48.0 or y > height - 48.0:
+		return
+	match event.button_index:
+		MOUSE_BUTTON_LEFT:
+			_try_place_tower(event.position)
+			get_viewport().set_input_as_handled()
+		MOUSE_BUTTON_RIGHT:
+			_cancel_placement()
+			get_viewport().set_input_as_handled()
 
 func _try_place_tower(screen_pos: Vector2) -> void:
 	## Snap to grid and validate before spending resources

@@ -4,9 +4,13 @@
 ## Auto-saves every 60 seconds and on wave end.
 extends Node
 
-const SAVE_PATH: String      = "user://cycle_four_save.json"
-const BACKUP_PATH: String    = "user://cycle_four_save.backup.json"
+const SAVE_PATH: String         = "user://cycle_four_save.json"
+const BACKUP_PATH: String       = "user://cycle_four_save.backup.json"
 const AUTO_SAVE_INTERVAL: float = 60.0
+
+## Set true during development to wipe saves on every launch.
+## Flip to false before shipping or when testing persistence.
+const DEV_CLEAR_SAVE: bool = true
 
 var _auto_save_timer: float = 0.0
 var _save_dirty: bool = false
@@ -14,6 +18,9 @@ var _save_dirty: bool = false
 func _ready() -> void:
 	EventBus.wave_ended.connect(_on_wave_ended)
 	EventBus.prestige_completed.connect(_on_prestige_completed)
+	if DEV_CLEAR_SAVE:
+		_wipe_saves()
+		return   ## Skip load -- managers start from their own defaults
 	load_game()
 
 func _process(delta: float) -> void:
@@ -96,6 +103,11 @@ func _galaxy_to_dict() -> Dictionary:
 func _galaxy_from_dict(data: Dictionary) -> void:
 	GalaxyManager.star_systems = data.get("star_systems", {})
 	GalaxyManager.treaties     = data.get("treaties", {})
+
+func _wipe_saves() -> void:
+	for path in [SAVE_PATH, BACKUP_PATH]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 func _try_load_backup() -> void:
 	if not FileAccess.file_exists(BACKUP_PATH):
