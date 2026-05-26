@@ -1,18 +1,18 @@
 ## WaveManager.gd
 ## Controls the tower defense / endless wave layer.
-## Spawns enemies, tracks wave state, handles commander dialogue triggers.
+## Tracks wave state; WaveSpawner handles actual spawning.
 extends Node
 
 enum WaveState { IDLE, COUNTDOWN, ACTIVE, RESULTS }
 
 var state: WaveState = WaveState.IDLE
 var current_wave: int = 0
-var enemies_remaining: int = 0
+var enemies_remaining: int = 0  ## Units still alive or in transit this wave
 var countdown_timer: float = 0.0
 
-const WAVE_COUNTDOWN: float = 1.0   # seconds between waves (keep short during dev)
+var _breaches: int = 0          ## Units that reached the base this wave
 
-signal _spawn_timer_done()
+const WAVE_COUNTDOWN: float = 1.0   ## Seconds between waves (keep short during dev)
 
 func _ready() -> void:
 	EventBus.wave_ended.connect(_on_wave_ended)
@@ -31,23 +31,32 @@ func begin_waves() -> void:
 	state = WaveState.COUNTDOWN
 	countdown_timer = WAVE_COUNTDOWN
 
-func get_wave_data(wave_number: int) -> Dictionary:
-	## Returns spawn list and commander info for a given wave.
-	## Delegates to faction-specific wave table.
-	return FactionManager.get_wave_data(wave_number)
+## Called by Unit when it reaches the end of the path.
+func report_base_breached() -> void:
+	_breaches += 1
+	enemies_remaining -= 1
+	_check_wave_complete()
 
+## Called by Unit when it is killed (health reaches zero).
 func report_enemy_killed() -> void:
 	enemies_remaining -= 1
-	if enemies_remaining <= 0:
-		_end_wave(true)
+	_check_wave_complete()
 
-func report_base_breached() -> void:
-	_end_wave(false)
+func get_wave_data(wave_number: int) -> Dictionary:
+	return FactionManager.get_wave_data(wave_number)
 
 # -- Internal --
 
+func _check_wave_complete() -> void:
+	## End the wave only when every spawned unit is accounted for.
+	if state != WaveState.ACTIVE:
+		return
+	if enemies_remaining <= 0:
+		_end_wave(_breaches == 0)
+
 func _start_next_wave() -> void:
 	current_wave += 1
+	_breaches = 0
 	GameState.wave_number = current_wave
 	var data: Dictionary = get_wave_data(current_wave)
 	enemies_remaining = data.get("enemy_count", 0)
@@ -60,6 +69,8 @@ func _end_wave(victory: bool) -> void:
 	EventBus.wave_ended.emit(current_wave, result)
 
 func _on_wave_ended(_wave_num: int, _result: String) -> void:
+	## Wait briefly then arm the countdown for the next wave.
 	await get_tree().create_timer(3.0).timeout
-	state = WaveState.COUNTDOWN
-	countdown_timer = WAVE_COUNTDOWN
+	if state == WaveState.RESULTS:   ## Guard against double-fires
+		state = WaveState.COUNTDOWN
+		countdown_timer = WAVE_COUNTDOWN

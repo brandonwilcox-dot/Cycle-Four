@@ -49,17 +49,23 @@ func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	if _wave_table == null:
 		_start_procedural_wave(wave_number)
-		return
-	var wave_def: Dictionary = _wave_table.get_wave(wave_number)
-	_current_unit_data = wave_def.get("unit", null)
-	_units_to_spawn    = int(wave_def.get("count", 5 + wave_number * 2))
-	_spawn_interval    = float(wave_def.get("interval", 1.2))
-	_spawn_timer       = 0.0
-	_spawning          = true
+	else:
+		var wave_def: Dictionary = _wave_table.get_wave(wave_number)
+		_current_unit_data = wave_def.get("unit", null)
+		_units_to_spawn    = int(wave_def.get("count", 5 + wave_number * 2))
+		_spawn_interval    = float(wave_def.get("interval", 1.2))
+		_spawn_timer       = 0.0
+		_spawning          = true
+	## Sync WaveManager's counter to the actual unit count we will spawn.
+	WaveManager.enemies_remaining = _units_to_spawn
 
 func _on_wave_ended(_wave_number: int, _result: String) -> void:
 	_spawning = false
 	_units_to_spawn = 0
+	## Free any units still on the path (e.g. if wave ended via defeat before all spawned)
+	if _unit_path != null:
+		for child in _unit_path.get_children():
+			child.queue_free()
 
 ## -- Spawn logic --
 

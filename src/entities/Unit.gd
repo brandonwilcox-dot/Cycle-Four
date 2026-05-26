@@ -11,6 +11,7 @@ var _is_dead: bool = false
 var _visual: ColorRect = null   ## placeholder until sprites exist
 
 func _ready() -> void:
+	loop = false   ## Must be false or units wrap back to spawn instead of reaching base
 	if data == null:
 		push_error("Unit spawned without UnitData -- call setup() before adding to tree.")
 		return
