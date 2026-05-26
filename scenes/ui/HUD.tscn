@@ -85,3 +85,7 @@ theme_override_font_sizes/font_size = 14
 [node name="StartWaveBtn" type="Button" parent="BottomBar"]
 layout_mode = 2
 text = "Begin Waves"
+
+[node name="PlaceTowerBtn" type="Button" parent="BottomBar"]
+layout_mode = 2
+text = "Place Tower"

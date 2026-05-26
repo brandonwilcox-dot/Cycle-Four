@@ -17,23 +17,36 @@ extends Control
 @onready var wave_label: Label         = $BottomBar/WaveLabel
 @onready var wave_status: Label        = $BottomBar/WaveStatus
 @onready var start_wave_btn: Button    = $BottomBar/StartWaveBtn
+@onready var place_tower_btn: Button   = $BottomBar/PlaceTowerBtn
 
 const FORMAT_RESOURCE: String = "%s"
 const FORMAT_RATE: String     = "+%.2f/s"
+
+var _starter_tower: Resource = null   ## TowerData for current faction
 
 func _ready() -> void:
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.resource_changed.connect(_on_resource_changed)
 	EventBus.wave_started.connect(_on_wave_started)
 	EventBus.wave_ended.connect(_on_wave_ended)
+	EventBus.tower_placement_requested.connect(_on_placement_started)
 	start_wave_btn.pressed.connect(_on_start_wave_pressed)
+	place_tower_btn.pressed.connect(_on_place_tower_pressed)
+	place_tower_btn.disabled = true   ## Enabled once faction is chosen
 	_refresh_wave_ui()
 
 # -- Event handlers --
 
 func _on_faction_selected(faction_id: String, sub_path: String) -> void:
-	faction_label.text = faction_id.capitalize()
+	faction_label.text  = faction_id.capitalize()
 	sub_path_label.text = sub_path.replace("_", " ").capitalize()
+	_starter_tower = FactionManager.get_starter_tower()
+	if _starter_tower != null:
+		place_tower_btn.text     = "Place Tower [%d]" % int(_starter_tower.primary_cost)
+		place_tower_btn.disabled = false
+	else:
+		place_tower_btn.text     = "Place Tower"
+		place_tower_btn.disabled = true
 
 func _on_resource_changed(faction_id: String, resource_id: String, amount: float) -> void:
 	var primary: String   = FactionManager.get_primary_resource()
@@ -45,6 +58,13 @@ func _on_resource_changed(faction_id: String, resource_id: String, amount: float
 	elif resource_id == secondary:
 		secondary_label.text = _format_amount(amount)
 		secondary_rate.text  = FORMAT_RATE % EconomyManager.get_rate(secondary)
+
+	## Update affordability indicator on the tower button
+	if _starter_tower != null and not place_tower_btn.disabled:
+		var can_afford: bool = EconomyManager.can_afford(
+			{FactionManager.get_primary_resource(): _starter_tower.primary_cost}
+		)
+		place_tower_btn.modulate = Color.WHITE if can_afford else Color(1.0, 0.5, 0.5)
 
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	wave_label.text  = "Wave %d" % wave_number
@@ -60,11 +80,25 @@ func _on_wave_ended(_wave_number: int, result: String) -> void:
 	)
 	start_wave_btn.disabled = false
 
+func _on_placement_started(_tower_data: Resource) -> void:
+	## Show that we're in placement mode; let Main handle the actual clicks
+	place_tower_btn.text     = "Placing... [RMB/ESC]"
+	place_tower_btn.disabled = true
+
 func _on_start_wave_pressed() -> void:
 	WaveManager.begin_waves()
 	start_wave_btn.disabled = true
 	wave_status.text = "INCOMING..."
 	wave_status.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
+
+func _on_place_tower_pressed() -> void:
+	if _starter_tower == null:
+		return
+	if not EconomyManager.can_afford(
+		{FactionManager.get_primary_resource(): _starter_tower.primary_cost}
+	):
+		return
+	EventBus.tower_placement_requested.emit(_starter_tower)
 
 # -- Internal --
 
@@ -80,3 +114,11 @@ func _format_amount(amount: float) -> String:
 		return "%.1fK" % (amount / 1_000.0)
 	else:
 		return "%.1f" % amount
+
+## Called by Main when placement mode ends (placed or cancelled)
+func end_placement_mode() -> void:
+	if _starter_tower != null:
+		place_tower_btn.text     = "Place Tower [%d]" % int(_starter_tower.primary_cost)
+		place_tower_btn.disabled = false
+	else:
+		place_tower_btn.disabled = true

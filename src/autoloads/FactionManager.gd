@@ -49,6 +49,13 @@ func get_wave_data(wave_number: int) -> Dictionary:
 			return table.get_wave(wave_number)
 	return {"enemy_count": _default_enemy_count(wave_number), "commander": {}}
 
+func get_starter_tower() -> Resource:
+	## Returns the T1 TowerData for the active faction, or null if not found.
+	var path: String = "res://resources/towers/%s_t1.tres" % active_faction
+	if ResourceLoader.exists(path):
+		return load(path)
+	return null
+
 func get_production_rates(sub_path: String) -> Dictionary:
 	## Base production rates before building bonuses.
 	## Override per faction in their faction script.
@@ -60,13 +67,17 @@ func _initialize_faction_economy() -> void:
 	## Seed EconomyManager with starting resources and rates for chosen faction.
 	var primary:   String = get_primary_resource()
 	var secondary: String = get_secondary_resource()
-	EconomyManager.resources[primary]   = 50.0
-	EconomyManager.resources[secondary] = 10.0
+	## Reset pools so a faction switch doesn't carry over old resources
+	EconomyManager.resources       = {}
+	EconomyManager.production_rates = {}
 	EconomyManager.storage_caps[primary]   = 1000.0
 	EconomyManager.storage_caps[secondary] = 500.0
-	# Base rates -- buildings add on top of these
+	## Base rates -- buildings add on top of these
 	EconomyManager.set_production_rate(primary,   1.0)
 	EconomyManager.set_production_rate(secondary, 0.2)
+	## Use add_resource() so resource_changed fires immediately and HUD shows correct values
+	EconomyManager.add_resource(primary,   50.0)
+	EconomyManager.add_resource(secondary, 10.0)
 
 func _default_enemy_count(wave: int) -> int:
 	## Fallback scaling before wave tables are authored.
