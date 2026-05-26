@@ -1,0 +1,87 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/ui/HUD.gd" id="1"]
+
+[node name="HUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="TopBar" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_bottom = 48.0
+grow_horizontal = 2
+theme_override_constants/separation = 24
+
+[node name="FactionLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+text = "---"
+theme_override_font_sizes/font_size = 20
+
+[node name="SubPathLabel" type="Label" parent="TopBar"]
+layout_mode = 2
+text = ""
+theme_override_font_sizes/font_size = 14
+
+[node name="PrimaryRes" type="HBoxContainer" parent="TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Amount" type="Label" parent="TopBar/PrimaryRes"]
+layout_mode = 2
+text = "0"
+theme_override_font_sizes/font_size = 18
+
+[node name="Rate" type="Label" parent="TopBar/PrimaryRes"]
+layout_mode = 2
+text = "+0.00/s"
+theme_override_font_sizes/font_size = 12
+
+[node name="SecondaryRes" type="HBoxContainer" parent="TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Amount" type="Label" parent="TopBar/SecondaryRes"]
+layout_mode = 2
+text = "0"
+theme_override_font_sizes/font_size = 18
+
+[node name="Rate" type="Label" parent="TopBar/SecondaryRes"]
+layout_mode = 2
+text = "+0.00/s"
+theme_override_font_sizes/font_size = 12
+
+[node name="BottomBar" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -48.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 16
+
+[node name="WaveLabel" type="Label" parent="BottomBar"]
+layout_mode = 2
+text = "Wave 0"
+theme_override_font_sizes/font_size = 16
+
+[node name="WaveStatus" type="Label" parent="BottomBar"]
+layout_mode = 2
+text = "STANDBY"
+theme_override_font_sizes/font_size = 14
+
+[node name="StartWaveBtn" type="Button" parent="BottomBar"]
+layout_mode = 2
+text = "Begin Waves"
