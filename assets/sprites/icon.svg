@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Cycle Four placeholder icon: dark background, stylised "C4" -->
+  <rect width="128" height="128" rx="16" fill="#141620"/>
+  <text x="64" y="52" font-family="monospace" font-size="36" font-weight="bold"
+        fill="#5599ff" text-anchor="middle" dominant-baseline="middle">C</text>
+  <text x="64" y="90" font-family="monospace" font-size="36" font-weight="bold"
+        fill="#55cc88" text-anchor="middle" dominant-baseline="middle">IV</text>
+</svg>
