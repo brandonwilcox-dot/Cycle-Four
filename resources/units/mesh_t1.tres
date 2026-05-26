@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Shard"
+faction_id = "mesh"
+tier = 1
+max_health = 60.0
+move_speed = 110.0
+damage_on_arrival = 6.0
+armor = 0.0
+resource_reward = 3.0
+spawn_cost = {}
+cooldown = 6.0
+color_hint = Color(0.9, 0.4, 0.85, 1.0)
+evolve_threshold = 0.0
+hacks_on_death = true
+hack_radius = 64.0

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Constructor"
+faction_id = "architects"
+tier = 1
+max_health = 80.0
+move_speed = 70.0
+damage_on_arrival = 8.0
+armor = 2.0
+resource_reward = 4.0
+spawn_cost = {}
+cooldown = 10.0
+color_hint = Color(0.35, 0.65, 1.0, 1.0)
+evolve_threshold = 0.0
+hacks_on_death = false
+hack_radius = 0.0
