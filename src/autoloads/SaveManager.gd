@@ -46,7 +46,7 @@ func load_game() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	var text := file.get_as_text()
 	file.close()
-	var result := JSON.parse_string(text)
+	var result: Variant = JSON.parse_string(text)
 	if result == null:
 		push_error("SaveManager: corrupt save file. Trying backup.")
 		_try_load_backup()
@@ -102,7 +102,7 @@ func _try_load_backup() -> void:
 		push_error("SaveManager: no backup available. Starting fresh.")
 		return
 	var file := FileAccess.open(BACKUP_PATH, FileAccess.READ)
-	var result := JSON.parse_string(file.get_as_text())
+	var result: Variant = JSON.parse_string(file.get_as_text())
 	file.close()
 	if result:
 		_apply_all_state(result)
