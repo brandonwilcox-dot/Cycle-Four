@@ -23,6 +23,9 @@ func _ready() -> void:
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
 	_build_default_path()
 	if not GameState.current_faction.is_empty():
+		## Restore FactionManager state from save so HUD and tower button initialise
+		## correctly without resetting the economy (SaveManager already did that).
+		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 		_start_game_world()
 
 func _on_faction_confirmed() -> void:

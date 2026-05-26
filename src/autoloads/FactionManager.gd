@@ -33,6 +33,17 @@ func select_faction(faction_id: String, sub_path: String) -> void:
 	_initialize_faction_economy()
 	EventBus.faction_selected.emit(faction_id, sub_path)
 
+func restore_faction(faction_id: String, sub_path: String) -> void:
+	## Called on load when a save already has a faction set.
+	## Restores FactionManager state and fires faction_selected so the HUD
+	## and other listeners can initialise -- does NOT reset the economy
+	## because SaveManager has already restored it from the save file.
+	if faction_id not in FACTION_IDS:
+		return
+	active_faction  = faction_id
+	active_sub_path = sub_path
+	EventBus.faction_selected.emit(faction_id, sub_path)
+
 func get_primary_resource() -> String:
 	return FACTION_RESOURCES.get(active_faction, ["energy", ""])[0]
 
