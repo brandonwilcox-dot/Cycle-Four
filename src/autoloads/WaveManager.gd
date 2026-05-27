@@ -25,6 +25,15 @@ func _process(delta: float) -> void:
 
 # -- Public API --
 
+## Resets all wave state. Called before a scene reload (Try Again / Return to Menu).
+func reset() -> void:
+	state             = WaveState.IDLE
+	current_wave      = 0
+	enemies_remaining = 0
+	countdown_timer   = 0.0
+	_breaches         = 0
+	GameState.wave_number = 0
+
 func begin_waves() -> void:
 	## Accept both IDLE and RESULTS so a player press during the post-wave
 	## grace period isn't silently dropped and doesn't soft-lock the HUD button.
@@ -38,11 +47,13 @@ func begin_waves() -> void:
 func report_base_breached() -> void:
 	_breaches += 1
 	enemies_remaining -= 1
+	EventBus.enemy_count_changed.emit(enemies_remaining)
 	_check_wave_complete()
 
 ## Called by Unit when it is killed (health reaches zero).
 func report_enemy_killed() -> void:
 	enemies_remaining -= 1
+	EventBus.enemy_count_changed.emit(enemies_remaining)
 	_check_wave_complete()
 
 func get_wave_data(wave_number: int) -> Dictionary:

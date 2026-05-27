@@ -1,7 +1,7 @@
 ## Tower.gd
 ## A placed defense tower. Scans for the nearest unit in range each attack cycle
 ## and calls take_damage() on it. No projectiles -- instant hit for MVP.
-## Visual is a colored square with a darker border and center pip.
+## Visual scales with tier: body grows, pip count matches tier number.
 extends Node2D
 
 const TowerDataClass = preload("res://src/entities/TowerData.gd")
@@ -9,7 +9,7 @@ const TowerDataClass = preload("res://src/entities/TowerData.gd")
 var data: Resource = null   ## TowerData instance
 var _attack_timer: float = 0.0
 
-## Called by Main before adding to scene tree
+## Called by Main before adding to scene tree.
 func setup(tower_data: Resource) -> void:
 	data = tower_data
 
@@ -27,6 +27,15 @@ func _process(delta: float) -> void:
 	if _attack_timer >= 1.0 / data.attack_speed:
 		_attack_timer = 0.0
 		_try_attack()
+
+## Replaces this tower's data with the next tier and rebuilds the visual in place.
+## Called by Main._try_upgrade_tower() after spending the upgrade cost.
+func upgrade(next_data: Resource) -> void:
+	data = next_data
+	## Clear existing child visuals then rebuild.
+	for child in get_children():
+		child.queue_free()
+	_build_visual()
 
 ## -- Combat --
 
@@ -46,22 +55,37 @@ func _try_attack() -> void:
 ## -- Visual --
 
 func _build_visual() -> void:
-	var col: Color = data.color_hint
-	## Darker border so towers read as distinct from units
+	var col      : Color = data.color_hint
+	var tier     : int   = int(data.get("tier")) if data.get("tier") else 1
+	## Body grows 4 px per tier: T1=48, T2=52, T3=56
+	var body_sz  : float = 44.0 + tier * 4.0
+	var half     : float = body_sz * 0.5
+	var border_sz: float = body_sz + 4.0
+	var b_half   : float = border_sz * 0.5
+
+	## Darker border -- reads as distinct from units
 	var border := ColorRect.new()
-	border.size     = Vector2(52.0, 52.0)
-	border.position = Vector2(-26.0, -26.0)
+	border.size     = Vector2(border_sz, border_sz)
+	border.position = Vector2(-b_half, -b_half)
 	border.color    = col.darkened(0.5)
 	add_child(border)
-	## Main body
+
+	## Main body -- brighter at higher tiers
 	var body := ColorRect.new()
-	body.size     = Vector2(48.0, 48.0)
-	body.position = Vector2(-24.0, -24.0)
-	body.color    = col
+	body.size     = Vector2(body_sz, body_sz)
+	body.position = Vector2(-half, -half)
+	body.color    = col.lightened((tier - 1) * 0.12)
 	add_child(body)
-	## Center pip -- visual shorthand for "barrel"
-	var pip := ColorRect.new()
-	pip.size     = Vector2(14.0, 14.0)
-	pip.position = Vector2(-7.0, -7.0)
-	pip.color    = col.darkened(0.65)
-	add_child(pip)
+
+	## Tier pips: one small square per tier, centred horizontally.
+	## T1 = 1 pip (single centre), T2 = 2 pips, T3 = 3 pips.
+	var pip_sz    : float = 8.0
+	var gap       : float = 3.0
+	var total_w   : float = tier * pip_sz + (tier - 1) * gap
+	var start_x   : float = -total_w * 0.5
+	for i in tier:
+		var pip := ColorRect.new()
+		pip.size     = Vector2(pip_sz, pip_sz)
+		pip.position = Vector2(start_x + i * (pip_sz + gap), -pip_sz * 0.5)
+		pip.color    = col.darkened(0.60)
+		add_child(pip)

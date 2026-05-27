@@ -67,6 +67,13 @@ func get_starter_tower() -> Resource:
 		return load(path)
 	return null
 
+func get_starter_building() -> Resource:
+	## Returns the T1 BuildingData for the active faction, or null if not found.
+	var path: String = "res://resources/buildings/%s_b1.tres" % active_faction
+	if ResourceLoader.exists(path):
+		return load(path)
+	return null
+
 func get_production_rates(sub_path: String) -> Dictionary:
 	## Base production rates before building bonuses.
 	## Override per faction in their faction script.
@@ -79,8 +86,9 @@ func _initialize_faction_economy() -> void:
 	var primary:   String = get_primary_resource()
 	var secondary: String = get_secondary_resource()
 	## Reset pools so a faction switch doesn't carry over old resources
-	EconomyManager.resources       = {}
+	EconomyManager.resources        = {}
 	EconomyManager.production_rates = {}
+	EconomyManager.territory_rates  = {}   ## Commander territory bonus resets with faction
 	EconomyManager.storage_caps[primary]   = 1000.0
 	EconomyManager.storage_caps[secondary] = 500.0
 	## Base rates -- buildings add on top of these

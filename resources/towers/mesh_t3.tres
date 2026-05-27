@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="TowerData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/TowerData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+tower_name = "Cascade Disruptor"
+faction_id = "mesh"
+tier = 3
+damage = 45.0
+range = 224.0
+attack_speed = 2.5
+primary_cost = 110.0
+upgrade_to = null
+color_hint = Color(1.0, 0.68, 1.0, 1.0)

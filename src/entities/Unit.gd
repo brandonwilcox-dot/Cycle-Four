@@ -2,6 +2,7 @@
 ## Enemy unit. Navigates a pre-computed world-space waypoint list from spawn to base.
 ## Spawned by WaveSpawner via setup(); reports death/arrival through WaveManager/EventBus.
 ## Phase B: uses Node2D + waypoint movement instead of PathFollow2D.
+## Phase F: flanker variant targets CLAIMED territory instead of the base.
 extends Node2D
 
 ## Injected by WaveSpawner before the node enters the scene tree.
@@ -17,6 +18,16 @@ var _current_health : float = 0.0
 var _is_dead        : bool  = false
 var _visual         : ColorRect = null   ## placeholder until sprites exist
 
+## Phase F -- flanker state.
+## Flankers target a CLAIMED cell instead of the base.
+## _target_cell = Vector2i(-1,-1) means "not a flanker / target already gone".
+var _is_flanker    : bool     = false
+var _target_cell   : Vector2i = Vector2i(-1, -1)
+var _map_grid_ref  : Node     = null
+## Must match Commander.RATE_PER_CLAIMED_CELL (0.05). Kept here to avoid coupling.
+const TERRITORY_RATE_PER_CELL : float = 0.05
+const RAID_RESOURCE_PENALTY   : float = 15.0   ## primary resources stolen on a successful raid
+
 func _ready() -> void:
 	add_to_group("units")
 	if data == null:
@@ -28,8 +39,16 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead or _waypoints.is_empty():
 		return
+	## Flankers: if our target was already raided by another unit, grab the next one.
+	## get_cell() is an O(1) array lookup -- safe to call every frame.
+	if _is_flanker and _target_cell != Vector2i(-1, -1) and _map_grid_ref != null:
+		if _map_grid_ref.get_cell(_target_cell.x, _target_cell.y) != 9:   ## no longer CLAIMED
+			_retarget_flanker()
 	if _wp_index >= _waypoints.size():
-		_reach_base()
+		if _is_flanker:
+			_raid_territory()
+		else:
+			_reach_base()
 		return
 	## Move toward the current waypoint
 	var target     : Vector2 = _waypoints[_wp_index]
@@ -53,6 +72,16 @@ func setup(unit_data: UnitData, waypoints: Array) -> void:
 	if not _waypoints.is_empty():
 		position = _waypoints[0]
 
+## Variant of setup() for flanker units (Phase F).
+## Waypoints lead to the adjacent PATH cell; the final element is the CLAIMED cell itself.
+## Flankers render with a red tint so the player can tell them apart at a glance.
+func setup_as_flanker(unit_data: UnitData, waypoints: Array,
+		target_cell: Vector2i, map_grid: Node) -> void:
+	setup(unit_data, waypoints)
+	_is_flanker   = true
+	_target_cell  = target_cell
+	_map_grid_ref = map_grid
+
 ## Called by WaveSpawner when EventBus.path_changed fires mid-wave.
 ## Finds the nearest traversable cell to current position and gets a fresh
 ## path to base from there. No-ops if the unit is dead or has no waypoints.
@@ -60,11 +89,23 @@ func reroute(map_grid: Node) -> void:
 	if _is_dead or _waypoints.is_empty():
 		return
 	var nearest_cell : Vector2i = map_grid.get_nearest_path_cell(global_position)
-	var new_path     : Array    = map_grid.get_path_to_base(nearest_cell)
+	if _is_flanker:
+		## Flankers re-find the nearest accessible claimed cell from their current position.
+		var flank_path : Array = map_grid.call("get_path_to_nearest_claimed", nearest_cell)
+		if not flank_path.is_empty():
+			_waypoints.assign(flank_path)
+			_wp_index    = 1
+			## Update target to the last waypoint (the CLAIMED cell world position)
+			_target_cell = map_grid.call("world_to_cell", _waypoints[_waypoints.size() - 1])
+			return
+		## No accessible claimed cells left -- demote to a base-rusher
+		_is_flanker  = false
+		_target_cell = Vector2i(-1, -1)
+	var new_path : Array = map_grid.get_path_to_base(nearest_cell)
 	if new_path.is_empty():
-		return   ## No alternative exists; unit continues on stale waypoints toward base
+		return
 	_waypoints.assign(new_path)
-	_wp_index = 1   ## Index 0 is the nearest cell; move toward index 1
+	_wp_index = 1
 
 ## Apply incoming damage. Returns true if the unit died.
 func take_damage(amount: float) -> bool:
@@ -84,6 +125,44 @@ func take_damage(amount: float) -> bool:
 	return false
 
 ## -- Internal --
+
+## Called when our target CLAIMED cell was taken by another flanker while en route.
+## Finds the nearest remaining CLAIMED cell and re-routes to it.
+## Falls back to base-rushing if no claimed cells remain.
+func _retarget_flanker() -> void:
+	var nearest_cell : Vector2i = _map_grid_ref.get_nearest_path_cell(global_position)
+	var flank_path   : Array    = _map_grid_ref.call("get_path_to_nearest_claimed", nearest_cell)
+	if not flank_path.is_empty():
+		_waypoints.assign(flank_path)
+		_wp_index = 1
+		## Derive target cell from the last waypoint (world-space centre of CLAIMED cell).
+		var last_wp  : Vector2  = _waypoints[_waypoints.size() - 1]
+		_target_cell = Vector2i(int(last_wp.x) / 64, int(last_wp.y) / 64)
+	else:
+		## No claimed territory left -- demote to a base-rusher.
+		_is_flanker  = false
+		_target_cell = Vector2i(-1, -1)
+		var base_path : Array = _map_grid_ref.get_path_to_base(nearest_cell)
+		if not base_path.is_empty():
+			_waypoints.assign(base_path)
+			_wp_index = 1
+
+## Flanker arrived at its target CLAIMED cell.
+## Unclaims it, penalises the economy, and counts as cleared for wave tracking.
+func _raid_territory() -> void:
+	_is_dead = true
+	if _map_grid_ref != null and _target_cell != Vector2i(-1, -1):
+		## Guard: another flanker may have raided this cell first (race condition).
+		if _map_grid_ref.get_cell(_target_cell.x, _target_cell.y) == 9:   ## Cell.CLAIMED
+			_map_grid_ref.call("unclaim_cell", _target_cell.x, _target_cell.y)
+			var primary : String = FactionManager.get_primary_resource()
+			## Steal resources and remove this cell's passive income contribution.
+			EconomyManager.add_resource(primary, -RAID_RESOURCE_PENALTY)
+			EconomyManager.add_territory_rate(primary, -TERRITORY_RATE_PER_CELL)
+			EventBus.territory_raided.emit(_target_cell)
+	## Count as cleared so the wave can end normally.
+	WaveManager.report_enemy_killed()
+	queue_free()
 
 func _reach_base() -> void:
 	_is_dead = true
@@ -108,11 +187,12 @@ func _evolve() -> void:
 	_update_health_visual()
 
 func _build_placeholder_visual() -> void:
-	## 24×24 square centred on the node
+	## 24×24 square centred on the node.
+	## Flankers get a red-orange tint so the player can read intent at a glance.
 	_visual          = ColorRect.new()
 	_visual.size     = Vector2(24.0, 24.0)
 	_visual.position = Vector2(-12.0, -12.0)
-	_visual.color    = data.color_hint if data else Color.GRAY
+	_visual.color    = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
 	add_child(_visual)
 	## Dark health-bar background
 	var bar_bg          := ColorRect.new()

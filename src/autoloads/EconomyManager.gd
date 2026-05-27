@@ -9,8 +9,9 @@ const IDLE_TICK_RATE: float = 1.0
 
 # Resource pools -- keyed by resource id (e.g. "energy", "biomass", "signal")
 var resources: Dictionary = {}
-var production_rates: Dictionary = {}   # per-second rates
-var storage_caps: Dictionary = {}       # max storage per resource
+var production_rates: Dictionary = {}    ## base per-second rates (set by FactionManager)
+var territory_rates: Dictionary = {}     ## bonus per-second rates from Commander territory
+var storage_caps: Dictionary = {}        ## max storage per resource
 
 var _tick_accumulator: float = 0.0
 var _last_save_timestamp: int = 0
@@ -31,8 +32,17 @@ func _process(delta: float) -> void:
 func get_resource(resource_id: String) -> float:
 	return resources.get(resource_id, 0.0)
 
+## Returns the combined per-second rate (base + territory bonus).
+## This is what the HUD displays, so the player always sees their true income.
 func get_rate(resource_id: String) -> float:
-	return production_rates.get(resource_id, 0.0)
+	return production_rates.get(resource_id, 0.0) + territory_rates.get(resource_id, 0.0)
+
+## Adds a permanent territory rate bonus for one resource.
+## Called by Commander each time a new GROUND cell is claimed.
+## Accumulates -- each new claim stacks on top of all previous ones.
+func add_territory_rate(resource_id: String, amount: float) -> void:
+	## Clamp to 0 so flanker raids can never produce a negative (draining) rate.
+	territory_rates[resource_id] = maxf(0.0, territory_rates.get(resource_id, 0.0) + amount)
 
 func can_afford(costs: Dictionary) -> bool:
 	for resource_id in costs:
@@ -70,8 +80,13 @@ func _initialize_resources() -> void:
 	pass
 
 func _do_idle_tick(delta: float) -> void:
+	## Base faction income
 	for resource_id in production_rates:
 		var gained: float = production_rates[resource_id] * delta
+		_modify_resource(resource_id, gained)
+	## Territory bonus income (Commander-claimed cells)
+	for resource_id in territory_rates:
+		var gained: float = territory_rates[resource_id] * delta
 		_modify_resource(resource_id, gained)
 	EventBus.idle_tick.emit(delta)
 

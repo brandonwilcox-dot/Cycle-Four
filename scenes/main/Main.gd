@@ -1,29 +1,37 @@
 ## Main.gd
-## Root scene controller. Owns top-level scene transitions and tower placement.
-## Flow: FactionSelectScreen -> game world (HUD visible, waves + economy running)
+## Root scene controller. Owns scene transitions, tower placement/upgrades,
+## and production building placement/destruction.
 extends Node
 
-const TOWER_SCENE: PackedScene = preload("res://scenes/main/Tower.tscn")
-const GRID_SIZE: int = 64   ## Pixels per grid cell for tower snapping
+const TOWER_SCENE    : PackedScene = preload("res://scenes/main/Tower.tscn")
+const BUILDING_SCENE : PackedScene = preload("res://scenes/main/Building.tscn")
+const GRID_SIZE      : int = 64
 
-@onready var faction_select: Control = $UILayer/FactionSelectScreen
-@onready var hud: Control            = $UILayer/HUD
-@onready var tower_layer: Node2D     = $WorldMap/TowerLayer
-@onready var world_map: Node2D       = $WorldMap
-@onready var _map_grid: Node2D       = $WorldMap/MapGrid
+@onready var faction_select  : Control  = $UILayer/FactionSelectScreen
+@onready var hud             : Control  = $UILayer/HUD
+@onready var tower_layer     : Node2D   = $WorldMap/TowerLayer
+@onready var building_layer  : Node2D   = $WorldMap/BuildingLayer
+@onready var _map_grid       : Node2D   = $WorldMap/MapGrid
 
-## Placement state
-var _placement_mode: bool     = false
-var _pending_tower: Resource  = null   ## TowerData being placed
-var _occupied_cells: Dictionary = {}   ## Vector2i -> true; prevents double-placing
+## Tower placement state
+var _placement_mode  : bool     = false
+var _pending_tower   : Resource = null
+## Vector2i -> Node2D (Tower); used for double-place guard and upgrade clicks.
+var _occupied_cells  : Dictionary = {}
+
+## Building placement state
+var _build_mode       : bool     = false
+var _pending_building : Resource = null
+## Vector2i -> Node2D (Building); used for double-place guard and raid destruction.
+var _building_cells   : Dictionary = {}
 
 func _ready() -> void:
 	hud.hide()
 	faction_select.selection_confirmed.connect(_on_faction_confirmed)
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
+	EventBus.building_placement_requested.connect(_on_build_requested)
+	EventBus.territory_raided.connect(_on_territory_raided)
 	if not GameState.current_faction.is_empty():
-		## Restore FactionManager state from save so HUD and tower button initialise
-		## correctly without resetting the economy (SaveManager already did that).
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 		_start_game_world()
 
@@ -34,78 +42,189 @@ func _start_game_world() -> void:
 	faction_select.hide()
 	hud.show()
 
+## -- Input --
+
+func _input(event: InputEvent) -> void:
+	## ESC cancels whichever mode is active.
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_ESCAPE:
+			if _placement_mode:
+				_cancel_placement()
+				get_viewport().set_input_as_handled()
+			elif _build_mode:
+				_cancel_build()
+				get_viewport().set_input_as_handled()
+		return
+
+	if not (event is InputEventMouseButton and event.pressed):
+		return
+
+	## Ignore HUD zones (top / bottom 48 px).
+	var y      : float = event.position.y
+	var height : float = get_viewport().get_visible_rect().size.y
+	if y < 48.0 or y > height - 48.0:
+		return
+
+	match event.button_index:
+		MOUSE_BUTTON_LEFT:
+			if _placement_mode:
+				_try_place_tower(event.position)
+				get_viewport().set_input_as_handled()
+			elif _build_mode:
+				_try_place_building(event.position)
+				get_viewport().set_input_as_handled()
+			else:
+				## Occupied cell → try tower upgrade.
+				## Empty cell → do NOT consume; Commander._unhandled_input handles movement.
+				var cell := _screen_to_cell(event.position)
+				if _occupied_cells.has(cell):
+					_try_upgrade_tower(cell)
+					get_viewport().set_input_as_handled()
+		MOUSE_BUTTON_RIGHT:
+			if _placement_mode:
+				_cancel_placement()
+				get_viewport().set_input_as_handled()
+			elif _build_mode:
+				_cancel_build()
+				get_viewport().set_input_as_handled()
+
 ## -- Tower placement --
 
 func _on_placement_requested(tower_data: Resource) -> void:
+	_cancel_build()          ## Exit build mode if active
 	_pending_tower  = tower_data
 	_placement_mode = true
 
-func _input(event: InputEvent) -> void:
-	if not _placement_mode:
-		return
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_ESCAPE:
-			_cancel_placement()
-			get_viewport().set_input_as_handled()
-		return
-	if not (event is InputEventMouseButton and event.pressed):
-		return
-	## Ignore clicks inside the HUD bars so buttons still work normally.
-	## TopBar occupies the top 48px; BottomBar the bottom 48px.
-	var y: float    = event.position.y
-	var height: float = get_viewport().get_visible_rect().size.y
-	if y < 48.0 or y > height - 48.0:
-		return
-	match event.button_index:
-		MOUSE_BUTTON_LEFT:
-			_try_place_tower(event.position)
-			get_viewport().set_input_as_handled()
-		MOUSE_BUTTON_RIGHT:
-			_cancel_placement()
-			get_viewport().set_input_as_handled()
-
 func _try_place_tower(screen_pos: Vector2) -> void:
-	## Snap click position to the nearest grid cell
-	var cell := Vector2i(
-		int(floor(screen_pos.x / GRID_SIZE)),
-		int(floor(screen_pos.y / GRID_SIZE))
-	)
+	var cell : Vector2i = _screen_to_cell(screen_pos)
 	if _occupied_cells.has(cell):
-		return   ## Cell already has a tower
-
-	## Phase C: reject placement that would disconnect any spawn from the base.
-	## Also blocks placement directly on spawn or base cells.
+		return
 	if not _map_grid.can_place_at(cell.x, cell.y):
 		return
-
-	var cost: Dictionary = {FactionManager.get_primary_resource(): _pending_tower.primary_cost}
+	var cost : Dictionary = {FactionManager.get_primary_resource(): _pending_tower.primary_cost}
 	if not EconomyManager.can_afford(cost):
+		_cancel_placement()
 		return
 	EconomyManager.spend(cost)
-
-	## Commit path change BEFORE placing the tower node so rerouted units
-	## get valid waypoints on the same frame the tower appears.
 	var route_changed : bool = _map_grid.mark_tower_placed(cell.x, cell.y)
 	_place_tower(cell)
 	if route_changed:
 		EventBus.path_changed.emit()
 
 func _place_tower(cell: Vector2i) -> void:
-	_occupied_cells[cell] = true
-	var tower: Node2D = TOWER_SCENE.instantiate()
+	var tower : Node2D = TOWER_SCENE.instantiate()
 	tower.call("setup", _pending_tower)
 	tower_layer.add_child(tower)
-	tower.position = Vector2(
-		cell.x * GRID_SIZE + GRID_SIZE * 0.5,
-		cell.y * GRID_SIZE + GRID_SIZE * 0.5
-	)
+	tower.position = _cell_to_world(cell)
+	_occupied_cells[cell] = tower
 	EventBus.tower_placed.emit(_pending_tower, cell)
-	_cancel_placement()   ## Return to normal mode after each placement
+	## Stay in placement mode while the player can still afford another tower.
+	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): _pending_tower.primary_cost}):
+		_cancel_placement()
 
 func _cancel_placement() -> void:
 	_placement_mode = false
 	_pending_tower  = null
 	hud.end_placement_mode()
 
-## Map path is now owned by MapGrid (res://src/core/map/MapGrid.gd).
-## Main.gd no longer builds or holds a Path2D reference.
+## -- Tower upgrades --
+
+func _try_upgrade_tower(cell: Vector2i) -> void:
+	var tower = _occupied_cells.get(cell)
+	if tower == null or not is_instance_valid(tower):
+		_occupied_cells.erase(cell)
+		return
+	var current_data = tower.get("data")
+	if current_data == null:
+		return
+	var next_data = current_data.get("upgrade_to")
+	if next_data == null:
+		EventBus.notification_pushed.emit("Already at max tier.", "info")
+		return
+	var cost := {FactionManager.get_primary_resource(): float(next_data.get("primary_cost"))}
+	if not EconomyManager.can_afford(cost):
+		EventBus.notification_pushed.emit(
+			"Not enough %s to upgrade. (need %d)" % [
+				FactionManager.get_primary_resource(),
+				int(next_data.get("primary_cost"))
+			], "warning"
+		)
+		return
+	EconomyManager.spend(cost)
+	tower.call("upgrade", next_data)
+	EventBus.notification_pushed.emit(
+		"%s upgraded to Tier %d." % [
+			str(next_data.get("tower_name")),
+			int(next_data.get("tier"))
+		], "positive"
+	)
+	EventBus.tower_placed.emit(next_data, cell)
+
+## -- Building placement --
+
+func _on_build_requested(building_data: Resource) -> void:
+	_cancel_placement()       ## Exit tower mode if active
+	_pending_building = building_data
+	_build_mode       = true
+
+func _try_place_building(screen_pos: Vector2) -> void:
+	var cell : Vector2i = _screen_to_cell(screen_pos)
+	## Buildings only go on CLAIMED territory.
+	if not _map_grid.call("is_claimed", cell.x, cell.y):
+		return
+	## One building per cell.
+	if _building_cells.has(cell):
+		return
+	var cost : Dictionary = {FactionManager.get_primary_resource(): float(_pending_building.get("primary_cost"))}
+	if not EconomyManager.can_afford(cost):
+		_cancel_build()
+		return
+	EconomyManager.spend(cost)
+	_place_building(cell)
+
+func _place_building(cell: Vector2i) -> void:
+	var building : Node2D = BUILDING_SCENE.instantiate()
+	building.call("setup", _pending_building)
+	building_layer.add_child(building)
+	building.position = _cell_to_world(cell)
+	_building_cells[cell] = building
+	EventBus.building_placed.emit(_pending_building, cell)
+	## Stay in build mode while the player can still afford another building.
+	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): float(_pending_building.get("primary_cost"))}):
+		_cancel_build()
+
+func _cancel_build() -> void:
+	_build_mode       = false
+	_pending_building = null
+	hud.end_build_mode()
+
+## -- Territory raids (building destruction) --
+
+func _on_territory_raided(cell: Vector2i) -> void:
+	if not _building_cells.has(cell):
+		return
+	var building = _building_cells.get(cell)
+	var bdata    = building.get("data") if is_instance_valid(building) else null
+	if is_instance_valid(building):
+		building.call("destroy")
+	_building_cells.erase(cell)
+	if bdata != null:
+		EventBus.building_destroyed.emit(bdata, cell)
+		EventBus.notification_pushed.emit(
+			"%s destroyed by raiders!" % str(bdata.get("building_name")),
+			"alert"
+		)
+
+## -- Helpers --
+
+func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
+	return Vector2i(
+		int(floor(screen_pos.x / GRID_SIZE)),
+		int(floor(screen_pos.y / GRID_SIZE))
+	)
+
+func _cell_to_world(cell: Vector2i) -> Vector2:
+	return Vector2(
+		cell.x * GRID_SIZE + GRID_SIZE * 0.5,
+		cell.y * GRID_SIZE + GRID_SIZE * 0.5
+	)

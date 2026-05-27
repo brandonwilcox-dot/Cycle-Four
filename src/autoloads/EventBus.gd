@@ -15,14 +15,23 @@ signal wave_ended(wave_number: int, result: String)
 signal unit_spawned(unit_data: Dictionary)
 signal unit_died(unit_data: Dictionary)
 signal base_damaged(amount: float, attacker_data: Dictionary)
+signal base_destroyed()                     ## base HP reached zero; triggers game-over
+signal enemy_count_changed(remaining: int)  ## fires on each kill/breach; HUD enemy counter
 
 # -- Tower Defense --
-signal tower_placement_requested(tower_data: Resource)  ## HUD -> Main: enter placement mode
+signal tower_placement_requested(tower_data: Resource)     ## HUD -> Main: enter tower placement
 signal tower_placed(tower_data: Resource, grid_pos: Vector2i)
 signal path_changed  ## Emitted by Main when a tower blocks a PATH cell; units reroute
-signal building_placed(building_data: Dictionary, grid_pos: Vector2i)
+signal building_placement_requested(building_data: Resource) ## HUD -> Main: enter build mode
+signal building_placed(building_data: Resource, grid_pos: Vector2i)
+signal building_destroyed(building_data: Resource, grid_pos: Vector2i)
 signal building_sold(building_data: Dictionary, grid_pos: Vector2i)
 signal building_upgraded(building_data: Dictionary, tier: int)
+
+# -- Commander --
+signal territory_claimed(cell: Vector2i)     ## Commander stepped onto a new GROUND cell
+signal territory_raided(cell: Vector2i)      ## Flanker successfully unclaimed a cell
+signal spawn_activated(spawn_cell: Vector2i) ## Commander reached a new enemy spawn zone
 
 # -- Factions & Progression --
 signal faction_selected(faction_id: String, sub_path: String)

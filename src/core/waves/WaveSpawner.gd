@@ -20,9 +20,9 @@ var _current_unit_data : UnitData = null
 var _spawn_interval    : float    = 1.2
 var _spawning          : bool     = false
 
-## Active spawn point this wave. Defaults to west; Phase D adds others.
-## Vector2i matching MapGrid spawn constants.
-var _spawn_cell : Vector2i = Vector2i(0, 8)   ## SPAWN_W_POS
+## Active spawn points. Starts with west only; Commander activates N/S/E.
+## Phase D: each unit picks a random active spawn at the moment it is created.
+var _spawn_cells : Array[Vector2i] = [Vector2i(0, 8)]   ## SPAWN_W_POS
 
 func _ready() -> void:
 	_unit_layer = get_node_or_null("../UnitLayer") as Node2D
@@ -32,15 +32,16 @@ func _ready() -> void:
 	if _map_grid == null:
 		push_error("WaveSpawner: could not find ../MapGrid in WorldMap.")
 	else:
-		## Tell MapGrid which spawn is active so the connectivity validator
-		## only protects routes that are actually sending enemies.
-		## Phase D will call register_active_spawn() for N/S/E when those go live.
-		_map_grid.call("register_active_spawn", _spawn_cell)
+		## Register the default western spawn so the connectivity validator
+		## protects that route from the first wave.
+		## Additional spawns are registered by Commander via EventBus.spawn_activated.
+		_map_grid.call("register_active_spawn", _spawn_cells[0])
 
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.wave_started.connect(_on_wave_started)
 	EventBus.wave_ended.connect(_on_wave_ended)
 	EventBus.path_changed.connect(_on_path_changed)
+	EventBus.spawn_activated.connect(_on_spawn_activated)
 
 func _process(delta: float) -> void:
 	if not _spawning or _units_to_spawn <= 0:
@@ -72,8 +73,10 @@ func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 		_spawn_interval    = float(wave_def.get("interval", 1.2))
 		_spawn_timer       = 0.0
 		_spawning          = true
-	## Sync WaveManager to the actual unit count we will spawn
+	## Sync WaveManager to the actual unit count we will spawn, then tell the
+	## HUD so the enemy counter shows the corrected number from the first frame.
 	WaveManager.enemies_remaining = _units_to_spawn
+	EventBus.enemy_count_changed.emit(_units_to_spawn)
 
 func _on_wave_ended(_wave_number: int, _result: String) -> void:
 	_spawning       = false
@@ -89,18 +92,53 @@ func _spawn_unit() -> void:
 	if _unit_layer == null or _map_grid == null:
 		push_error("WaveSpawner: missing UnitLayer or MapGrid -- cannot spawn.")
 		return
-	## Get world-space waypoints from the map grid (returned as Array[Vector2])
-	var wp_array : Array = _map_grid.get_path_to_base(_spawn_cell)
+	## Pick a random active spawn for variety when multiple spawns are open.
+	var chosen_spawn : Vector2i = _spawn_cells[randi() % _spawn_cells.size()]
+
+	## Phase F: waves 6+ have an escalating chance to produce a flanker that
+	## targets claimed territory instead of the base.
+	var ratio : float = _flanker_ratio(WaveManager.current_wave)
+	if ratio > 0.0 and randf() < ratio:
+		var flank_path : Array = _map_grid.call("get_path_to_nearest_claimed", chosen_spawn)
+		if not flank_path.is_empty():
+			var target_world : Vector2   = flank_path[flank_path.size() - 1]
+			var target_cell  : Vector2i  = _map_grid.call("world_to_cell", target_world)
+			var flanker      : Node2D    = UNIT_SCENE.instantiate()
+			flanker.call("setup_as_flanker", _current_unit_data, flank_path, target_cell, _map_grid)
+			_unit_layer.add_child(flanker)
+			_emit_unit_spawned()
+			return
+		## No accessible claimed cells -- fall through and spawn a normal base-rusher.
+
+	## Normal base-rusher
+	var wp_array : Array = _map_grid.get_path_to_base(chosen_spawn)
 	if wp_array.is_empty():
-		push_error("WaveSpawner: no path from spawn %s -- check MapGrid path connectivity." % _spawn_cell)
+		push_error("WaveSpawner: no path from spawn %s -- check MapGrid path connectivity." % chosen_spawn)
 		return
 	var unit : Node2D = UNIT_SCENE.instantiate()
 	unit.call("setup", _current_unit_data, wp_array)
 	_unit_layer.add_child(unit)
+	_emit_unit_spawned()
+
+## Fraction of units that are flankers for a given wave.
+## 0 for waves 1-5; ramps 10% per wave from wave 6, capped at 50%.
+## Wave 6=10%, wave 7=20%, wave 8=30%, wave 9=40%, wave 10+=50%.
+func _flanker_ratio(wave_number: int) -> float:
+	if wave_number < 6:
+		return 0.0
+	return clampf((wave_number - 5) * 0.10, 0.0, 0.50)
+
+func _emit_unit_spawned() -> void:
 	EventBus.unit_spawned.emit({
 		"unit": _current_unit_data.unit_name if _current_unit_data else "unknown",
 		"wave": WaveManager.current_wave,
 	})
+
+## Commander reached a new spawn zone -- add it to our active roster.
+## MapGrid connectivity is already updated by Commander before this fires.
+func _on_spawn_activated(spawn_cell: Vector2i) -> void:
+	if not spawn_cell in _spawn_cells:
+		_spawn_cells.append(spawn_cell)
 
 func _on_path_changed() -> void:
 	## A tower was placed on a PATH cell mid-wave. Tell every in-flight unit

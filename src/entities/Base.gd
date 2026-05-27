@@ -1,24 +1,31 @@
 ## Base.gd
 ## The player's Forward Operating Base. Militarised starting position --
 ## an always-on turret provides early-wave defense. Cannot be moved or sold.
-## Damage tracking and upgrade paths deferred until HP / upgrade systems land.
+## HP tracks cumulative breach damage; reaching zero emits base_destroyed.
 ## Design ref: core/17_units-maps-buildings.md (FOB concept)
 extends Node2D
 
 ## Turret stats -- strong enough to carry early waves solo, challenged past wave 5.
-## Phase B: base moved to map centre (992, 544); range kept in world-space pixels.
-## Phase A balance pass will tune these against procedural wave scaling.
-const RANGE: float        = 256.0  ## pixels -- covers ~4 grid cells
-const DAMAGE: float       = 18.0   ## per shot
-const ATTACK_SPEED: float = 1.5    ## shots per second
+const RANGE        : float = 256.0   ## pixels -- covers ~4 grid cells
+const DAMAGE       : float = 18.0    ## per shot
+const ATTACK_SPEED : float = 1.5     ## shots per second
 
-var _attack_timer: float = 0.0
+## HP -- 300 means 30 breaches at default unit damage (10.0). Tune in balance pass.
+const MAX_HP : float = 300.0
+
+var _current_hp    : float     = MAX_HP
+var _hp_bar        : ColorRect = null   ## tracked for live updates
+var _attack_timer  : float     = 0.0
+var _is_destroyed  : bool      = false
 
 func _ready() -> void:
 	add_to_group("base")
 	_build_visual()
+	EventBus.base_damaged.connect(_on_base_damaged)
 
 func _process(delta: float) -> void:
+	if _is_destroyed:
+		return
 	_attack_timer += delta
 	if _attack_timer >= 1.0 / ATTACK_SPEED:
 		_attack_timer = 0.0
@@ -26,13 +33,22 @@ func _process(delta: float) -> void:
 
 ## -- Combat --
 
+func _on_base_damaged(amount: float, _attacker_data: Dictionary) -> void:
+	if _is_destroyed:
+		return
+	_current_hp = maxf(0.0, _current_hp - amount)
+	_update_hp_bar()
+	if _current_hp <= 0.0:
+		_is_destroyed = true
+		EventBus.base_destroyed.emit()
+
 func _try_attack() -> void:
-	var nearest: Node    = null
-	var nearest_dist: float = RANGE
+	var nearest      : Node  = null
+	var nearest_dist : float = RANGE
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		var dist: float = global_position.distance_to(unit.global_position)
+		var dist : float = global_position.distance_to(unit.global_position)
 		if dist < nearest_dist:
 			nearest_dist = dist
 			nearest      = unit
@@ -40,6 +56,18 @@ func _try_attack() -> void:
 		nearest.take_damage(DAMAGE)
 
 ## -- Visual --
+
+func _update_hp_bar() -> void:
+	if _hp_bar == null:
+		return
+	_hp_bar.size.x = 80.0 * (_current_hp / MAX_HP)
+	var ratio : float = _current_hp / MAX_HP
+	if ratio > 0.5:
+		_hp_bar.color = Color(0.20, 0.90, 0.20)
+	elif ratio > 0.25:
+		_hp_bar.color = Color(0.90, 0.70, 0.10)
+	else:
+		_hp_bar.color = Color(0.90, 0.20, 0.10)
 
 func _build_visual() -> void:
 	## Sandbag / concrete outer ring
@@ -85,3 +113,17 @@ func _build_visual() -> void:
 	label.add_theme_font_size_override("font_size", 11)
 	label.add_theme_color_override("font_color", Color(0.85, 0.82, 0.55, 1.0))
 	add_child(label)
+
+	## HP bar background
+	var bar_bg := ColorRect.new()
+	bar_bg.size     = Vector2(80.0, 6.0)
+	bar_bg.position = Vector2(-40.0, 52.0)
+	bar_bg.color    = Color(0.20, 0.20, 0.20)
+	add_child(bar_bg)
+
+	## HP bar foreground (tracked for live updates)
+	_hp_bar          = ColorRect.new()
+	_hp_bar.size     = Vector2(80.0, 6.0)
+	_hp_bar.position = Vector2(-40.0, 52.0)
+	_hp_bar.color    = Color(0.20, 0.90, 0.20)
+	add_child(_hp_bar)

@@ -17,7 +17,12 @@ class_name TowerData
 @export var attack_speed: float = 1.0  ## attacks per second
 
 ## Economy
-@export var primary_cost: float = 25.0 ## cost in faction primary resource
+@export var primary_cost: float = 25.0  ## cost in faction primary resource
+
+## Upgrade chain
+## upgrade_to == null means this is the max tier.
+## Upgrade cost = upgrade_to.primary_cost (what the next tier costs to build fresh).
+@export var upgrade_to: TowerData = null
 
 ## Visual
 @export var color_hint: Color = Color.WHITE

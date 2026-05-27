@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+building_name = "Signal Tap"
+faction_id = "mesh"
+income_rate = 0.8
+primary_cost = 35.0
+color_hint = Color(0.9, 0.4, 0.85, 1.0)

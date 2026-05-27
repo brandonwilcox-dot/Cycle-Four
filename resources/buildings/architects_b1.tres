@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BuildingData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/BuildingData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+building_name = "Relay Node"
+faction_id = "architects"
+income_rate = 0.8
+primary_cost = 40.0
+color_hint = Color(0.35, 0.65, 1.0, 1.0)

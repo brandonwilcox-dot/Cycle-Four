@@ -41,6 +41,11 @@ func register_active_spawn(spawn_cell: Vector2i) -> void:
 	if not spawn_cell in _active_spawns:
 		_active_spawns.append(spawn_cell)
 
+## Returns true if the cell holds Commander-claimed territory.
+## Used by Main to validate production building placement.
+func is_claimed(col: int, row: int) -> bool:
+	return get_cell(col, row) == Cell.CLAIMED
+
 func _ready() -> void:
 	_cells.resize(COLS * ROWS)
 	_cells.fill(Cell.GROUND)
@@ -73,10 +78,11 @@ func can_place_at(col: int, row: int) -> bool:
 	## Protect spawn points and the base from being covered
 	if ct in [Cell.BASE, Cell.SPAWN_W, Cell.SPAWN_N, Cell.SPAWN_S, Cell.SPAWN_E]:
 		return false
-	## Non-traversable cells (GROUND, WALL, existing OBSTACLE) never affect routing
+	## Non-traversable cells (GROUND, WALL, OBSTACLE, CLAIMED) never affect enemy
+	## routing -- placing a tower there cannot disconnect any spawn from the base.
 	if not _is_traversable(ct):
 		return true
-	## PATH or CLAIMED cell: test that blocking it keeps all spawns connected
+	## PATH or spawn-adjacent cell: test that blocking it keeps all spawns connected.
 	return _test_obstacle_ok(col, row)
 
 ## Marks (col, row) as occupied by a tower.
@@ -88,6 +94,63 @@ func mark_tower_placed(col: int, row: int) -> bool:
 		set_cell(col, row, Cell.OBSTACLE)   ## triggers _rebuild_astar + queue_redraw
 		return true
 	return false
+
+## Returns world-space waypoints from from_cell to the nearest accessible CLAIMED cell.
+## "Accessible" means the CLAIMED cell has at least one orthogonally adjacent traversable
+## (PATH/SPAWN/BASE) cell that is in the AStar graph. The returned path navigates via
+## AStar to that adjacent cell, then appends one final step onto the CLAIMED cell itself.
+## Returns empty array when no accessible CLAIMED cells exist.
+func get_path_to_nearest_claimed(from_cell: Vector2i) -> Array[Vector2]:
+	var from_id : int = _cell_id(from_cell.x, from_cell.y)
+	if not _astar.has_point(from_id):
+		return []
+
+	var best_path   : Array[Vector2] = []
+	var best_length : int            = 999999
+
+	for row in ROWS:
+		for col in COLS:
+			if _cells[col + row * COLS] != Cell.CLAIMED:
+				continue
+			var claimed_cell : Vector2i = Vector2i(col, row)
+			## Try every adjacent traversable cell as the AStar target.
+			## We pick the adjacent cell that yields the shortest total path.
+			for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var adj : Vector2i = claimed_cell + (off as Vector2i)
+				if adj.x < 0 or adj.x >= COLS or adj.y < 0 or adj.y >= ROWS:
+					continue
+				if not _is_traversable(_cells[adj.x + adj.y * COLS]):
+					continue
+				var to_id : int = _cell_id(adj.x, adj.y)
+				if not _astar.has_point(to_id):
+					continue
+				var cell_pts : PackedVector2Array = _astar.get_point_path(from_id, to_id)
+				if cell_pts.is_empty() or cell_pts.size() >= best_length:
+					continue
+				best_length = cell_pts.size()
+				best_path.clear()
+				for cp in cell_pts:
+					best_path.append(cell_to_world(int(cp.x), int(cp.y)))
+				## Final step: step off the path network onto the claimed cell
+				best_path.append(cell_to_world(claimed_cell.x, claimed_cell.y))
+
+	return best_path
+
+## Reverts a CLAIMED cell back to GROUND.
+## Called by Unit._raid_territory() when a flanker reaches its target cell.
+func unclaim_cell(col: int, row: int) -> void:
+	if get_cell(col, row) == Cell.CLAIMED:
+		_cells[col + row * COLS] = Cell.GROUND
+		queue_redraw()   ## No AStar rebuild -- CLAIMED was not in the enemy graph
+
+## Marks a GROUND cell as Commander-claimed territory.
+## CLAIMED cells render in a distinct colour and will generate resources (Phase E).
+## They do NOT extend the enemy AStar graph, so claiming never shortens enemy routes.
+func claim_cell(col: int, row: int) -> void:
+	if get_cell(col, row) != Cell.GROUND:
+		return
+	_cells[col + row * COLS] = Cell.CLAIMED
+	queue_redraw()   ## No AStar rebuild needed -- CLAIMED is not enemy-traversable
 
 ## Returns the nearest traversable cell to world_pos via BFS.
 ## Used by Unit.reroute() to find a valid start for a fresh AStar query
@@ -164,7 +227,7 @@ func get_path_to_base(spawn_cell: Vector2i) -> Array[Vector2]:
 ## Cell ↔ world conversions.
 func cell_to_world(col: int, row: int) -> Vector2:
 	return Vector2(col * CELL_SIZE + CELL_SIZE * 0.5,
-	               row * CELL_SIZE + CELL_SIZE * 0.5)
+				   row * CELL_SIZE + CELL_SIZE * 0.5)
 
 func world_to_cell(world_pos: Vector2) -> Vector2i:
 	return Vector2i(
@@ -179,6 +242,7 @@ func _draw() -> void:
 	var spawn_col := Color(0.42, 0.10, 0.10, 1.0)
 	var base_col  := Color(0.52, 0.42, 0.06, 1.0)
 	var obs_col   := Color(0.30, 0.22, 0.12, 1.0)
+	var claim_col := Color(0.10, 0.30, 0.16, 1.0)   ## dark green: Commander territory
 	var line_col  := Color(0.15, 0.15, 0.22, 0.30)
 
 	for row in ROWS:
@@ -193,6 +257,8 @@ func _draw() -> void:
 					draw_rect(rect, spawn_col)
 				Cell.OBSTACLE:
 					draw_rect(rect, obs_col)
+				Cell.CLAIMED:
+					draw_rect(rect, claim_col)
 
 	## Subtle grid overlay across the whole board
 	for r in ROWS + 1:
@@ -281,10 +347,11 @@ func _rebuild_astar() -> void:
 					_astar.connect_points(id, nid)
 
 func _is_traversable(cell_type: int) -> bool:
+	## CLAIMED is intentionally excluded -- enemy AStar never walks through
+	## friendly territory; it only affects the Commander's footprint visually.
 	return cell_type in [
 		Cell.PATH, Cell.BASE,
 		Cell.SPAWN_W, Cell.SPAWN_N, Cell.SPAWN_S, Cell.SPAWN_E,
-		Cell.CLAIMED,
 	]
 
 func _cell_id(col: int, row: int) -> int:
