@@ -97,44 +97,54 @@ func mark_tower_placed(col: int, row: int) -> bool:
 
 ## Returns world-space waypoints from from_cell to the nearest accessible CLAIMED cell.
 ## "Accessible" means the CLAIMED cell has at least one orthogonally adjacent traversable
-## (PATH/SPAWN/BASE) cell that is in the AStar graph. The returned path navigates via
-## AStar to that adjacent cell, then appends one final step onto the CLAIMED cell itself.
+## (PATH/SPAWN/BASE) cell. The path navigates via AStar to that adjacent cell, then
+## appends one final step onto the CLAIMED cell itself.
 ## Returns empty array when no accessible CLAIMED cells exist.
+##
+## Algorithm: BFS outward through the traversable (PATH/SPAWN/BASE) cell graph from
+## from_cell. Stop at the first traversable cell that borders a CLAIMED cell -- that
+## is guaranteed to be the nearest one in graph-hop distance. Then ONE AStar query
+## gives the actual world-space path. Complexity: O(traversable_cells) instead of
+## O(claimed_cells * traversable_cells) -- critical when the map is mostly claimed.
 func get_path_to_nearest_claimed(from_cell: Vector2i) -> Array[Vector2]:
 	var from_id : int = _cell_id(from_cell.x, from_cell.y)
 	if not _astar.has_point(from_id):
 		return []
 
-	var best_path   : Array[Vector2] = []
-	var best_length : int            = 999999
+	## BFS through the traversable graph.
+	var visited : Dictionary = {from_cell: true}
+	var queue   : Array      = [from_cell]
 
-	for row in ROWS:
-		for col in COLS:
-			if _cells[col + row * COLS] != Cell.CLAIMED:
+	while not queue.is_empty():
+		var cur : Vector2i = queue.pop_front()
+
+		for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nb : Vector2i = cur + off
+			if nb.x < 0 or nb.x >= COLS or nb.y < 0 or nb.y >= ROWS:
 				continue
-			var claimed_cell : Vector2i = Vector2i(col, row)
-			## Try every adjacent traversable cell as the AStar target.
-			## We pick the adjacent cell that yields the shortest total path.
-			for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var adj : Vector2i = claimed_cell + (off as Vector2i)
-				if adj.x < 0 or adj.x >= COLS or adj.y < 0 or adj.y >= ROWS:
-					continue
-				if not _is_traversable(_cells[adj.x + adj.y * COLS]):
-					continue
-				var to_id : int = _cell_id(adj.x, adj.y)
-				if not _astar.has_point(to_id):
-					continue
-				var cell_pts : PackedVector2Array = _astar.get_point_path(from_id, to_id)
-				if cell_pts.is_empty() or cell_pts.size() >= best_length:
-					continue
-				best_length = cell_pts.size()
-				best_path.clear()
-				for cp in cell_pts:
-					best_path.append(cell_to_world(int(cp.x), int(cp.y)))
-				## Final step: step off the path network onto the claimed cell
-				best_path.append(cell_to_world(claimed_cell.x, claimed_cell.y))
 
-	return best_path
+			var nb_type : int = _cells[nb.x + nb.y * COLS]
+
+			if nb_type == Cell.CLAIMED:
+				## cur is the nearest traversable cell adjacent to claimed territory.
+				## One AStar query gets the path; then append the claimed cell.
+				var to_id    : int               = _cell_id(cur.x, cur.y)
+				var cell_pts : PackedVector2Array = _astar.get_point_path(from_id, to_id)
+				if cell_pts.is_empty():
+					return []
+				var result : Array[Vector2] = []
+				for cp in cell_pts:
+					result.append(cell_to_world(int(cp.x), int(cp.y)))
+				result.append(cell_to_world(nb.x, nb.y))   ## step onto the claimed cell
+				return result
+
+			## Expand to unvisited traversable neighbors.
+			if visited.has(nb) or not _is_traversable(nb_type):
+				continue
+			visited[nb] = true
+			queue.append(nb)
+
+	return []   ## No claimed cells accessible from this position
 
 ## Reverts a CLAIMED cell back to GROUND.
 ## Called by Unit._raid_territory() when a flanker reaches its target cell.
