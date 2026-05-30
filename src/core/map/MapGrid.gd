@@ -49,11 +49,37 @@ func is_claimed(col: int, row: int) -> bool:
 func _ready() -> void:
 	_cells.resize(COLS * ROWS)
 	_cells.fill(Cell.GROUND)
-	_build_default_paths()
-	_rebuild_astar()
+	var map_data : MapData = DefaultMapBuilder.create()
+	if OS.is_debug_build():
+		## Phase 2 parity check: build the reference layout with the old hardcoded method,
+		## then load from the resource, and assert they are cell-for-cell identical.
+		## Remove this block (or leave it) once parity is confirmed in the editor.
+		_build_default_paths()
+		var reference : Array[int] = _cells.duplicate()
+		load_map_data(map_data)
+		_assert_parity(reference)
+	else:
+		load_map_data(map_data)
 	queue_redraw()
 
 ## -- Public API --
+
+## Loads a MapData resource into the grid, replacing the current cell layout.
+## Overwrites _cells, rebuilds the enemy AStar. Call queue_redraw() afterwards if needed.
+## Dimensions must match COLS × ROWS; fires an assert otherwise.
+func load_map_data(map_data: MapData) -> void:
+	assert(
+		map_data.dimensions == Vector2i(COLS, ROWS),
+		"MapGrid.load_map_data: dimensions mismatch — expected %s, got %s" % [
+			str(Vector2i(COLS, ROWS)), str(map_data.dimensions)
+		]
+	)
+	for i in COLS * ROWS:
+		_cells[i] = map_data.cell_types[i] as int
+	_rebuild_astar()
+	## Phase 3: build the cell→zone reverse index. The index is runtime-only and
+	## must be rebuilt on every map load (not serialized with the resource).
+	map_data.build_zone_index()
 
 func get_cell(col: int, row: int) -> int:
 	if col < 0 or col >= COLS or row < 0 or row >= ROWS:
@@ -200,6 +226,24 @@ func _test_obstacle_ok(col: int, row: int) -> bool:
 	_rebuild_astar()
 	return ok
 
+## Phase 2 parity check. Compares the current _cells against a reference array built
+## by the old _build_default_paths(). Prints OK or pushes per-cell error messages.
+## Called only in debug builds from _ready(); safe to remove after Phase 2 is confirmed.
+func _assert_parity(reference: Array[int]) -> void:
+	var mismatches : int = 0
+	for i in COLS * ROWS:
+		if _cells[i] != reference[i]:
+			var col : int = i % COLS
+			var row : int = i / COLS
+			push_error("MapGrid parity FAIL at (%d,%d): loaded=%d  reference=%d" % [
+				col, row, _cells[i], reference[i]
+			])
+			mismatches += 1
+	if mismatches == 0:
+		print("MapGrid Phase 2 parity OK -- load_map_data matches _build_default_paths().")
+	else:
+		push_error("MapGrid Phase 2 parity FAILED: %d mismatch(es). See errors above." % mismatches)
+
 ## Returns true when every ACTIVE spawn still has at least one path to base.
 ## Only registered spawns are checked; inactive spawn paths may be freely blocked.
 func _all_spawns_connected() -> bool:
@@ -278,6 +322,10 @@ func _draw() -> void:
 
 ## -- Path building --
 
+## DEPRECATED — no longer called from _ready(). Kept as the parity reference for
+## Phase 2 validation and as documentation of the default topology.
+## DefaultMapBuilder._build_paths() is the live mirror of this function.
+## Both must be kept in sync until Phase 10 (procedural generator) lands.
 func _build_default_paths() -> void:
 	## West path: TWO-BRANCH network between junction (4,8) and exit (13,8).
 	## Blocking most cells forces the other branch; only the short entry corridor
