@@ -5,7 +5,8 @@
 ## Listens to WaveManager signals; never drives wave state itself.
 extends Node
 
-const UNIT_SCENE : PackedScene = preload("res://scenes/main/Unit.tscn")
+const UNIT_SCENE          : PackedScene = preload("res://scenes/main/Unit.tscn")
+const _WAVE_TABLE_BUILDER = preload("res://src/core/waves/WaveTableBuilder.gd")
 
 ## Loaded when faction is confirmed.
 var _wave_table        : Resource = null   ## WaveTable; typed Resource to avoid load-order issues
@@ -26,6 +27,12 @@ var _spawning          : bool     = false
 ## Emitted to EventBus as wave_axis_committed so the WavePanel can display axis pressure.
 var _spawn_queue : Dictionary = {}
 
+## Scripted overrides: wave_number (int) → {secondary_count: int}.
+## When the keyed wave starts a secondary (non-primary) active spawn is chosen and
+## secondary_count extra units are injected into the spawn queue from that axis.
+## If no secondary spawn is active the override is silently skipped.
+var scripted_overrides : Dictionary = {}
+
 func _ready() -> void:
 	_unit_layer = get_node_or_null("../UnitLayer") as Node2D
 	_map_grid   = get_node_or_null("../MapGrid")   as Node2D
@@ -33,6 +40,8 @@ func _ready() -> void:
 		push_error("WaveSpawner: could not find ../UnitLayer in WorldMap.")
 	if _map_grid == null:
 		push_error("WaveSpawner: could not find ../MapGrid in WorldMap.")
+
+	scripted_overrides = { 3: { secondary_count = 3 } }
 
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.wave_started.connect(_on_wave_started)
@@ -58,7 +67,7 @@ func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
 	if ResourceLoader.exists(path):
 		_wave_table = load(path)
 	else:
-		_wave_table = null   ## Procedural fallback
+		_wave_table = _WAVE_TABLE_BUILDER.build(faction_id)
 
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	if _wave_table == null:
@@ -76,6 +85,7 @@ func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	EventBus.enemy_count_changed.emit(_units_to_spawn)
 	## Pre-commit spawn distribution and broadcast for the wave panel axis diagram.
 	_build_spawn_queue(_units_to_spawn)
+	_apply_scripted_override(wave_number)
 	var axis_weights : Dictionary = {}
 	for spawn_id in _spawn_queue:
 		axis_weights[spawn_id] = _spawn_queue[spawn_id].count
@@ -207,6 +217,52 @@ func _get_active_spawn_cells() -> Array[Vector2i]:
 	if data == null:
 		return ([] as Array[Vector2i])
 	return data.get_active_spawn_cells()
+
+## Injects extra units from a non-primary axis when a scripted override exists for this wave.
+func _apply_scripted_override(wave_number: int) -> void:
+	if not scripted_overrides.has(wave_number):
+		return
+	var override     : Dictionary = scripted_overrides[wave_number]
+	var secondary_pos : Vector2i  = _pick_secondary_spawn_pos()
+	if secondary_pos == Vector2i(-1, -1):
+		return
+	var secondary_id  : StringName = _get_spawn_id_at(secondary_pos)
+	if secondary_id == &"":
+		return
+	var extra : int = int(override.get("secondary_count", 3))
+	if _spawn_queue.has(secondary_id):
+		_spawn_queue[secondary_id].count += extra
+	else:
+		_spawn_queue[secondary_id] = { count = extra, position = secondary_pos }
+	_units_to_spawn             += extra
+	WaveManager.enemies_remaining = _units_to_spawn
+	EventBus.enemy_count_changed.emit(_units_to_spawn)
+	EventBus.wave_flank_triggered.emit(wave_number)
+
+## Returns the position of an active spawn that is NOT the primary (highest-count) axis.
+## Returns Vector2i(-1, -1) if no secondary spawn is available.
+func _pick_secondary_spawn_pos() -> Vector2i:
+	var primary_id  : StringName = &""
+	var max_count   : int        = -1
+	for spawn_id in _spawn_queue:
+		if _spawn_queue[spawn_id].count > max_count:
+			max_count  = _spawn_queue[spawn_id].count
+			primary_id = spawn_id
+	var data : MapData = _map_grid.get("map_data") as MapData
+	if data == null:
+		return Vector2i(-1, -1)
+	for sp : SpawnPoint in data.get_active_spawn_points():
+		if sp.id != primary_id:
+			return sp.position
+	return Vector2i(-1, -1)
+
+## Looks up the SpawnPoint id for a given map cell position.
+func _get_spawn_id_at(pos: Vector2i) -> StringName:
+	var data : MapData = _map_grid.get("map_data") as MapData
+	if data == null:
+		return &""
+	var sp : SpawnPoint = data.get_spawn_at(pos)
+	return sp.id if sp != null else &""
 
 func _on_path_changed() -> void:
 	## A tower was placed on a PATH cell mid-wave. Tell every in-flight unit

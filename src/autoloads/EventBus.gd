@@ -16,6 +16,7 @@ signal wave_axis_committed(axis_weights: Dictionary)       ## spawn_id → unit_
 signal wave_composition_committed(unit_name: String, count: int)  ## unit type + total count for the incoming wave
 signal unit_spawned(unit_data: Dictionary)
 signal unit_died(unit_data: Dictionary)
+signal wave_flank_triggered(wave_number: int)  ## Scripted secondary-axis probe fired
 signal base_damaged(amount: float, attacker_data: Dictionary)
 signal base_healed(amount: float)           ## Bloom Overdrive / Verdant Bulwark FOB regen
 signal base_destroyed()                     ## base HP reached zero; triggers game-over

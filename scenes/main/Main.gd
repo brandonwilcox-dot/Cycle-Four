@@ -3,15 +3,22 @@
 ## and production building placement/destruction.
 extends Node
 
-const TOWER_SCENE    : PackedScene = preload("res://scenes/main/Tower.tscn")
-const BUILDING_SCENE : PackedScene = preload("res://scenes/main/Building.tscn")
-const GRID_SIZE      : int = 64
+const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tscn")
+const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.tscn")
+const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
+const GRID_SIZE             : int = 64
 
-@onready var faction_select  : Node2D   = $UILayer/Academy
-@onready var hud             : Control  = $UILayer/HUD
-@onready var tower_layer     : Node2D   = $WorldMap/TowerLayer
-@onready var building_layer  : Node2D   = $WorldMap/BuildingLayer
-@onready var _map_grid       : Node2D   = $WorldMap/MapGrid
+const WASH_FADE_IN  : float = 0.4
+const WASH_HOLD     : float = 0.3
+const WASH_FADE_OUT : float = 0.4
+const WASH_ALPHA    : float = 0.6
+
+@onready var faction_select   : Node2D    = $UILayer/Academy
+@onready var hud              : Control   = $UILayer/HUD
+@onready var tower_layer      : Node2D    = $WorldMap/TowerLayer
+@onready var building_layer   : Node2D    = $WorldMap/BuildingLayer
+@onready var _map_grid        : Node2D    = $WorldMap/MapGrid
+@onready var _milestone_wash  : ColorRect = $WashLayer/MilestoneWash
 
 ## Tower placement state
 var _placement_mode  : bool     = false
@@ -35,6 +42,7 @@ func _ready() -> void:
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
+	EventBus.milestone_reached.connect(_on_milestone_reached)
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 		_start_game_world()
@@ -279,3 +287,53 @@ func _cell_to_world(cell: Vector2i) -> Vector2:
 		cell.x * GRID_SIZE + GRID_SIZE * 0.5,
 		cell.y * GRID_SIZE + GRID_SIZE * 0.5
 	)
+
+## -- Milestone visuals --
+
+func _on_milestone_reached(faction_id: String, _milestone_index: int) -> void:
+	_play_milestone_wash(faction_id)
+
+func _play_milestone_wash(faction_id: String) -> void:
+	var tween : Tween = create_tween()
+	tween.tween_property(_milestone_wash, "color:a", WASH_ALPHA, WASH_FADE_IN)
+	tween.tween_interval(WASH_HOLD)
+	tween.tween_property(_milestone_wash, "color:a", 0.0, WASH_FADE_OUT)
+	tween.tween_callback(_spawn_ancient_watcher.bind(faction_id))
+
+func _spawn_ancient_watcher(faction_id: String) -> void:
+	var ruins_cell : Vector2i = _find_ruins_cell()
+	if ruins_cell == Vector2i(-1, -1):
+		return
+	var dialogue : String = _ancient_dialogue(faction_id)
+	var watcher  : Node2D = ANCIENT_WATCHER_SCENE.instantiate() as Node2D
+	get_node("WorldMap").add_child(watcher)
+	var start_world  : Vector2 = _cell_to_world(ruins_cell)
+	var target_world : Vector2 = _cell_to_world(ruins_cell + Vector2i(1, 0))
+	watcher.global_position = start_world
+	watcher.call("setup", target_world, dialogue)
+
+## Returns the center cell of the first ANCIENT_PATH_CROSSING zone, or (-1,-1).
+func _find_ruins_cell() -> Vector2i:
+	var data : MapData = _map_grid.get("map_data") as MapData
+	if data == null:
+		return Vector2i(-1, -1)
+	for zone : ZoneRegion in data.zones:
+		if zone == null:
+			continue
+		if zone.kind == ZoneRegion.ZoneKind.ANCIENT_PATH_CROSSING:
+			if zone.use_rect:
+				var r : Rect2i = zone.shape_rect
+				return r.position + Vector2i(r.size.x >> 1, r.size.y >> 1)
+			elif not zone.shape_cells.is_empty():
+				return zone.shape_cells[zone.shape_cells.size() >> 1]
+	return Vector2i(-1, -1)
+
+func _ancient_dialogue(faction_id: String) -> String:
+	match faction_id:
+		"architects":
+			return "You have optimized past the first threshold. We have been watching."
+		"bloom":
+			return "The territory remembers. You are no longer a visitor."
+		"mesh":
+			return "The routes hold. The network has reached critical mass."
+	return ""

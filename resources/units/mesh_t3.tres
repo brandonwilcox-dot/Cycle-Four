@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Carver"
+faction_id = "mesh"
+tier = 3
+max_health = 300.0
+move_speed = 62.0
+damage_on_arrival = 40.0
+armor = 6.0
+resource_reward = 28.0
+spawn_cost = {}
+cooldown = 240.0
+color_hint = Color(0.70, 0.18, 0.68, 1.0)
+evolve_threshold = 0.0
+hacks_on_death = true
+hack_radius = 96.0
+status_immune = false

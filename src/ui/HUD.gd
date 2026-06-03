@@ -81,6 +81,7 @@ func _ready() -> void:
 	place_building_btn.pressed.connect(_on_place_building_pressed)
 	research_btn.pressed.connect(_on_research_pressed)
 	EventBus.research_stage_purchased.connect(_on_research_stage_purchased)
+	EventBus.offline_catch_up.connect(_on_offline_catch_up)
 	place_tower_btn.disabled    = true   ## Enabled once faction is chosen
 	place_building_btn.disabled = true
 	start_wave_btn.disabled     = false
@@ -151,10 +152,14 @@ func _on_resource_changed(_faction_id: String, resource_id: String, amount: floa
 
 # -- Wave handlers (action bar only; WavePanel owns status display) -----------
 
-func _on_wave_started(_wave_number: int, _commander_data: Dictionary) -> void:
+func _on_wave_started(wave_number: int, commander_data: Dictionary) -> void:
 	start_wave_btn.disabled = true
 	## Combat begins: collapse all contextual panels so the player can focus.
 	enter_glance_state()
+	## Surface commander name at waves 11+ (core/12).
+	var cmd_name : String = commander_data.get("name", "")
+	if not cmd_name.is_empty():
+		_push_notification("Wave %d — %s" % [wave_number, cmd_name], Color(0.80, 0.70, 1.00))
 
 func _on_wave_ended(wave_number: int, _result: String) -> void:
 	start_wave_btn.disabled = false
@@ -395,6 +400,18 @@ func _depth_label(d: HudDepth) -> String:
 		HudDepth.TACTICAL: return "tactical"
 		HudDepth.ACTIVE:   return "active"
 	return "unknown"
+
+# -- Offline catch-up --------------------------------------------------------
+
+func _on_offline_catch_up(seconds_elapsed: float) -> void:
+	var hours   : int   = int(seconds_elapsed / 3600.0)
+	var minutes : int   = int(fmod(seconds_elapsed, 3600.0) / 60.0)
+	var msg     : String
+	if hours > 0:
+		msg = "Welcome back! %dh %dm of idle income collected." % [hours, minutes]
+	else:
+		msg = "Welcome back! %dm of idle income collected." % minutes
+	_push_notification(msg, Color(0.35, 1.0, 0.45))
 
 # -- Helpers ------------------------------------------------------------------
 

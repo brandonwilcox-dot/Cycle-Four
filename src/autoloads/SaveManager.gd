@@ -18,6 +18,9 @@ var _save_dirty: bool = false
 func _ready() -> void:
 	EventBus.wave_ended.connect(_on_wave_ended)
 	EventBus.prestige_completed.connect(_on_prestige_completed)
+	EventBus.faction_selected.connect(_on_dirty_event)
+	EventBus.building_placed.connect(_on_dirty_event)
+	EventBus.tower_placed.connect(_on_dirty_event)
 	if DEV_CLEAR_SAVE:
 		_wipe_saves()
 		return   ## Skip load -- managers start from their own defaults
@@ -69,11 +72,12 @@ func _collect_all_state() -> Dictionary:
 	return {
 		"version":  1,
 		"timestamp": Time.get_unix_time_from_system(),
-		"game_state":    GameState.to_save_data(),
-		"resources":     EconomyManager.resources,
+		"game_state":       GameState.to_save_data(),
+		"resources":        EconomyManager.resources,
 		"production_rates": EconomyManager.production_rates,
-		"storage_caps":  EconomyManager.storage_caps,
-		"galaxy":        _galaxy_to_dict(),
+		"territory_rates":  EconomyManager.territory_rates,
+		"storage_caps":     EconomyManager.storage_caps,
+		"galaxy":           _galaxy_to_dict(),
 	}
 
 func _apply_all_state(data: Dictionary) -> void:
@@ -88,6 +92,9 @@ func _apply_all_state(data: Dictionary) -> void:
 	var caps: Dictionary = data.get("storage_caps", {})
 	for k in caps:
 		EconomyManager.storage_caps[k] = float(caps[k])
+	var terr: Dictionary = data.get("territory_rates", {})
+	for k in terr:
+		EconomyManager.territory_rates[k] = float(terr[k])
 	_galaxy_from_dict(data.get("galaxy", {}))
 	# Apply offline production after all state is restored
 	if offline_seconds > 30.0:
@@ -124,3 +131,8 @@ func _on_wave_ended(_wave: int, _result: String) -> void:
 
 func _on_prestige_completed(_faction: String) -> void:
 	save_game()
+
+## Shared dirty-marker wired to placement and selection events.
+## Godot 4 allows connecting to a function with fewer params than the signal.
+func _on_dirty_event() -> void:
+	mark_dirty()

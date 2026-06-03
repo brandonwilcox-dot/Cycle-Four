@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Bramble-Walker"
+faction_id = "bloom"
+tier = 2
+max_health = 320.0
+move_speed = 45.0
+damage_on_arrival = 28.0
+armor = 3.0
+resource_reward = 14.0
+spawn_cost = {}
+cooldown = 90.0
+color_hint = Color(0.2, 0.72, 0.28, 1.0)
+evolve_threshold = 0.3
+hacks_on_death = false
+hack_radius = 0.0
+status_immune = false
