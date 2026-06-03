@@ -233,6 +233,12 @@ func _draw() -> void:
 		var field_r     : float   = _ability_controller.FIELD_RADIUS_PX
 		draw_circle(field_local, field_r, Color(0.40, 0.80, 1.00, 0.12))
 		draw_arc(field_local, field_r, 0.0, TAU, 48, Color(0.40, 0.80, 1.00, 0.65), 2.0)
+	## Bloom biomass hazard: dim green disc after field expires.
+	if _ability_controller != null and _ability_controller.hazard_active:
+		var hazard_local : Vector2 = _ability_controller.hazard_center - global_position
+		var hazard_r     : float   = _ability_controller.FIELD_RADIUS_PX
+		draw_circle(hazard_local, hazard_r, Color(0.20, 0.55, 0.15, 0.18))
+		draw_arc(hazard_local, hazard_r, 0.0, TAU, 48, Color(0.25, 0.70, 0.20, 0.55), 2.0)
 
 func _build_visual() -> void:
 	## 32×32 gold body -- distinct from enemy units (24×24, grey/faction colour)
@@ -295,6 +301,7 @@ func _try_primary_attack() -> void:
 	_spawn_shot_line(target.global_position, PRIMARY_LINE_COLOR, 2.0)
 	if _ability_controller != null:
 		_ability_controller.add_lance_charge(dmg)
+		_ability_controller.on_primary_hit()
 
 func _find_nearest_unit_in_range() -> Node2D:
 	var best : Node2D  = null

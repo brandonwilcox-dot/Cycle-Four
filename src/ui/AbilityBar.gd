@@ -6,11 +6,12 @@ extends Control
 
 const SLOT_SIZE   : float = 52.0
 const SLOT_GAP    : float = 8.0
-const KEY_LABELS  : Array = ["Q", "W", "E"]
+const KEY_LABELS  : Array = ["Q", "W", "E", "R"]
 const SLOT_COLORS : Array = [
 	Color(1.00, 0.92, 0.30, 1.0),   ## Lance — gold
 	Color(0.40, 0.80, 1.00, 1.0),   ## Suppression Field — cyan
 	Color(1.00, 0.55, 0.18, 1.0),   ## Overdrive — orange
+	Color(0.85, 0.30, 1.00, 1.0),   ## Ultimate — magenta (updated at faction select)
 ]
 
 ## Each entry: {panel, bg, cooldown_bar, key_label, lock_overlay}
@@ -32,7 +33,7 @@ func _build_slots() -> void:
 	hbox.add_theme_constant_override("separation", int(SLOT_GAP))
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	add_child(hbox)
-	for i in 3:
+	for i in 4:
 		var slot := _make_slot(i)
 		hbox.add_child(slot.panel)
 		_slots.append(slot)

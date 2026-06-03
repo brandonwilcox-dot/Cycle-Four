@@ -18,6 +18,7 @@ var _current_health   : float    = 0.0
 var _is_dead          : bool     = false
 var _visual           : ColorRect = null   ## placeholder until sprites exist
 var _speed_multiplier : float    = 1.0    ## set by AbilityController (Suppression Field)
+var _stun_until       : float    = -1.0   ## timestamp; movement skipped while now < _stun_until
 
 ## Phase F -- flanker state.
 ## Flankers target a CLAIMED cell instead of the base.
@@ -51,6 +52,9 @@ func _process(delta: float) -> void:
 	## Phase 6/8: hide while inside unrevealed cells. Enemies emerging from the fog
 	## should only appear once their cell enters the Commander's vision.
 	_update_fog_visibility()
+	## Stun check: freeze movement for the duration. Status-immune units skip this.
+	if _stun_until > 0.0 and Time.get_ticks_msec() / 1000.0 < _stun_until:
+		return
 	## Flankers: if our target was already raided by another unit, grab the next one.
 	## get_cell() is an O(1) array lookup -- safe to call every frame.
 	if _is_flanker and _target_cell != Vector2i(-1, -1) and _map_grid_ref != null:
@@ -136,8 +140,17 @@ func reroute(map_grid: Node) -> void:
 	_wp_index = 1
 
 ## Sets a speed multiplier applied by the Suppression Field. Call with 1.0 to clear.
+## Status-immune units ignore the slow but the call is safe to make unconditionally.
 func set_debuff(speed_mult: float) -> void:
+	if data != null and data.status_immune:
+		return
 	_speed_multiplier = speed_mult
+
+## Freezes movement for duration seconds. No-op on status-immune units.
+func apply_stun(duration: float) -> void:
+	if data != null and data.status_immune:
+		return
+	_stun_until = Time.get_ticks_msec() / 1000.0 + duration
 
 ## Apply incoming damage. Returns true if the unit died.
 func take_damage(amount: float) -> bool:

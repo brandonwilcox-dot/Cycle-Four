@@ -32,3 +32,7 @@ class_name UnitData
 ## Mesh-specific: hacks nearby buildings on death
 @export var hacks_on_death: bool = false
 @export var hack_radius: float = 0.0
+
+## Ability system: units flagged true ignore stun and slow from ability effects.
+## Set on heavy/lore-immune chassis (Mire-Beast, Bio-Titan, etc.).
+@export var status_immune: bool = false

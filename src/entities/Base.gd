@@ -31,6 +31,7 @@ func _ready() -> void:
 	add_to_group("base")
 	_build_visual()
 	EventBus.base_damaged.connect(_on_base_damaged)
+	EventBus.base_healed.connect(_on_base_healed)
 	EventBus.convoy_arrived.connect(_on_convoy_arrived)
 
 ## Phase 9: FOB receives cargo and gains fortification rank. Visual-only stub
@@ -65,6 +66,12 @@ func _on_base_damaged(amount: float, _attacker_data: Dictionary) -> void:
 	if _current_hp <= 0.0:
 		_is_destroyed = true
 		EventBus.base_destroyed.emit()
+
+func _on_base_healed(amount: float) -> void:
+	if _is_destroyed:
+		return
+	_current_hp = minf(MAX_HP, _current_hp + amount)
+	_update_hp_bar()
 
 func _try_attack() -> void:
 	var nearest      : Node  = null

@@ -17,6 +17,7 @@ signal wave_composition_committed(unit_name: String, count: int)  ## unit type +
 signal unit_spawned(unit_data: Dictionary)
 signal unit_died(unit_data: Dictionary)
 signal base_damaged(amount: float, attacker_data: Dictionary)
+signal base_healed(amount: float)           ## Bloom Overdrive / Verdant Bulwark FOB regen
 signal base_destroyed()                     ## base HP reached zero; triggers game-over
 signal enemy_count_changed(remaining: int)  ## fires on each kill/breach; HUD enemy counter
 
