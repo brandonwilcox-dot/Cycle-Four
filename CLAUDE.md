@@ -238,6 +238,7 @@ self-contained session prompt. Recommended model listed with each.
 ---
 
 ### TRACK A — Convoy fix + Commander sensor rings
+**STATUS: COMPLETE (2026-06-02)**
 **Recommended model: Sonnet** (well-defined code work, files and logic are known)
 **Prerequisite: none — start here**
 
@@ -279,9 +280,9 @@ Run via Godot MCP after the bug fix, then again after sensor rings. Zero new err
 
 ---
 
-### TRACK B — Ability system design pass
-**Recommended model: Opus** (open-ended design with gameplay + faction identity
-implications; needs broader reasoning than implementation tasks)
+### TRACK B / B-2 — Ability system design (core/24 §1–11)
+**STATUS: COMPLETE (2026-06-02)**
+**Recommended model: Opus**
 **Prerequisite: Track A complete**
 
 #### Context
@@ -311,9 +312,10 @@ resource types, signal names). This doc is the spec for Track C.
 
 ---
 
-### TRACK C — Ability system build
-**Recommended model: Sonnet** (implementation from a complete spec)
-**Prerequisite: Track B design doc exists at core/24_ability-system.md**
+### TRACK C / C-2 — Ability system build (full kit + faction divergence + ultimates)
+**STATUS: COMPLETE (2026-06-02)**
+**Recommended model: Sonnet**
+**Prerequisite: Track B complete**
 
 #### What to build (high level — defer to the spec for details)
 1. Remove auto-fire secondary timer from Commander._process()
@@ -336,6 +338,12 @@ The §22 tactical-state layer is now **fully wired**. All three triggers from §
 - Click tower/building → InspectionPanel ✓
 - Click wave panel expand → composition detail ✓
 - Panels close when player looks away (empty click, ESC, wave start) ✓
+
+**Ability system — COMPLETE (2026-06-02):**
+4 slots Q/W/E/R live. Lance charge-based (60 dmg). Suppression Field ground-targeted.
+Overdrive self-amp. Faction divergences + 3 ultimates (Compile Cascade / Verdant Bulwark /
+System Seizure) all verified. §9 forward queue closed (charge meter, faction branches,
+slot 4, accessibility pass). Files: `src/abilities/`, `src/ui/AbilityBar.gd`.
 
 **Remaining §22 UI work:**
 1. Damage indicator overlay on buildings (glance-state — needs gradual HP on towers/buildings first; deferred until game systems catch up)
