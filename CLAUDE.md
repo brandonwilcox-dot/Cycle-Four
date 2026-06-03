@@ -136,15 +136,208 @@ assets/            -- sprites, audio, fonts, shaders
 
 ---
 
-## What Is NOT Started Yet
+## Current Status (2026-05-30)
 
-- Scene files (.tscn) -- none exist, only scripts
-- Unit / building resource files (.tres)
-- Wave tables
-- UI scenes
-- Faction-specific unit scripts
-- The Pacification / Dominance Meter system
-- Research tree
-- Galaxy generation
+**Active work: UI / HUD systems.** Map architecture refactor (Phases 1–10) is COMPLETE as of 2026-05-30.
+The hardcoded 30x17 cell grid is being replaced with a multi-layer,
+data-driven architecture. Full specification lives at:
 
-Work in order: Economy baseline -> first wave -> faction units -> UI.
+`C:\ClaudeProjects\Skippy Gaming Design Engineer Agent\planning\map-architecture-implementation-handoff.md`
+
+**Read the handoff doc before touching any file in `src/core/map/`.**
+
+### Map architecture phase tracker
+
+| Phase | Status | Output |
+|---|---|---|
+| 1. Data structure scaffolding | COMPLETE | 8 Resource scripts in `src/core/map/` |
+| 2. MapData loader + parity test | COMPLETE | `DefaultMapBuilder.gd`, `MapGrid.load_map_data()`, debug parity check in `_ready()` |
+| 3. Zone-region overlay + reverse index | COMPLETE | `build_zone_index()`, `get_zones_at_cell()`, `ZoneIndexBench.gd` |
+| 4. Spawn point migration | COMPLETE | `SpawnPoint` resources, `MapData.spawn_points` source-of-truth, `EventBus.spawn_activated(spawn_id: StringName)`, verified end-to-end via MCP |
+| 5. Objective subsystem | COMPLETE | `ObjectiveManager` autoload, faction × sub_path keying, sealing (DORMANT/ACTIVE → SEALED), `map_completed` → PERMANENTLY_SEALED, verified end-to-end via MCP |
+| 6. Fog-of-war | COMPLETE | `Commander.VISION_RADIUS=3`, `meta.revealed` writes, `EventBus.region_revealed`, fog-driven ON_REVEAL spawn activation, fog-aware `_draw` (unrevealed cells hidden + spawn squares hidden until revealed), safe zone radius 3 around FOB |
+| 7. Friendly AStar + support graph + ancient paths | COMPLETE | `_friendly_astar` skeleton on MapGrid (GROUND/CLAIMED/BASE traversable, PATH excluded); SupportGraph stub with FOB + depot at (4,1); ancient `PathEdge` `nw_to_fob` (19 cells); auto-flagged ANCIENT_PATH_CROSSING zones (3); fog-driven `path_discovered` signal wiring. Path-cut/stranded logic deferred to Phase 8 with convoys. |
+| 8. Convoy entity class | COMPLETE | `Convoy.gd` round-trip ferry (depot↔FOB, blue loaded / grey empty, 1.5s pause at each endpoint); `ConvoyManager` autoload with connectivity BFS on `path_discovered`, spawn-once-per-depot logic, cargo aggregator; fog visibility for both Convoy and Unit (enemies hidden in unrevealed cells); depot markers rendered as amber inset squares. Flanker damage / map-failure UX deferred to Phase 8b. |
+| 9. Two progression curves | COMPLETE | Tower level/xp/_damage_multiplier (step function ×1.15/level, threshold 50×level²); Convoy proficiency (logarithmic) + rank (every 10 deliveries, +5% speed); Commander rank (every 25 cells, +5% speed, +10% damage, primary rapid-fire + secondary cannon AOE attacks); FOB fortification rank (every 10 cargo). Reusable `ProgressionBar` widget renders bars above Tower/Convoy/Commander/FOB. Spawn-flash fix for Unit/Convoy. |
+| 10. Procedural generator + guardrails | COMPLETE | `MapGenerator.gd` static `generate(seed, biome, topology)` → MapData; 2–4 cardinal spawns randomized; winding multi-segment paths (1–3 intermediate waypoints with perpendicular offsets); random depot placement; ancient PathEdge auto-detected + crossings; full validation pass (every spawn reaches BASE, depots on GROUND, BASE intact) with reroll-on-failure up to 16 attempts. Replaces DefaultMapBuilder for fresh runs; DefaultMapBuilder kept as legacy reference + generator fallback. Phase 2 parity check retired (no longer applicable). |
+| 9. Two progression curves | pending | |
+| 10. Procedural generator with guardrails | pending | |
+
+### Files in src/core/map/ (current state)
+
+- `MapGrid.gd` — live grid, loads MapData via `load_map_data()` on `_ready()`
+- `MapData.gd` — top-level map resource with cell types, meta bitfield, zones, spawn points, support graph, objectives. Has 12 meta accessors + zone index API.
+- `SystemData.gd` — star-system container holding multiple MapData
+- `ObjectiveData.gd` — authoritative side of objective→spawn seal relationship
+- `SpawnPoint.gd` — replaces SPAWN_* cell types; SpawnState enum includes PERMANENTLY_SEALED
+- `ZoneRegion.gd` — strategic zones including ANCIENT_PATH_CROSSING kind
+- `SupportGraph.gd` — building-node logistics graph (FOB-rooted)
+- `BuildingNode.gd` — graph node (building, HP, derived `connected_to_fob`)
+- `PathEdge.gd` — graph edge with `kind` (ANCIENT/PLAYER_BUILT) and `discovered` flag
+- `DefaultMapBuilder.gd` — Phase 2 bridge; replicates the old hardcoded layout into a MapData. Retire when Phase 10 generator lands.
+- `ZoneIndexBench.gd` — Phase 3 perf bench; call `ZoneIndexBench.run()` to verify sub-frame lookup time on 100k random queries.
+
+Phase 5 added one autoload (lives in `src/autoloads/`, not `src/core/map/`):
+
+- `ObjectiveManager.gd` — autoload. Owns the active objective list, subscribes to `territory_claimed`/`territory_raided`/`faction_selected`, applies seal/unseal/permanent-seal rules. `set_map(map_data)` is called from `MapGrid.load_map_data()`.
+
+### Tooling — Godot MCP wired in
+
+The `Coding-Solo/godot-mcp` server is configured via `.mcp.json` in this
+project. MCP tools available (prefix `mcp__godot__`): `get_godot_version`,
+`get_project_info`, `list_projects`, `launch_editor`, `run_project`,
+`stop_project`, `get_debug_output`, `create_scene`, `save_scene`,
+`add_node`, `load_sprite`, `export_mesh_library`, `get_uid`,
+`update_project_uids`.
+
+Use these to run the project and capture debug output directly rather
+than asking the user. The Phase 2 parity check (`MapGrid Phase 2 parity OK`)
+and the `ZoneIndexBench.run()` Phase 3 benchmark are both verifiable
+end-to-end via the MCP.
+
+MCP source lives at `D:\AI\godot-mcp` (cloned from
+github.com/Coding-Solo/godot-mcp, vetted: zero network code, child
+processes restricted to Godot binary, MIT license, 3.9k stars).
+
+### What's also already built in this project (not just map work)
+
+Autoloads: EventBus, GameState, EconomyManager, FactionManager,
+GalaxyManager, SaveManager, WaveManager.
+Entities: Unit, Tower, Building, Base, Commander (+ *Data resources).
+Waves: WaveTable, WaveSpawner.
+UI: FactionSelectScreen, HUD, GameOverScreen.
+Scenes for all of the above exist in `scenes/main/` and `scenes/ui/`.
+
+### Side tasks queued (chip tray)
+
+1. **Rapid-click hang investigation.** Reproducible UI race when the player clicks rapidly during/near tower upgrade interactions. Pre-existing since Phase 4 verification; not blocked on Phase 10. Investigation prompt + repro recipe baked into the chip.
+2. **Map scale-up to 60×34.** Production target is ~4× the current 30×17. Touches MapData/MapGrid/MapGenerator constants plus CELL_SIZE or a camera. Spec captured in `planning/map-architecture-implementation-handoff.md` §11.5. Investigation prompt + recommended approach (A vs B) in the chip.
+
+### Next session start (UI work)
+
+**UI track approach:** faction-agnostic first (confirmed 2026-05-31). Skins are a later pass.
+
+**Completed UI work:**
+
+| Panel | Status | Files |
+|---|---|---|
+| Objective panel | COMPLETE (2026-05-31) | `src/ui/ObjectivePanel.gd`, `scenes/ui/HUD.tscn` (ObjSummaryBtn + ObjectivePanel nodes) |
+| Wave panel | COMPLETE (2026-05-31) | `src/ui/WavePanel.gd`, `scenes/ui/HUD.tscn` (WavePanel nodes), `EventBus.wave_axis_committed`, `MapData.get_active_spawn_points()`, `WaveSpawner._spawn_queue` |
+| BottomBar cleanup + four-cluster restructure | COMPLETE (2026-05-31) | `scenes/ui/HUD.tscn` rewritten (TopBar→ResourceCluster, BottomBar→ActionBar, NotificationStack bottom-right anchored). `src/ui/HUD.gd` rewritten (updated paths, removed duplicate wave handlers). **Note:** `.tscn` format does not support `##` comment lines between node declarations. |
+| Building inspection panel | COMPLETE (2026-05-31) | `src/ui/InspectionPanel.gd` + nodes in `HUD.tscn`. Click tower → tier/dmg/range/level/XP/Upgrade btn. Click building → name/income. Upgrade now deliberate. `EventBus.panel_upgrade_requested`. `Main._screen_to_cell()` camera-aware. |
+| Progressive disclosure wiring | COMPLETE (2026-05-31) | `HudDepth` enum (GLANCE/TACTICAL/ACTIVE) in HUD.gd. `_set_depth()`, `enter_glance_state()`. Wave start → GLANCE. ESC → GLANCE. Empty-cell click → close inspection. `hud_state_changed(depth)` emitted on every transition. |
+| Wave panel expansion | COMPLETE (2026-05-31) | `EventBus.wave_composition_committed(unit_name, count)`. WaveSpawner emits it after `wave_axis_committed`. WavePanel: `ExpandBtn` (▶/▼) in WaveRow header, `CompositionDetail` label below EnemyLabel. Hidden until wave starts; collapsed each new wave; hidden on wave end. |
+
+**Objective panel behavior:** `ObjSummaryBtn` in TopBar shows "Objectives: N/M", hidden until faction selected. Clicking toggles a PanelContainer anchored right (offset_left=-288, top=56, bottom=340). One row per `ObjectiveData`: description label + ProgressBar + ✓ status. Wired to `objective_progressed`, `objective_completed`, `objective_lapsed`, `map_completed`. On map complete: title turns green, summary btn says "Map Complete!".
+
+**Next session start**
+
+Camera and HUD click-through are complete. Three queued tracks below, each with a
+self-contained session prompt. Recommended model listed with each.
+
+---
+
+### TRACK A — Convoy fix + Commander sensor rings
+**Recommended model: Sonnet** (well-defined code work, files and logic are known)
+**Prerequisite: none — start here**
+
+#### Bug context
+`ConvoyManager._spawn_for_newly_connected()` spawns a convoy as soon as the ancient
+PathEdge is `discovered = true`. But `path_discovered` fires the moment ANY of the
+edge's 19 cells enters the Commander's starting vision — which can happen at startup
+before the player has ever walked to the depot. The depot endpoint cell may not be
+revealed yet. Fix: guard in `_spawn_for_newly_connected()` that calls
+`data.get_meta_revealed(sp_col + sp_row * data.dimensions.x)` on the depot node's
+position before calling `_spawn_convoy()`. One file, one guard.
+
+#### New feature: two commander rings
+Commander.gd currently has one `VISION_RADIUS = 3` doing fog reveal, spawn activation,
+and convoy gating all at once. Split into two concentric rings:
+
+**LoS ring (keep as VISION_RADIUS ≈ 3):** fog reveal, spawn activation, convoy depot
+gating. Behavior unchanged; just explicitly named.
+
+**Sensor ring (new SENSOR_RADIUS ≈ 8–10):** larger pass in `_reveal_around()` that
+sets `ObjectiveData.sensed = true` and emits `EventBus.objective_sensed(id)` without
+activating the objective. The player sees the depot in the ObjectivePanel as
+"DETECTED" (dimmed, question-mark marker) before they've walked to it. Convoy still
+only spawns once the depot is within LoS.
+
+Draw the sensor ring on-screen as a faint dashed circle around the Commander (use
+`_draw()` or a Line2D polygon approximation). The LoS ring can be a slightly brighter
+inner circle.
+
+#### Files to touch
+- `src/autoloads/ConvoyManager.gd`    -- depot-reveal guard (bug fix)
+- `src/entities/Commander.gd`         -- add SENSOR_RADIUS, second sweep, draw both rings
+- `src/autoloads/EventBus.gd`         -- add `objective_sensed(objective_id: StringName)`
+- `src/core/map/ObjectiveData.gd`     -- add `var sensed: bool = false`
+- `src/autoloads/ObjectiveManager.gd` -- connect objective_sensed, update sensed state
+- `src/ui/ObjectivePanel.gd`          -- show sensed rows dimmed with "?" prefix
+
+Run via Godot MCP after the bug fix, then again after sensor rings. Zero new errors.
+
+---
+
+### TRACK B — Ability system design pass
+**Recommended model: Opus** (open-ended design with gameplay + faction identity
+implications; needs broader reasoning than implementation tasks)
+**Prerequisite: Track A complete**
+
+#### Context
+Commander.gd has a secondary cannon AOE that fires automatically every 5 seconds.
+The user wants this converted to a deliberate player-triggered ability with a keyboard
+binding, similar to an MMO skill bar.
+
+Current combat in Commander.gd:
+- Primary: auto-fire, 0.4s interval, 8 dmg, single target, always automatic (keep)
+- Secondary: auto-fire, 5s interval, 30 dmg AOE, needs to become deliberate
+
+#### Design questions to answer
+1. Ability slot count for the first pass (recommend 1–4)
+2. Keybind convention: Q/E, 1/2/3/4, or something else? Tradeoffs?
+3. Cost model: cooldown only, resource cost + cooldown, or charge-based?
+4. Are abilities faction-neutral or faction-specific from the start? Reference
+   core/12_wave-commanders.md and core/17_units-maps-buildings.md for faction feel.
+5. Hotbar HUD position in the four-cluster layout (§22). Bottom edge is the
+   production stack — does the hotbar sit here or get its own cluster?
+6. Unlock/progression path: available from start, or gated by research/rank?
+7. What 2–3 other abilities beyond the cannon AOE make sense for the first build?
+
+#### Output
+Write `C:\ClaudeProjects\Skippy Gaming Design Engineer Agent\core\24_ability-system.md`
+covering all of the above plus implementation handoff notes (files to touch, new
+resource types, signal names). This doc is the spec for Track C.
+
+---
+
+### TRACK C — Ability system build
+**Recommended model: Sonnet** (implementation from a complete spec)
+**Prerequisite: Track B design doc exists at core/24_ability-system.md**
+
+#### What to build (high level — defer to the spec for details)
+1. Remove auto-fire secondary timer from Commander._process()
+2. `src/entities/AbilityData.gd` — new Resource: cooldown, damage/effect, range,
+   input_action (StringName), display_name
+3. `Commander.gd` — load abilities, _unhandled_input for ability keys, cooldown
+   tracking per slot, emit `EventBus.ability_used(ability_id, position)`
+4. `EventBus.gd` — add `ability_used` signal
+5. `src/ui/AbilityBar.gd` + nodes in `scenes/ui/HUD.tscn` — one slot per ability:
+   key label, cooldown ring (ProgressionBar style), ready/not-ready tint
+6. Input map — register action names via InputMap API at startup (no project.godot edits)
+
+Run via Godot MCP after each step. Zero new errors is the bar.
+
+---
+
+### UI track (ongoing — no dedicated prompt needed)
+Continue from the current §22 spec. Next natural wedges in order:
+The §22 tactical-state layer is now **fully wired**. All three triggers from §22 §2 are live:
+- Click tower/building → InspectionPanel ✓
+- Click wave panel expand → composition detail ✓
+- Panels close when player looks away (empty click, ESC, wave start) ✓
+
+**Remaining §22 UI work:**
+1. Damage indicator overlay on buildings (glance-state — needs gradual HP on towers/buildings first; deferred until game systems catch up)
+2. Active state panels (research tree, galaxy map, pacification — future dedicated tracks)
+3. Faction UI skins (texture pass on all four clusters — deferred until faction selection is stable)

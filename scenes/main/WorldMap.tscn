@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/core/map/MapGrid.gd" id="1"]
 [ext_resource type="Script" path="res://src/core/waves/WaveSpawner.gd" id="2"]
 [ext_resource type="Script" path="res://src/entities/Base.gd" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/main/Commander.tscn" id="4"]
+[ext_resource type="Script" path="res://src/core/CameraController.gd" id="5"]
 
 [node name="WorldMap" type="Node2D"]
 
@@ -33,3 +34,6 @@ position = Vector2(992, 544)
 
 [node name="WaveSpawner" type="Node" parent="."]
 script = ExtResource("2")
+
+[node name="Camera" type="Camera2D" parent="."]
+script = ExtResource("5")

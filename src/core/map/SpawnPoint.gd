@@ -36,7 +36,9 @@ enum SpawnState {
 @export var axis: SpawnAxis = SpawnAxis.PRIMARY
 @export var activation_trigger: ActivationTrigger = ActivationTrigger.ON_REVEAL
 
-## DERIVED — do not set directly. Computed by the spawn manager from objective state.
+## DERIVED (in Phase 5+) — Computed by the spawn manager from objective state.
+## PHASE 4 NOTE: until the objective subsystem lands in Phase 5, state is mutated
+## directly via MapData.activate_spawn_by_id() / MapData.deactivate_spawn_by_id().
 ## SEALED is conditional; PERMANENTLY_SEALED is terminal (set by map_completed signal).
 ## See §2.5 and §4.3 of the map architecture handoff.
 var state: SpawnState = SpawnState.DORMANT

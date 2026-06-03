@@ -144,6 +144,134 @@ func _index_cell(cell: Vector2i, zone_id: StringName) -> void:
 	if not cell in cells_for_zone:
 		cells_for_zone.append(cell)
 
+## -- Spawn point API --
+## Spawn points are the source of truth for enemy spawn locations after Phase 4
+## (replacing the legacy SPAWN_W/N/S/E cell type values). Cells at spawn positions
+## are normal PATH cells in the cell_types array; "is this cell a spawn?" must be
+## answered by consulting MapData, not by inspecting cell type.
+
+## Returns the SpawnPoint at the given cell, or null if no spawn is there.
+## O(spawn_count); typically ≤ 4 entries.
+func get_spawn_at(cell: Vector2i) -> SpawnPoint:
+	for sp in spawn_points:
+		if sp != null and sp.position == cell:
+			return sp
+	return null
+
+## Convenience boolean form of get_spawn_at().
+func is_spawn_at(cell: Vector2i) -> bool:
+	return get_spawn_at(cell) != null
+
+## Returns the SpawnPoint with the given id, or null.
+func get_spawn_by_id(id: StringName) -> SpawnPoint:
+	for sp in spawn_points:
+		if sp != null and sp.id == id:
+			return sp
+	return null
+
+## Returns cell positions of every spawn currently in ACTIVE state.
+## Used by WaveSpawner each spawn cycle and by MapGrid for connectivity checks.
+func get_active_spawn_cells() -> Array[Vector2i]:
+	var out : Array[Vector2i] = []
+	for sp in spawn_points:
+		if sp != null and sp.state == SpawnPoint.SpawnState.ACTIVE:
+			out.append(sp.position)
+	return out
+
+## Returns the full SpawnPoint objects for every ACTIVE spawn.
+## Preferred over get_active_spawn_cells() when id or axis metadata is needed.
+func get_active_spawn_points() -> Array[SpawnPoint]:
+	var out : Array[SpawnPoint] = []
+	for sp in spawn_points:
+		if sp != null and sp.state == SpawnPoint.SpawnState.ACTIVE:
+			out.append(sp)
+	return out
+
+## Flips a DORMANT spawn to ACTIVE by id. Returns true if found and transitioned.
+## Phase 4 manual activation hook; Phase 5+ will drive state from objective evaluator.
+## SEALED / PERMANENTLY_SEALED spawns are not re-activated by this method.
+func activate_spawn_by_id(id: StringName) -> bool:
+	var sp : SpawnPoint = get_spawn_by_id(id)
+	if sp == null:
+		return false
+	if sp.state == SpawnPoint.SpawnState.DORMANT:
+		sp.state = SpawnPoint.SpawnState.ACTIVE
+		return true
+	return false
+
+## Flips an ACTIVE spawn back to DORMANT by id. Returns true if found and transitioned.
+## Phase 4 manual hook; future phases derive state from objective lapses.
+func deactivate_spawn_by_id(id: StringName) -> bool:
+	var sp : SpawnPoint = get_spawn_by_id(id)
+	if sp == null:
+		return false
+	if sp.state == SpawnPoint.SpawnState.ACTIVE:
+		sp.state = SpawnPoint.SpawnState.DORMANT
+		return true
+	return false
+
+## -- Objective resolution (Phase 5+) --
+
+## Returns the active objective list for the given (faction, sub_path) pair.
+## Keys in objectives_by_faction_subpath follow the form "faction_id:sub_path_id".
+## Returns an empty array if no list is authored for that combination.
+func get_objectives_for(faction_id: String, sub_path: String) -> Array[ObjectiveData]:
+	var key : String = "%s:%s" % [faction_id, sub_path]
+	if not objectives_by_faction_subpath.has(key):
+		var empty : Array[ObjectiveData] = []
+		return empty
+	## Dictionary values are stored as untyped Array; rebuild as typed Array[ObjectiveData].
+	var raw : Array = objectives_by_faction_subpath[key]
+	var typed : Array[ObjectiveData] = []
+	for entry in raw:
+		if entry is ObjectiveData:
+			typed.append(entry)
+	return typed
+
+## -- SupportGraph + Ancient path API (Phase 7+) --
+
+## Returns every ancient PathEdge currently undiscovered. Used by the fog-reveal
+## subsystem to test for discovery on region_revealed events.
+func get_undiscovered_ancient_edges() -> Array[PathEdge]:
+	var out : Array[PathEdge] = []
+	if support_graph == null:
+		return out
+	for edge in support_graph.edges:
+		if edge == null:
+			continue
+		if edge.kind == PathEdge.PathEdgeKind.ANCIENT and not edge.discovered:
+			out.append(edge)
+	return out
+
+## Returns the PathEdge with the given id, or null. O(N) on edge count.
+func get_path_edge_by_id(edge_id: StringName) -> PathEdge:
+	if support_graph == null:
+		return null
+	for edge in support_graph.edges:
+		if edge != null and edge.id == edge_id:
+			return edge
+	return null
+
+## --
+
+## Walks the given objective list and populates each spawn's seal_condition_refs by
+## scanning ObjectiveData.seals (the authoritative side of the relationship per §2.7a).
+## Should be called once after objectives are resolved for the active player.
+## Idempotent: re-running on the same list rebuilds refs from scratch.
+func resolve_spawn_seal_refs(active_objectives: Array[ObjectiveData]) -> void:
+	## Clear existing refs on every spawn (idempotent rebuild).
+	for sp in spawn_points:
+		if sp != null:
+			sp.seal_condition_refs = []
+	## For each objective, add its id to every spawn it claims to seal.
+	for obj in active_objectives:
+		if obj == null:
+			continue
+		for spawn_id in obj.seals:
+			var sp : SpawnPoint = get_spawn_by_id(spawn_id)
+			if sp != null and not obj.objective_id in sp.seal_condition_refs:
+				sp.seal_condition_refs.append(obj.objective_id)
+
 ## -- Meta bitfield accessors --
 ## All public accessors take cell_idx = col + row * dimensions.x.
 

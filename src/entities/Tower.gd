@@ -4,10 +4,25 @@
 ## Visual scales with tier: body grows, pip count matches tier number.
 extends Node2D
 
-const TowerDataClass = preload("res://src/entities/TowerData.gd")
+const TowerDataClass    = preload("res://src/entities/TowerData.gd")
+const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
+
+## Phase 9 progression constants. Step-function scaling per the handoff §8.1.
+const XP_BASE_THRESHOLD   : float = 50.0   ## XP needed for level 1 → 2
+const XP_LEVEL_EXPONENT   : float = 2.0    ## threshold scales as XP_BASE × level^exp
+const DAMAGE_PER_LEVEL    : float = 0.15   ## +15% damage per level (multiplicative)
 
 var data: Resource = null   ## TowerData instance
 var _attack_timer: float = 0.0
+
+## Phase 9: level + XP. Level is earned through kills, independent of tier (which
+## is bought by spending resources). Damage scales multiplicatively per level via
+## _damage_multiplier so the shared TowerData resource is never mutated.
+var level              : int   = 1
+var xp                 : float = 0.0
+var xp_to_next         : float = XP_BASE_THRESHOLD
+var _damage_multiplier : float = 1.0
+var _xp_bar            : Node2D = null   ## ProgressionBar instance
 
 ## Called by Main before adding to scene tree.
 func setup(tower_data: Resource) -> void:
@@ -50,7 +65,36 @@ func _try_attack() -> void:
 			nearest_dist = dist
 			nearest = unit
 	if nearest != null and nearest.has_method("take_damage"):
-		nearest.take_damage(data.damage)
+		var effective_damage : float = data.damage * _damage_multiplier
+		var killed : bool = nearest.take_damage(effective_damage)
+		if killed:
+			_award_xp_for_kill(nearest)
+
+## Phase 9: XP attribution. Award XP proportional to the killed unit's max health
+## (proxy for its value). On crossing xp_to_next, level up — applies a multiplicative
+## damage boost and rescales the next threshold by level^XP_LEVEL_EXPONENT.
+func _award_xp_for_kill(killed_unit: Node) -> void:
+	var unit_data = killed_unit.get("data")
+	if unit_data == null:
+		return
+	var unit_value : float = float(unit_data.get("max_health"))
+	if unit_value <= 0.0:
+		return
+	xp += unit_value
+	while xp >= xp_to_next:
+		xp -= xp_to_next
+		_level_up()
+	_update_xp_bar()
+
+func _update_xp_bar() -> void:
+	if _xp_bar != null and xp_to_next > 0.0:
+		_xp_bar.set_progress(xp / xp_to_next)
+
+func _level_up() -> void:
+	level += 1
+	_damage_multiplier = pow(1.0 + DAMAGE_PER_LEVEL, float(level - 1))
+	xp_to_next = XP_BASE_THRESHOLD * pow(float(level), XP_LEVEL_EXPONENT)
+	EventBus.tower_leveled_up.emit(self, level)
 
 ## -- Visual --
 
@@ -89,3 +133,9 @@ func _build_visual() -> void:
 		pip.position = Vector2(start_x + i * (pip_sz + gap), -pip_sz * 0.5)
 		pip.color    = col.darkened(0.60)
 		add_child(pip)
+
+	## Phase 9: XP progression bar above the tower body.
+	_xp_bar = ProgressionBarScript.new()
+	_xp_bar.position = Vector2(0.0, -half - 10.0)
+	add_child(_xp_bar)
+	_update_xp_bar()

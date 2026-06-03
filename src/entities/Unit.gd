@@ -14,9 +14,10 @@ var _waypoints     : Array[Vector2] = []
 var _wp_index      : int            = 1
 const ARRIVE_DIST  : float          = 3.0   ## px -- close enough to snap to waypoint
 
-var _current_health : float = 0.0
-var _is_dead        : bool  = false
-var _visual         : ColorRect = null   ## placeholder until sprites exist
+var _current_health   : float    = 0.0
+var _is_dead          : bool     = false
+var _visual           : ColorRect = null   ## placeholder until sprites exist
+var _speed_multiplier : float    = 1.0    ## set by AbilityController (Suppression Field)
 
 ## Phase F -- flanker state.
 ## Flankers target a CLAIMED cell instead of the base.
@@ -35,10 +36,21 @@ func _ready() -> void:
 		return
 	_current_health = data.max_health
 	_build_placeholder_visual()
+	## Phase 6/8: cache MapGrid reference so we can hide ourselves in unrevealed cells.
+	## Flankers already have _map_grid_ref set via setup_as_flanker; for normal units
+	## resolve it from the scene tree (UnitLayer/Unit → ../../MapGrid).
+	if _map_grid_ref == null:
+		_map_grid_ref = get_node_or_null("../../MapGrid")
+	## Phase 9 polish: apply fog visibility immediately at spawn so units don't flash
+	## for one frame before _process runs.
+	_update_fog_visibility()
 
 func _process(delta: float) -> void:
 	if _is_dead or _waypoints.is_empty():
 		return
+	## Phase 6/8: hide while inside unrevealed cells. Enemies emerging from the fog
+	## should only appear once their cell enters the Commander's vision.
+	_update_fog_visibility()
 	## Flankers: if our target was already raided by another unit, grab the next one.
 	## get_cell() is an O(1) array lookup -- safe to call every frame.
 	if _is_flanker and _target_cell != Vector2i(-1, -1) and _map_grid_ref != null:
@@ -54,12 +66,28 @@ func _process(delta: float) -> void:
 	var target     : Vector2 = _waypoints[_wp_index]
 	var to_target  : Vector2 = target - global_position
 	var dist       : float   = to_target.length()
-	var step       : float   = data.move_speed * delta
+	var step       : float   = data.move_speed * _speed_multiplier * delta
 	if dist <= step or dist <= ARRIVE_DIST:
 		global_position = target
 		_wp_index += 1
 	else:
 		global_position += to_target.normalized() * step
+
+## Phase 6/8: toggles self.visible based on the cell the unit currently occupies.
+## Revealed → visible. Unrevealed → hidden. Cheap: one cell→idx math + one byte read.
+## Once revealed cells are permanent within a session, this naturally fades units
+## into view as the Commander explores.
+func _update_fog_visibility() -> void:
+	if _map_grid_ref == null:
+		return
+	var map_data : MapData = _map_grid_ref.get("map_data") as MapData
+	if map_data == null:
+		return
+	var cell : Vector2i = _map_grid_ref.world_to_cell(global_position)
+	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
+		return
+	var idx : int = cell.x + cell.y * map_data.dimensions.x
+	visible = map_data.get_meta_revealed(idx)
 
 ## Called by WaveSpawner before adding the unit to the scene tree.
 ## waypoints[0] is the spawn world position; unit starts there.
@@ -106,6 +134,10 @@ func reroute(map_grid: Node) -> void:
 		return
 	_waypoints.assign(new_path)
 	_wp_index = 1
+
+## Sets a speed multiplier applied by the Suppression Field. Call with 1.0 to clear.
+func set_debuff(speed_mult: float) -> void:
+	_speed_multiplier = speed_mult
 
 ## Apply incoming damage. Returns true if the unit died.
 func take_damage(amount: float) -> bool:

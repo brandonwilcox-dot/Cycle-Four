@@ -12,6 +12,8 @@ signal offline_catch_up(seconds_elapsed: float)
 # -- Waves --
 signal wave_started(wave_number: int, commander_data: Dictionary)
 signal wave_ended(wave_number: int, result: String)
+signal wave_axis_committed(axis_weights: Dictionary)       ## spawn_id → unit_count; emitted before first spawn
+signal wave_composition_committed(unit_name: String, count: int)  ## unit type + total count for the incoming wave
 signal unit_spawned(unit_data: Dictionary)
 signal unit_died(unit_data: Dictionary)
 signal base_damaged(amount: float, attacker_data: Dictionary)
@@ -31,7 +33,34 @@ signal building_upgraded(building_data: Dictionary, tier: int)
 # -- Commander --
 signal territory_claimed(cell: Vector2i)     ## Commander stepped onto a new GROUND cell
 signal territory_raided(cell: Vector2i)      ## Flanker successfully unclaimed a cell
-signal spawn_activated(spawn_cell: Vector2i) ## Commander reached a new enemy spawn zone
+signal spawn_activated(spawn_id: StringName) ## A previously-dormant spawn became active (Phase 4+: spawn_id, not cell)
+signal region_revealed(cells: Array[Vector2i]) ## Phase 6: fog-of-war reveal — list of newly-visible cells
+signal path_discovered(edge_id: StringName)    ## Phase 7: an ancient PathEdge transitioned to discovered=true
+signal region_sensed(cells: Array[Vector2i])   ## Sensor ring: cells detected but not yet revealed
+
+# -- Convoys (Phase 8+) --
+signal convoy_spawned(convoy_id: StringName, from_node: StringName, to_node: StringName)
+signal convoy_arrived(convoy_id: StringName, to_node: StringName, cargo_amount: float)
+signal convoy_destroyed(convoy_id: StringName, by_unit_id: StringName)
+
+# -- Progression (Phase 9+) --
+signal tower_leveled_up(tower: Node, new_level: int)
+signal convoy_proficiency_changed(convoy_id: StringName, new_proficiency: float)
+
+# -- Abilities --
+signal ability_used(slot_id: int)                                             ## cast fired
+signal ability_cooldown_changed(slot_id: int, remaining: float, total: float) ## per-frame; drives radial sweep
+signal ability_charge_changed(slot_id: int, current: float, max_charge: float) ## charge-based slots; bar fills up
+signal ability_ready(slot_id: int)                                            ## cooldown hit zero / charge full
+signal ability_unlocked(slot_id: int, ability_id: StringName)                 ## slot opened
+signal ability_targeting_changed(slot_id: int, active: bool)                  ## ground-target armed/cancelled
+
+# -- Objectives (Phase 5+) --
+signal objective_sensed(objective_id: StringName)   ## Sensor ring detected a spawn linked to this objective
+signal objective_progressed(objective_id: StringName, old_progress: int, new_progress: int)
+signal objective_completed(objective_id: StringName)
+signal objective_lapsed(objective_id: StringName)   ## Was complete; regressed below target (e.g., territory raided)
+signal map_completed()                              ## All objectives on the active map are complete
 
 # -- Factions & Progression --
 signal faction_selected(faction_id: String, sub_path: String)
@@ -58,7 +87,8 @@ signal pilgrimage_exited()
 signal mark_progress_changed(progress: float)
 
 # -- UI --
-signal hud_state_changed(new_state: String)  # "glance" | "tactical" | "active"
+signal hud_state_changed(depth: String)  ## "glance" | "tactical" | "active"(new_state: String)  # "glance" | "tactical" | "active"
 signal notification_pushed(message: String, priority: String)
 signal panel_open_requested(panel_id: String, data: Dictionary)
 signal panel_close_requested(panel_id: String)
+signal panel_upgrade_requested   ## InspectionPanel upgrade btn → Main._try_upgrade_tower

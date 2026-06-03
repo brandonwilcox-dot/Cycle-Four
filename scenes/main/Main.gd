@@ -25,12 +25,16 @@ var _pending_building : Resource = null
 ## Vector2i -> Node2D (Building); used for double-place guard and raid destruction.
 var _building_cells   : Dictionary = {}
 
+## Inspection state -- tracks which cell is currently open in the inspection panel.
+var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
+
 func _ready() -> void:
 	hud.hide()
 	faction_select.selection_confirmed.connect(_on_faction_confirmed)
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
+	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
 	if not GameState.current_faction.is_empty():
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 		_start_game_world()
@@ -45,15 +49,16 @@ func _start_game_world() -> void:
 ## -- Input --
 
 func _input(event: InputEvent) -> void:
-	## ESC cancels whichever mode is active.
+	## ESC cancels placement/build mode, or collapses panels to glance state.
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_ESCAPE:
 			if _placement_mode:
 				_cancel_placement()
-				get_viewport().set_input_as_handled()
 			elif _build_mode:
 				_cancel_build()
-				get_viewport().set_input_as_handled()
+			else:
+				hud.enter_glance_state()
+			get_viewport().set_input_as_handled()
 		return
 
 	if not (event is InputEventMouseButton and event.pressed):
@@ -74,12 +79,17 @@ func _input(event: InputEvent) -> void:
 				_try_place_building(event.position)
 				get_viewport().set_input_as_handled()
 			else:
-				## Occupied cell → try tower upgrade.
-				## Empty cell → do NOT consume; Commander._unhandled_input handles movement.
+				## Occupied tower/building cell → open inspection panel.
+				## Empty cell → close inspection (player looked away), let Commander move.
 				var cell := _screen_to_cell(event.position)
 				if _occupied_cells.has(cell):
-					_try_upgrade_tower(cell)
+					_open_tower_inspection(cell)
 					get_viewport().set_input_as_handled()
+				elif _building_cells.has(cell):
+					_open_building_inspection(cell)
+					get_viewport().set_input_as_handled()
+				else:
+					hud.close_inspection()
 		MOUSE_BUTTON_RIGHT:
 			if _placement_mode:
 				_cancel_placement()
@@ -92,6 +102,7 @@ func _input(event: InputEvent) -> void:
 
 func _on_placement_requested(tower_data: Resource) -> void:
 	_cancel_build()          ## Exit build mode if active
+	hud.close_inspection()   ## Dismiss inspection panel when entering placement
 	_pending_tower  = tower_data
 	_placement_mode = true
 
@@ -164,6 +175,7 @@ func _try_upgrade_tower(cell: Vector2i) -> void:
 
 func _on_build_requested(building_data: Resource) -> void:
 	_cancel_placement()       ## Exit tower mode if active
+	hud.close_inspection()    ## Dismiss inspection panel when entering build mode
 	_pending_building = building_data
 	_build_mode       = true
 
@@ -215,12 +227,51 @@ func _on_territory_raided(cell: Vector2i) -> void:
 			"alert"
 		)
 
+## -- Inspection panel --
+
+func _open_tower_inspection(cell: Vector2i) -> void:
+	var tower = _occupied_cells.get(cell)
+	if tower == null or not is_instance_valid(tower):
+		_occupied_cells.erase(cell)
+		return
+	_inspected_cell = cell
+	var d           = tower.get("data")
+	var next        = d.get("upgrade_to") if d != null else null
+	var can_afford  : bool = false
+	if next != null:
+		var cost : float = float(next.get("primary_cost") if next.get("primary_cost") != null else 0.0)
+		can_afford = EconomyManager.can_afford({FactionManager.get_primary_resource(): cost})
+	hud.open_tower_inspection(tower, can_afford)
+
+func _open_building_inspection(cell: Vector2i) -> void:
+	var building = _building_cells.get(cell)
+	if building == null or not is_instance_valid(building):
+		_building_cells.erase(cell)
+		return
+	_inspected_cell = cell
+	hud.open_building_inspection(building)
+
+func _on_panel_upgrade_requested() -> void:
+	if _inspected_cell == Vector2i(-1, -1):
+		return
+	_try_upgrade_tower(_inspected_cell)
+	_inspected_cell = Vector2i(-1, -1)
+
 ## -- Helpers --
 
+## Converts a screen-space click position to a map cell, accounting for Camera2D
+## zoom and pan. Falls back to a 1:1 mapping if no camera is present.
 func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
+	var camera : Camera2D = get_node_or_null("WorldMap/Camera") as Camera2D
+	var world_pos : Vector2
+	if camera != null:
+		var vp_center : Vector2 = get_viewport().get_visible_rect().size * 0.5
+		world_pos = camera.global_position + (screen_pos - vp_center) / camera.zoom
+	else:
+		world_pos = screen_pos
 	return Vector2i(
-		int(floor(screen_pos.x / GRID_SIZE)),
-		int(floor(screen_pos.y / GRID_SIZE))
+		int(floor(world_pos.x / float(GRID_SIZE))),
+		int(floor(world_pos.y / float(GRID_SIZE)))
 	)
 
 func _cell_to_world(cell: Vector2i) -> Vector2:

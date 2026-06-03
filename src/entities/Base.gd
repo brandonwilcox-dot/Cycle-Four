@@ -13,15 +13,39 @@ const ATTACK_SPEED : float = 1.5     ## shots per second
 ## HP -- 300 means 30 breaches at default unit damage (10.0). Tune in balance pass.
 const MAX_HP : float = 300.0
 
-var _current_hp    : float     = MAX_HP
-var _hp_bar        : ColorRect = null   ## tracked for live updates
-var _attack_timer  : float     = 0.0
-var _is_destroyed  : bool      = false
+## Phase 9: FOB fortification rank — accumulates from convoy deliveries. Visual only
+## for the moment; later phases may attach HP regen or defense bonuses to rank.
+const CARGO_PER_RANK : float = 10.0
+
+const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
+
+var _current_hp        : float     = MAX_HP
+var _hp_bar            : ColorRect = null   ## tracked for live updates
+var _attack_timer      : float     = 0.0
+var _is_destroyed      : bool      = false
+var _cargo_received    : float     = 0.0
+var _fortification_rank : int      = 0
+var _rank_bar          : Node2D    = null
 
 func _ready() -> void:
 	add_to_group("base")
 	_build_visual()
 	EventBus.base_damaged.connect(_on_base_damaged)
+	EventBus.convoy_arrived.connect(_on_convoy_arrived)
+
+## Phase 9: FOB receives cargo and gains fortification rank. Visual-only stub
+## for now; future phases can bind regen or defense bonuses to rank.
+func _on_convoy_arrived(_convoy_id: StringName, _to_node: StringName, cargo: float) -> void:
+	_cargo_received += cargo
+	while _cargo_received >= CARGO_PER_RANK:
+		_cargo_received -= CARGO_PER_RANK
+		_fortification_rank += 1
+	_update_rank_bar()
+
+func _update_rank_bar() -> void:
+	if _rank_bar == null:
+		return
+	_rank_bar.set_progress(_cargo_received / CARGO_PER_RANK)
 
 func _process(delta: float) -> void:
 	if _is_destroyed:
@@ -127,3 +151,9 @@ func _build_visual() -> void:
 	_hp_bar.position = Vector2(-40.0, 52.0)
 	_hp_bar.color    = Color(0.20, 0.90, 0.20)
 	add_child(_hp_bar)
+
+	## Phase 9: fortification rank progression bar above the FOB.
+	_rank_bar = ProgressionBarScript.new()
+	_rank_bar.position = Vector2(0.0, -62.0)
+	add_child(_rank_bar)
+	_update_rank_bar()

@@ -34,6 +34,10 @@ var complete: bool:
 ## seal_condition_refs directly; add spawn ids here instead.
 @export var seals: Array[StringName] = []
 
+## Set to true by ObjectiveManager when the Commander's sensor ring detects a spawn
+## linked to this objective. Cleared on map reset. Not persisted.
+var sensed: bool = false
+
 ## References to the map state this objective reads from (zone ids, spawn ids, cell sets).
 ## Populated at run start by the objective evaluator. Untyped — content varies by kind.
 var tracked_refs: Array = []

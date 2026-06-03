@@ -32,54 +32,71 @@ const SPAWN_E_POS  := Vector2i(29, 8)
 var _cells : Array[int] = []
 var _astar  : AStar2D   = AStar2D.new()
 
-## Spawn cells whose connectivity is enforced by can_place_at().
-## Starts empty; WaveSpawner registers each spawn when it goes active.
-## Phase D will add SPAWN_N/S/E here as those directions come online.
-var _active_spawns : Array[Vector2i] = []
+## Phase 7: friendly-side AStar. Reflects cells the commander and future friendly
+## entities can traverse (CLAIMED + GROUND for now). Mutates incrementally on claim
+## /unclaim events. Distinct from `_astar` so enemy pathfinding (Constraint #1) is
+## never affected. Not yet consumed by Commander movement — kept available for
+## convoys (Phase 8) and friendly escorts (later phases).
+var _friendly_astar : AStar2D = AStar2D.new()
 
-func register_active_spawn(spawn_cell: Vector2i) -> void:
-	if not spawn_cell in _active_spawns:
-		_active_spawns.append(spawn_cell)
+## The MapData resource currently loaded. Source of truth for spawn points and zones.
+## Set by load_map_data(); consumers (Commander, WaveSpawner) may read it directly.
+var map_data : MapData = null
+
+## Phase 4: register_active_spawn() / _active_spawns are retired.
+## Connectivity validation now derives active spawn cells from map_data.spawn_points
+## (see _all_spawns_connected()).
 
 ## Returns true if the cell holds Commander-claimed territory.
 ## Used by Main to validate production building placement.
 func is_claimed(col: int, row: int) -> bool:
 	return get_cell(col, row) == Cell.CLAIMED
 
+## Phase 10: preload the generator script directly. class_name resolution
+## intermittently fails for freshly-added scripts in Godot 4 until the editor
+## rescans; preload avoids the parse-time identifier issue.
+const MapGeneratorScript = preload("res://src/core/map/MapGenerator.gd")
+
 func _ready() -> void:
 	_cells.resize(COLS * ROWS)
 	_cells.fill(Cell.GROUND)
-	var map_data : MapData = DefaultMapBuilder.create()
-	if OS.is_debug_build():
-		## Phase 2 parity check: build the reference layout with the old hardcoded method,
-		## then load from the resource, and assert they are cell-for-cell identical.
-		## Remove this block (or leave it) once parity is confirmed in the editor.
-		_build_default_paths()
-		var reference : Array[int] = _cells.duplicate()
-		load_map_data(map_data)
-		_assert_parity(reference)
-	else:
-		load_map_data(map_data)
+	## Phase 10: procedural generator is the live path. Each session boots a fresh
+	## seed; the validation pass inside MapGenerator guarantees the emitted MapData
+	## is playable (every spawn reaches BASE; every depot sits on GROUND). The
+	## old DefaultMapBuilder remains in the tree as a fallback inside the
+	## generator's reroll loop and as a reference for the tutorial map.
+	var data : MapData = MapGeneratorScript.generate()
+	load_map_data(data)
 	queue_redraw()
 
 ## -- Public API --
 
 ## Loads a MapData resource into the grid, replacing the current cell layout.
-## Overwrites _cells, rebuilds the enemy AStar. Call queue_redraw() afterwards if needed.
-## Dimensions must match COLS × ROWS; fires an assert otherwise.
-func load_map_data(map_data: MapData) -> void:
+## Overwrites _cells, rebuilds the enemy AStar, and stores a reference for later
+## spawn/zone queries. Dimensions must match COLS × ROWS; fires an assert otherwise.
+func load_map_data(data: MapData) -> void:
 	assert(
-		map_data.dimensions == Vector2i(COLS, ROWS),
+		data.dimensions == Vector2i(COLS, ROWS),
 		"MapGrid.load_map_data: dimensions mismatch — expected %s, got %s" % [
-			str(Vector2i(COLS, ROWS)), str(map_data.dimensions)
+			str(Vector2i(COLS, ROWS)), str(data.dimensions)
 		]
 	)
+	map_data = data
 	for i in COLS * ROWS:
-		_cells[i] = map_data.cell_types[i] as int
+		_cells[i] = data.cell_types[i] as int
 	_rebuild_astar()
+	_rebuild_friendly_astar()
 	## Phase 3: build the cell→zone reverse index. The index is runtime-only and
 	## must be rebuilt on every map load (not serialized with the resource).
-	map_data.build_zone_index()
+	data.build_zone_index()
+	## Phase 5: hand the map to the objective subsystem. It resolves the active
+	## objective list against FactionManager.active_faction/sub_path and computes
+	## the spawn seal_condition_refs from objective.seals. Must run after spawn
+	## points exist on the resource.
+	ObjectiveManager.set_map(data)
+	## Phase 8: hand the map to the convoy subsystem. It needs map_data for graph
+	## traversal and map_grid for cell→world conversion when spawning convoys.
+	ConvoyManager.set_map(data, self)
 
 func get_cell(col: int, row: int) -> int:
 	if col < 0 or col >= COLS or row < 0 or row >= ROWS:
@@ -101,14 +118,17 @@ func set_cell(col: int, row: int, cell_type: int) -> void:
 ## the cell is converted to OBSTACLE.
 func can_place_at(col: int, row: int) -> bool:
 	var ct : int = get_cell(col, row)
-	## Protect spawn points and the base from being covered
-	if ct in [Cell.BASE, Cell.SPAWN_W, Cell.SPAWN_N, Cell.SPAWN_S, Cell.SPAWN_E]:
+	## Protect the base from being covered.
+	if ct == Cell.BASE:
+		return false
+	## Protect spawn point positions (now PATH cells, identified via MapData).
+	if map_data != null and map_data.is_spawn_at(Vector2i(col, row)):
 		return false
 	## Non-traversable cells (GROUND, WALL, OBSTACLE, CLAIMED) never affect enemy
 	## routing -- placing a tower there cannot disconnect any spawn from the base.
 	if not _is_traversable(ct):
 		return true
-	## PATH or spawn-adjacent cell: test that blocking it keeps all spawns connected.
+	## PATH cell: test that blocking it keeps every active spawn connected.
 	return _test_obstacle_ok(col, row)
 
 ## Marks (col, row) as occupied by a tower.
@@ -182,6 +202,10 @@ func unclaim_cell(col: int, row: int) -> void:
 ## Marks a GROUND cell as Commander-claimed territory.
 ## CLAIMED cells render in a distinct colour and will generate resources (Phase E).
 ## They do NOT extend the enemy AStar graph, so claiming never shortens enemy routes.
+## Phase 7: friendly AStar is unchanged because both GROUND and CLAIMED are friendly-
+## traversable. If a future cell type splits this assumption (e.g. CLAIMED becomes
+## friendly-only while GROUND is shared), incremental friendly AStar maintenance
+## belongs here.
 func claim_cell(col: int, row: int) -> void:
 	if get_cell(col, row) != Cell.GROUND:
 		return
@@ -234,6 +258,7 @@ func _assert_parity(reference: Array[int]) -> void:
 	for i in COLS * ROWS:
 		if _cells[i] != reference[i]:
 			var col : int = i % COLS
+			@warning_ignore("integer_division")
 			var row : int = i / COLS
 			push_error("MapGrid parity FAIL at (%d,%d): loaded=%d  reference=%d" % [
 				col, row, _cells[i], reference[i]
@@ -245,14 +270,18 @@ func _assert_parity(reference: Array[int]) -> void:
 		push_error("MapGrid Phase 2 parity FAILED: %d mismatch(es). See errors above." % mismatches)
 
 ## Returns true when every ACTIVE spawn still has at least one path to base.
-## Only registered spawns are checked; inactive spawn paths may be freely blocked.
+## Active spawns are derived from map_data.spawn_points (state == ACTIVE).
+## DORMANT/SEALED spawn paths may be freely blocked.
 func _all_spawns_connected() -> bool:
-	if _active_spawns.is_empty():
-		return true   ## Nothing active yet -- all placements allowed
+	if map_data == null:
+		return true   ## No map loaded -- allow (only matters at startup edge cases)
+	var active : Array[Vector2i] = map_data.get_active_spawn_cells()
+	if active.is_empty():
+		return true   ## Nothing active -- all placements allowed
 	var to_id : int = _cell_id(BASE_POS.x, BASE_POS.y)
 	if not _astar.has_point(to_id):
 		return false
-	for spawn in _active_spawns:
+	for spawn in active:
 		var from_id : int = _cell_id(spawn.x, spawn.y)
 		if not _astar.has_point(from_id):
 			continue
@@ -301,18 +330,64 @@ func _draw() -> void:
 
 	for row in ROWS:
 		for col in COLS:
+			var idx : int = col + row * COLS
+			## Phase 6 fog-of-war: unrevealed cells render as background (no fill).
+			## The dark default_clear_color shows through, which IS the fog.
+			if map_data != null and not map_data.get_meta_revealed(idx):
+				continue
 			var rect := Rect2(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-			match _cells[col + row * COLS]:
+			match _cells[idx]:
 				Cell.PATH:
 					draw_rect(rect, path_col)
 				Cell.BASE:
 					draw_rect(rect, base_col)
-				Cell.SPAWN_W, Cell.SPAWN_N, Cell.SPAWN_S, Cell.SPAWN_E:
-					draw_rect(rect, spawn_col)
 				Cell.OBSTACLE:
 					draw_rect(rect, obs_col)
 				Cell.CLAIMED:
 					draw_rect(rect, claim_col)
+	## Phase 4: spawn cells are PATH underneath; overlay them in the spawn colour by
+	## walking map_data.spawn_points. Dormant spawns are drawn in a dimmer hue.
+	## Phase 6: spawns that are NOT yet revealed by fog are hidden entirely — drawing
+	## a dormant spawn before reveal would leak its position to the player.
+	if map_data != null:
+		var spawn_dim := Color(spawn_col.r * 0.55, spawn_col.g * 0.55, spawn_col.b * 0.55, 1.0)
+		for sp in map_data.spawn_points:
+			if sp == null:
+				continue
+			var sp_idx : int = sp.position.x + sp.position.y * COLS
+			if not map_data.get_meta_revealed(sp_idx):
+				continue
+			var rect := Rect2(sp.position.x * CELL_SIZE, sp.position.y * CELL_SIZE,
+							  CELL_SIZE, CELL_SIZE)
+			if sp.state == SpawnPoint.SpawnState.ACTIVE:
+				draw_rect(rect, spawn_col)
+			else:
+				draw_rect(rect, spawn_dim)
+
+	## Phase 8: render SupportGraph BuildingNode markers (depots and other non-FOB
+	## infrastructure) as a warm amber inset square so the player can spot important
+	## off-FOB spots. Gated by fog reveal like everything else — depot in the dark
+	## stays invisible until the Commander explores its cell. The FOB itself has its
+	## own scene visual (Base.tscn), so skip it.
+	if map_data != null and map_data.support_graph != null:
+		var depot_fill := Color(1.00, 0.55, 0.20, 1.0)   ## warm amber
+		var depot_edge := Color(0.40, 0.20, 0.05, 1.0)   ## dark amber outline
+		var inset      : float = 12.0
+		for node_id in map_data.support_graph.nodes:
+			var node : BuildingNode = map_data.support_graph.nodes[node_id]
+			if node == null or node_id == map_data.support_graph.fob_node_id:
+				continue
+			var d_idx : int = node.position.x + node.position.y * COLS
+			if not map_data.get_meta_revealed(d_idx):
+				continue
+			var inner := Rect2(
+				node.position.x * CELL_SIZE + inset,
+				node.position.y * CELL_SIZE + inset,
+				CELL_SIZE - inset * 2.0,
+				CELL_SIZE - inset * 2.0
+			)
+			draw_rect(inner, depot_fill)
+			draw_rect(inner, depot_edge, false, 2.0)
 
 	## Subtle grid overlay across the whole board
 	for r in ROWS + 1:
@@ -371,12 +446,10 @@ func _build_default_paths() -> void:
 	_fill_v(19,  8,  13, Cell.PATH)
 	_fill_h(8,  15,  19, Cell.PATH)
 
-	## Stamp spawn and base markers last (override PATH)
-	_set_raw(SPAWN_W_POS.x, SPAWN_W_POS.y, Cell.SPAWN_W)
-	_set_raw(SPAWN_N_POS.x, SPAWN_N_POS.y, Cell.SPAWN_N)
-	_set_raw(SPAWN_S_POS.x, SPAWN_S_POS.y, Cell.SPAWN_S)
-	_set_raw(SPAWN_E_POS.x, SPAWN_E_POS.y, Cell.SPAWN_E)
-	_set_raw(BASE_POS.x,    BASE_POS.y,    Cell.BASE)
+	## Stamp the base marker last. Phase 4: spawn positions are no longer special cells —
+	## they remain PATH (already written by _fill_h above). Identity lives on the
+	## SpawnPoint resource list in MapData.
+	_set_raw(BASE_POS.x, BASE_POS.y, Cell.BASE)
 
 ## -- AStar --
 
@@ -404,13 +477,44 @@ func _rebuild_astar() -> void:
 				if not _astar.are_points_connected(id, nid):
 					_astar.connect_points(id, nid)
 
+## Phase 7: rebuilds the friendly AStar from scratch. Points = every GROUND, CLAIMED,
+## or BASE cell (the surfaces a friendly entity can walk). Called on map load; later
+## phases will call incremental add/remove on claim/unclaim instead of full rebuilds.
+func _rebuild_friendly_astar() -> void:
+	_friendly_astar.clear()
+	for row in ROWS:
+		for col in COLS:
+			if _is_friendly_traversable(_cells[col + row * COLS]):
+				_friendly_astar.add_point(_cell_id(col, row), Vector2(col, row))
+	for row in ROWS:
+		for col in COLS:
+			if not _is_friendly_traversable(_cells[col + row * COLS]):
+				continue
+			var id : int = _cell_id(col, row)
+			for off in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
+				var nc : int = col + off.x
+				var nr : int = row + off.y
+				if nc < 0 or nc >= COLS or nr < 0 or nr >= ROWS:
+					continue
+				if not _is_friendly_traversable(_cells[nc + nr * COLS]):
+					continue
+				var nid : int = _cell_id(nc, nr)
+				if not _friendly_astar.are_points_connected(id, nid):
+					_friendly_astar.connect_points(id, nid)
+
+## What cells the commander and friendly entities can walk on. PATH cells are
+## intentionally excluded — those are enemy corridors. CLAIMED, GROUND, and BASE
+## form the friendly traversal surface.
+func _is_friendly_traversable(cell_type: int) -> bool:
+	return cell_type == Cell.GROUND or cell_type == Cell.CLAIMED or cell_type == Cell.BASE
+
 func _is_traversable(cell_type: int) -> bool:
 	## CLAIMED is intentionally excluded -- enemy AStar never walks through
 	## friendly territory; it only affects the Commander's footprint visually.
-	return cell_type in [
-		Cell.PATH, Cell.BASE,
-		Cell.SPAWN_W, Cell.SPAWN_N, Cell.SPAWN_S, Cell.SPAWN_E,
-	]
+	## Phase 4: SPAWN_* removed from this set — spawn cells are now PATH (which is
+	## already traversable). The Cell.SPAWN_* enum values remain for backwards
+	## reference but no cell in the array uses them after Phase 4.
+	return cell_type == Cell.PATH or cell_type == Cell.BASE
 
 func _cell_id(col: int, row: int) -> int:
 	return col + row * COLS

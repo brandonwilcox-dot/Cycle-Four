@@ -20,9 +20,11 @@ var _current_unit_data : UnitData = null
 var _spawn_interval    : float    = 1.2
 var _spawning          : bool     = false
 
-## Active spawn points. Starts with west only; Commander activates N/S/E.
-## Phase D: each unit picks a random active spawn at the moment it is created.
-var _spawn_cells : Array[Vector2i] = [Vector2i(0, 8)]   ## SPAWN_W_POS
+## Pre-committed spawn distribution for the current wave.
+## Maps spawn_id (StringName) → {count: int, position: Vector2i}.
+## Built at wave_started, consumed by _spawn_unit, cleared at wave_ended.
+## Emitted to EventBus as wave_axis_committed so the WavePanel can display axis pressure.
+var _spawn_queue : Dictionary = {}
 
 func _ready() -> void:
 	_unit_layer = get_node_or_null("../UnitLayer") as Node2D
@@ -31,11 +33,6 @@ func _ready() -> void:
 		push_error("WaveSpawner: could not find ../UnitLayer in WorldMap.")
 	if _map_grid == null:
 		push_error("WaveSpawner: could not find ../MapGrid in WorldMap.")
-	else:
-		## Register the default western spawn so the connectivity validator
-		## protects that route from the first wave.
-		## Additional spawns are registered by Commander via EventBus.spawn_activated.
-		_map_grid.call("register_active_spawn", _spawn_cells[0])
 
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.wave_started.connect(_on_wave_started)
@@ -77,10 +74,22 @@ func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	## HUD so the enemy counter shows the corrected number from the first frame.
 	WaveManager.enemies_remaining = _units_to_spawn
 	EventBus.enemy_count_changed.emit(_units_to_spawn)
+	## Pre-commit spawn distribution and broadcast for the wave panel axis diagram.
+	_build_spawn_queue(_units_to_spawn)
+	var axis_weights : Dictionary = {}
+	for spawn_id in _spawn_queue:
+		axis_weights[spawn_id] = _spawn_queue[spawn_id].count
+	EventBus.wave_axis_committed.emit(axis_weights)
+	## Emit unit composition so WavePanel can show it when expanded.
+	var unit_name : String = "Unknown"
+	if _current_unit_data != null and _current_unit_data.get("unit_name") != null:
+		unit_name = str(_current_unit_data.unit_name)
+	EventBus.wave_composition_committed.emit(unit_name, _units_to_spawn)
 
 func _on_wave_ended(_wave_number: int, _result: String) -> void:
 	_spawning       = false
 	_units_to_spawn = 0
+	_spawn_queue.clear()
 	## Free any units still alive (e.g. defeat before all spawned)
 	if _unit_layer != null:
 		for child in _unit_layer.get_children():
@@ -92,8 +101,15 @@ func _spawn_unit() -> void:
 	if _unit_layer == null or _map_grid == null:
 		push_error("WaveSpawner: missing UnitLayer or MapGrid -- cannot spawn.")
 		return
-	## Pick a random active spawn for variety when multiple spawns are open.
-	var chosen_spawn : Vector2i = _spawn_cells[randi() % _spawn_cells.size()]
+	## Draw from the pre-committed queue; fall back to random active cells if queue
+	## is empty (e.g. a new spawn activated mid-wave after queue was built).
+	var chosen_spawn : Vector2i = _draw_from_queue()
+	if chosen_spawn == Vector2i(-1, -1):
+		var active : Array[Vector2i] = _get_active_spawn_cells()
+		if active.is_empty():
+			push_error("WaveSpawner: no active spawn points -- cannot spawn.")
+			return
+		chosen_spawn = active[randi() % active.size()]
 
 	## Phase F: waves 6+ have an escalating chance to produce a flanker that
 	## targets claimed territory instead of the base.
@@ -134,11 +150,63 @@ func _emit_unit_spawned() -> void:
 		"wave": WaveManager.current_wave,
 	})
 
-## Commander reached a new spawn zone -- add it to our active roster.
-## MapGrid connectivity is already updated by Commander before this fires.
-func _on_spawn_activated(spawn_cell: Vector2i) -> void:
-	if not spawn_cell in _spawn_cells:
-		_spawn_cells.append(spawn_cell)
+## Phase 4: spawn_activated now carries a spawn_id (StringName), and the activation
+## itself is performed by MapData.activate_spawn_by_id() inside Commander BEFORE the
+## signal fires. We don't need to maintain a local cache — _get_active_spawn_cells()
+## reads fresh from MapData. This handler is a hook for future UI/notification work.
+func _on_spawn_activated(_spawn_id: StringName) -> void:
+	pass
+
+## Builds _spawn_queue by distributing total_units across active spawns.
+## Equal split; remainder units go to the first spawns in list order.
+## Each entry: { count: int, position: Vector2i }
+func _build_spawn_queue(total_units: int) -> void:
+	_spawn_queue.clear()
+	if _map_grid == null:
+		return
+	var data : MapData = _map_grid.get("map_data") as MapData
+	if data == null:
+		return
+	var active_spawns : Array[SpawnPoint] = data.get_active_spawn_points()
+	if active_spawns.is_empty():
+		return
+	var k          : int = active_spawns.size()
+	@warning_ignore("integer_division")
+	var base_share : int = total_units / k
+	var remainder  : int = total_units % k
+	for i in range(k):
+		var sp    : SpawnPoint = active_spawns[i]
+		var share : int        = base_share + (1 if i < remainder else 0)
+		_spawn_queue[sp.id] = { count = share, position = sp.position }
+
+## Picks a spawn from the pre-committed queue (weighted by remaining count),
+## decrements its counter, and returns its map position.
+## Reads position BEFORE erasing to avoid key-missing errors.
+## Returns Vector2i(-1, -1) when the queue is exhausted.
+func _draw_from_queue() -> Vector2i:
+	var pool : Array[StringName] = []
+	for spawn_id in _spawn_queue:
+		var entry : Dictionary = _spawn_queue[spawn_id]
+		for _i in range(entry.count):
+			pool.append(spawn_id)
+	if pool.is_empty():
+		return Vector2i(-1, -1)
+	var chosen_id  : StringName = pool[randi() % pool.size()]
+	var position   : Vector2i   = _spawn_queue[chosen_id].position
+	_spawn_queue[chosen_id].count -= 1
+	if _spawn_queue[chosen_id].count <= 0:
+		_spawn_queue.erase(chosen_id)
+	return position
+
+## Returns the currently-active spawn cells, queried from MapData via MapGrid.
+## Returns an empty array if either reference is missing.
+func _get_active_spawn_cells() -> Array[Vector2i]:
+	if _map_grid == null:
+		return ([] as Array[Vector2i])
+	var data : MapData = _map_grid.get("map_data") as MapData
+	if data == null:
+		return ([] as Array[Vector2i])
+	return data.get_active_spawn_cells()
 
 func _on_path_changed() -> void:
 	## A tower was placed on a PATH cell mid-wave. Tell every in-flight unit
