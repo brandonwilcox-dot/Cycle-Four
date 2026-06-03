@@ -345,7 +345,153 @@ Overdrive self-amp. Faction divergences + 3 ultimates (Compile Cascade / Verdant
 System Seizure) all verified. §9 forward queue closed (charge meter, faction branches,
 slot 4, accessibility pass). Files: `src/abilities/`, `src/ui/AbilityBar.gd`.
 
-**Remaining §22 UI work:**
-1. Damage indicator overlay on buildings (glance-state — needs gradual HP on towers/buildings first; deferred until game systems catch up)
-2. Active state panels (research tree, galaxy map, pacification — future dedicated tracks)
-3. Faction UI skins (texture pass on all four clusters — deferred until faction selection is stable)
+**Remaining §22 UI work (deferred):**
+1. Damage indicator overlay — needs tower/building gradual HP first (Track E unblocks)
+2. Active state panels (research tree, galaxy map, pacification) — future tracks
+3. Faction UI skins — deferred until faction selection is stable (Track D-2 unblocks)
+
+---
+
+### TRACK D — First-Session Flow (core/16)
+Design spec: `core/16_first-session-flow.md`. Full 5-chapter arc: Academy → first map →
+waves 1–20 → sub-path commit → first milestone → Ancient activation.
+
+Split into sub-tracks by dependency and scope. Start with D-1.
+
+---
+
+#### D-1 — Milestone System
+**Recommended model: Sonnet**
+**Status: COMPLETE + verified (2026-06-03)**
+
+Per-faction milestone conditions, progress tracking, and `milestone_reached` emission.
+Currently `milestone_reached` is never emitted — Overdrive (slot E) and the faction
+Ultimate (slot R) never unlock. This is the highest-priority unblock.
+
+**Per-faction milestone targets (core/21, core/16 Chapter 6):**
+- **Architects:** Research chain R1–R5 complete (EconomyManager stub: gate on cumulative
+  schematics spent ≥ threshold OR a 5-stage research counter). For v1: simple counter
+  that the player can trigger from a "Research" button, 5 stages at increasing cost.
+- **Bloom:** Biomass coverage ≥ 60% of GROUND cells (CLAIMED cells as proxy — already
+  tracked by Commander). `_claimed_count / total_ground_cells >= 0.60`.
+- **Mesh:** 5 convoy routes simultaneously active (5 `connected_to_fob = true` depots
+  at the same time). ConvoyManager already tracks connectivity.
+
+**What to build:**
+1. `src/core/MilestoneManager.gd` — new autoload. Subscribes to `territory_claimed`,
+   `path_discovered`, `convoy_spawned`. Evaluates condition each relevant event.
+   When met: emit `EventBus.milestone_reached(FactionManager.active_faction, 0)`.
+   Idempotent — only fires once per run.
+2. `EventBus` already has `milestone_reached(faction_id, milestone_index)` — no change.
+3. Register MilestoneManager in project.godot autoloads.
+4. For Architects v1: add a "Research" button to ActionBar or a simple progress counter
+   in ResourceCluster. 5 clicks × increasing schematics cost = milestone. Deferred UI
+   until D-2 fleshes the tech tree — for now, trigger on R1 research spending threshold.
+5. Progress indicator in HUD: a compact bar/counter specific to each faction's milestone
+   condition (per core/16 Chapter 6: appears "~wave 12–14"). Show in ResourceCluster
+   once faction is selected, hidden until wave 10 starts.
+
+**Key numbers (core/16 + core/21):**
+- Architect research: 5 stages. Costs: 50/100/200/400/800 schematics each.
+- Bloom coverage: 60% of total GROUND cells on the map.
+- Mesh connectivity: 5 depots `connected_to_fob = true` simultaneously.
+
+Run via Godot MCP. Zero new errors.
+
+---
+
+#### D-2 — Sub-path Commit UI
+**Recommended model: Sonnet**
+**Status: COMPLETE + verified (2026-06-03)**
+
+Wave-timer pause between waves 9–10, two-branch tech tree overlay, sub-path
+confirmation. Fires `EventBus.faction_selected` with the committed sub-path string
+(re-emit with updated sub_path, or add a new `subpath_committed` signal). Currently
+`active_sub_path` is never set after faction selection — Suppression Field unlock
+depends on this event.
+
+**What to build:**
+1. Pause wave countdown at the start of the between-waves-9-10 gap.
+2. Modal overlay (the only modal in the first session per core/16 §5 constraint):
+   two sub-path cards, faction-voiced description, confirm button.
+3. On confirm: `FactionManager.set_sub_path(id)` → emit signal → WaveManager resumes.
+4. The existing `ability_unlock` for Suppression Field already connects to
+   `faction_selected` — re-emitting after sub-path commit is the simplest wire.
+
+---
+
+#### D-3 — Academy Scene
+**STATUS: COMPLETE + verified (2026-06-02)**
+**Recommended model: Opus for implementation design, Sonnet to build**
+**Prerequisite: D-2 complete**
+
+Pilgrimage opening (Chapter 0), three sorting scenarios (Chapter 1), faction
+recommendation + selection. Implementation design: `planning/academy-scene-implementation-handoff.md`.
+
+Files: `scenes/main/Academy.tscn`, `src/ui/Academy.gd`, `src/academy/` (AcademyScenario,
+CadetAvatar, ChamberFloor, ChamberMark, ChamberRingWall), `resources/academy/scenario_1..3.tres`.
+Swapped `FactionSelectScreen` → Academy in `Main.tscn`/`Main.gd`. `GameState.academy_completed`
++ `GameState.unsorted` added with save round-trip. Skip guard: Academy plays only when
+`current_faction.is_empty() OR NOT academy_completed`. Sorting: 3 votes, sigil alpha = votes/3,
+tie-break = last-voted, 3-way = neutral line. Decline sets `unsorted = true`. All paths
+call `FactionManager.select_faction(faction, default_sub_path)` → emit `selection_confirmed`.
+
+---
+
+#### D-4 — Wave Scripted Events
+**Recommended model: Sonnet**
+**Prerequisite: D-3 complete ✓**
+**Status: NEXT**
+
+- Wave 3: guarantee a secondary-axis flanker probe (scripted, not random).
+  WaveSpawner gains a `scripted_overrides: Dictionary` that forces spawn composition
+  for specific wave numbers.
+- Faction-voiced one-liners: brief notification toasts on key events (resource node
+  connected, first unit defeat, wave 3 flank hit, sub-path commit). NotificationStack
+  already exists.
+- Ancient activation at milestone: desaturation effect (full-screen ColorRect, alpha
+  0 → 0.7 grey over 0.5s then back), Ancient unit spawns at Ruins position, walks to
+  Ruins edge, delivers one dialogue line, emits faction-counter debuff, despawns.
+  Unit is not in "units" group — it does not participate in wave logic.
+
+---
+
+### TRACK E — Economy & Idle Loop
+**Recommended model: Sonnet**
+**Prerequisite: Track D complete (D-1 at minimum for research cost integration)**
+
+Real idle tick income (`idle_tick` signal already in EventBus but never fired),
+offline catch-up (SaveManager stub), resource caps, secondary resource production
+(schematics/lineages/routes — currently never generated). Wire EconomyManager's
+production rates to the idle tick. Prerequisite for the §22 damage indicator.
+
+---
+
+### TRACK F — Wave Content
+**Recommended model: Sonnet**
+**Prerequisite: Track E complete**
+
+Real wave tables per faction (core/17 Tier 1–3 units + 2 milestone signatures each),
+wave escalation curve across waves 1–25+, named commander integration (core/12).
+Currently all waves spawn generic placeholder units.
+
+---
+
+### TRACK G — Rapid-Click Hang (Bug)
+**Recommended model: Sonnet — anytime, independent**
+
+Pre-existing UI race when clicking rapidly near tower upgrade interactions. Reproducible
+since Phase 4. Investigation: add input-event logging to `_unhandled_input` in Main.gd
+and HUD.gd; check for double-free or signal double-connect on the InspectionPanel
+upgrade button path.
+
+---
+
+### TRACK H — Map Scale-Up to 60×34
+**Recommended model: Sonnet — anytime, independent**
+
+Production target is ~4× the current 30×17 map. Touches `MapData.dimensions` defaults
+in `MapGenerator.gd` and `DefaultMapBuilder.gd`, `MapGrid` cell count, camera
+`min_zoom` formula (already self-adjusting: `max(vp_w/map_w, vp_h/map_h)`), and any
+hardcoded 30/17 constants. Estimated 3–5 files. Spec in
+`planning/map-architecture-implementation-handoff.md §11.5`.

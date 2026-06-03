@@ -7,7 +7,7 @@ const TOWER_SCENE    : PackedScene = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE : PackedScene = preload("res://scenes/main/Building.tscn")
 const GRID_SIZE      : int = 64
 
-@onready var faction_select  : Control  = $UILayer/FactionSelectScreen
+@onready var faction_select  : Node2D   = $UILayer/Academy
 @onready var hud             : Control  = $UILayer/HUD
 @onready var tower_layer     : Node2D   = $WorldMap/TowerLayer
 @onready var building_layer  : Node2D   = $WorldMap/BuildingLayer
@@ -35,7 +35,7 @@ func _ready() -> void:
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
-	if not GameState.current_faction.is_empty():
+	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 		_start_game_world()
 

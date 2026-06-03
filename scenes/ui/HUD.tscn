@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/ui/HUD.gd" id="1"]
 [ext_resource type="Script" path="res://src/ui/ObjectivePanel.gd" id="2"]
 [ext_resource type="Script" path="res://src/ui/WavePanel.gd" id="3"]
 [ext_resource type="Script" path="res://src/ui/InspectionPanel.gd" id="4"]
 [ext_resource type="Script" path="res://src/ui/AbilityBar.gd" id="5"]
+[ext_resource type="Script" path="res://src/ui/SubpathCommitPanel.gd" id="6"]
 
 [node name="HUD" type="Control"]
 layout_mode = 3
@@ -113,6 +114,23 @@ text = "0"
 theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.38, 0.88, 0.48, 1.0)
 
+[node name="MilestoneRow" type="HBoxContainer" parent="ResourceCluster/VBox"]
+layout_mode = 2
+visible = false
+theme_override_constants/separation = 5
+mouse_filter = 2
+
+[node name="MilestoneIcon" type="Label" parent="ResourceCluster/VBox/MilestoneRow"]
+layout_mode = 2
+text = "Milestone"
+theme_override_font_sizes/font_size = 12
+
+[node name="MilestoneProgress" type="Label" parent="ResourceCluster/VBox/MilestoneRow"]
+layout_mode = 2
+text = "0/0"
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.90, 0.80, 0.30, 1.0)
+
 [node name="ObjSummaryBtn" type="Button" parent="ResourceCluster/VBox"]
 layout_mode = 2
 text = "Objectives"
@@ -202,6 +220,11 @@ text = "Place Tower"
 layout_mode = 2
 text = "Place Building"
 
+[node name="ResearchBtn" type="Button" parent="ActionBar"]
+layout_mode = 2
+text = "Research [50]"
+visible = false
+
 [node name="AbilityBar" type="Control" parent="."]
 layout_mode = 1
 anchor_left = 0.5
@@ -270,6 +293,19 @@ theme_override_font_sizes/font_size = 12
 layout_mode = 2
 text = "Upgrade"
 visible = false
+
+[node name="SubpathCommitPanel" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+visible = false
+z_index = 10
+mouse_filter = 0
+script = ExtResource("6")
+script = ExtResource("6")
 
 [node name="ObjectivePanel" type="PanelContainer" parent="."]
 layout_mode = 1

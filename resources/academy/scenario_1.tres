@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AcademyScenario" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/academy/AcademyScenario.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"scenario_1"
+prompt = "Two contacts approach from opposite angles. The core is exposed."
+duration = 75.0
+timeout_vote = &"bloom"
+zones = [{"pos": Vector2(-220, 80), "label": "Production chain", "faction": &"architects", "weight": 1.0}, {"pos": Vector2(220, 80), "label": "Territory edge", "faction": &"bloom", "weight": 1.0}, {"pos": Vector2(0, -200), "label": "Intercept", "faction": &"mesh", "weight": 1.0}]

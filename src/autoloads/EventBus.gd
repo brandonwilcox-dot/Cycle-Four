@@ -66,6 +66,9 @@ signal map_completed()                              ## All objectives on the act
 # -- Factions & Progression --
 signal faction_selected(faction_id: String, sub_path: String)
 signal milestone_reached(faction_id: String, milestone_index: int)
+signal milestone_progress_changed(current: int, target: int, label: String)
+signal research_stage_purchased(stage: int, cost: float)  ## Architect research; MilestoneManager listens
+signal subpath_committed(sub_path: String)   ## Player confirmed sub-path between waves 9-10
 signal prestige_started(faction_id: String, collapse_count: int)
 signal prestige_completed(faction_id: String)
 
@@ -80,6 +83,10 @@ signal pacification_progress_changed(ruins_id: String, progress: float)
 signal fragment_acquired(fragment_index: int)
 signal ancient_gift_received(gift_data: Dictionary)
 signal observed_status_changed(is_observed: bool)
+
+# -- Academy --
+signal academy_scenario_resolved(index: int, faction: StringName)  ## telemetry / feel hooks
+signal academy_completed(faction: StringName, unsorted: bool)      ## fired on Academy commit
 
 # -- Memory / Pilgrimage --
 signal memory_tier_unlocked(tier: int)

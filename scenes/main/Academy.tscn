@@ -1,0 +1,115 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://src/ui/Academy.gd" id="1"]
+[ext_resource type="Script" path="res://src/academy/CadetAvatar.gd" id="2"]
+[ext_resource type="Script" path="res://src/academy/ChamberRingWall.gd" id="3"]
+[ext_resource type="Script" path="res://src/academy/ChamberFloor.gd" id="4"]
+[ext_resource type="Script" path="res://src/academy/ChamberMark.gd" id="5"]
+
+[node name="Academy" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Chamber" type="Node2D" parent="."]
+
+[node name="Backdrop" type="ColorRect" parent="Chamber"]
+layout_mode = 0
+offset_left = -960.0
+offset_top = -540.0
+offset_right = 960.0
+offset_bottom = 540.0
+color = Color(0.06, 0.08, 0.10, 1.0)
+mouse_filter = 2
+
+[node name="RingWall" type="Node2D" parent="Chamber"]
+script = ExtResource("3")
+
+[node name="Floor" type="Node2D" parent="Chamber"]
+script = ExtResource("4")
+
+[node name="Mark" type="Node2D" parent="Chamber"]
+script = ExtResource("5")
+
+[node name="Aperture" type="ColorRect" parent="Chamber"]
+layout_mode = 0
+offset_left = -8.0
+offset_top = -540.0
+offset_right = 8.0
+offset_bottom = -200.0
+color = Color(0.8, 0.85, 1.0, 0.08)
+mouse_filter = 2
+
+[node name="ZoneLayer" type="Node2D" parent="Chamber"]
+
+[node name="Cadet" type="Node2D" parent="."]
+script = ExtResource("2")
+position = Vector2(0, 60)
+
+[node name="Camera" type="Camera2D" parent="."]
+zoom = Vector2(0.3, 0.3)
+
+[node name="TextLayer" type="CanvasLayer" parent="."]
+layer = 20
+
+[node name="Line" type="Label" parent="TextLayer"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 420.0
+offset_right = 1920.0
+offset_bottom = 490.0
+grow_horizontal = 2
+grow_vertical = 2
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 22
+
+[node name="SortingLayer" type="CanvasLayer" parent="."]
+layer = 21
+
+[node name="SigilRow" type="HBoxContainer" parent="SortingLayer"]
+layout_mode = 0
+offset_left = 660.0
+offset_top = 320.0
+offset_right = 1260.0
+offset_bottom = 380.0
+alignment = 1
+
+[node name="RecommendLine" type="Label" parent="SortingLayer"]
+layout_mode = 0
+offset_left = 560.0
+offset_top = 400.0
+offset_right = 1360.0
+offset_bottom = 440.0
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+
+[node name="Buttons" type="HBoxContainer" parent="SortingLayer"]
+layout_mode = 0
+offset_left = 760.0
+offset_top = 460.0
+offset_right = 1160.0
+offset_bottom = 500.0
+alignment = 1
+
+[node name="AcceptBtn" type="Button" parent="SortingLayer/Buttons"]
+layout_mode = 0
+text = "Accept"
+
+[node name="ChooseBtn" type="Button" parent="SortingLayer/Buttons"]
+layout_mode = 0
+text = "Choose other"
+
+[node name="DeclineBtn" type="Button" parent="SortingLayer/Buttons"]
+layout_mode = 0
+text = "Decline"
+
+[node name="WashRect" type="ColorRect" parent="."]
+layout_mode = 0
+offset_left = -960.0
+offset_top = -540.0
+offset_right = 960.0
+offset_bottom = 540.0
+color = Color(1.0, 1.0, 1.0, 0.0)
+mouse_filter = 2

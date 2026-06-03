@@ -28,9 +28,13 @@ var _depth : HudDepth = HudDepth.GLANCE
 @onready var territory_info     : HBoxContainer = $ResourceCluster/VBox/TerritoryInfo
 @onready var territory_count    : Label         = $ResourceCluster/VBox/TerritoryInfo/TerritoryCount
 @onready var obj_summary_btn    : Button        = $ResourceCluster/VBox/ObjSummaryBtn
+@onready var milestone_row      : HBoxContainer = $ResourceCluster/VBox/MilestoneRow
+@onready var milestone_icon     : Label         = $ResourceCluster/VBox/MilestoneRow/MilestoneIcon
+@onready var milestone_progress : Label         = $ResourceCluster/VBox/MilestoneRow/MilestoneProgress
 
 ## ── Panels ──────────────────────────────────────────────────────────────────
 @onready var objective_panel    : Control       = $ObjectivePanel
+@onready var subpath_panel     : Control       = $SubpathCommitPanel
 @onready var wave_panel         : Control       = $WavePanel
 @onready var inspection_panel   : Control       = $InspectionPanel
 
@@ -38,6 +42,7 @@ var _depth : HudDepth = HudDepth.GLANCE
 @onready var start_wave_btn     : Button        = $ActionBar/StartWaveBtn
 @onready var place_tower_btn    : Button        = $ActionBar/PlaceTowerBtn
 @onready var place_building_btn : Button        = $ActionBar/PlaceBuildingBtn
+@onready var research_btn       : Button        = $ActionBar/ResearchBtn
 
 ## ── Notifications ───────────────────────────────────────────────────────────
 @onready var notification_stack : VBoxContainer = $NotificationStack
@@ -45,9 +50,10 @@ var _depth : HudDepth = HudDepth.GLANCE
 const FORMAT_RATE : String = "+%.2f/s"
 const MAX_TOASTS  : int    = 5
 
-var _starter_tower    : Resource = null
-var _starter_building : Resource = null
-var _territory_cells  : int      = 0
+var _starter_tower         : Resource = null
+var _starter_building      : Resource = null
+var _territory_cells       : int      = 0
+var _subpath_panel_shown   : bool     = false  ## fires once per run after wave 9
 
 func _ready() -> void:
 	EventBus.faction_selected.connect(_on_faction_selected)
@@ -66,10 +72,15 @@ func _ready() -> void:
 	EventBus.objective_completed.connect(_on_obj_completed)
 	EventBus.objective_lapsed.connect(_on_obj_lapsed)
 	EventBus.map_completed.connect(_on_map_completed_hud)
+	EventBus.milestone_progress_changed.connect(_on_milestone_progress)
+	EventBus.milestone_reached.connect(_on_milestone_reached_hud)
+	EventBus.subpath_committed.connect(_on_subpath_committed_hud)
 	obj_summary_btn.pressed.connect(_toggle_objective_panel)
 	start_wave_btn.pressed.connect(_on_start_wave_pressed)
 	place_tower_btn.pressed.connect(_on_place_tower_pressed)
 	place_building_btn.pressed.connect(_on_place_building_pressed)
+	research_btn.pressed.connect(_on_research_pressed)
+	EventBus.research_stage_purchased.connect(_on_research_stage_purchased)
 	place_tower_btn.disabled    = true   ## Enabled once faction is chosen
 	place_building_btn.disabled = true
 	start_wave_btn.disabled     = false
@@ -104,7 +115,14 @@ func _on_faction_selected(faction_id: String, sub_path: String) -> void:
 	base_hp_label.text   = "%d HP" % int(300)
 	base_hp_label.add_theme_color_override("font_color", Color(0.20, 0.90, 0.20))
 	_territory_cells       = 0
+	_subpath_panel_shown   = false
 	territory_info.visible = false
+	milestone_row.visible  = true
+	## Research button: only visible and relevant for Architects.
+	research_btn.visible   = (faction_id == "architects")
+	research_btn.disabled  = false
+	_update_research_btn_label(0)
+	milestone_progress.add_theme_color_override("font_color", Color(0.90, 0.80, 0.30))
 	var objectives := ObjectiveManager.get_active_objectives()
 	objective_panel.populate(objectives)
 	_refresh_obj_summary(objectives)
@@ -138,8 +156,15 @@ func _on_wave_started(_wave_number: int, _commander_data: Dictionary) -> void:
 	## Combat begins: collapse all contextual panels so the player can focus.
 	enter_glance_state()
 
-func _on_wave_ended(_wave_number: int, _result: String) -> void:
+func _on_wave_ended(wave_number: int, _result: String) -> void:
 	start_wave_btn.disabled = false
+	## Core/16 Chapter 5: sub-path commit fires once after wave 9.
+	## Panel is the only modal pause in the first session.
+	if wave_number == 9 and not _subpath_panel_shown and not FactionManager.active_faction.is_empty():
+		_subpath_panel_shown     = true
+		start_wave_btn.disabled  = true   ## block start until committed
+		subpath_panel.populate(FactionManager.active_faction, FactionManager.active_sub_path)
+		subpath_panel.visible = true
 
 # -- Territory handlers -------------------------------------------------------
 
@@ -256,6 +281,45 @@ func end_build_mode() -> void:
 		place_building_btn.disabled = false
 	else:
 		place_building_btn.disabled = true
+
+# -- Milestone handlers -------------------------------------------------------
+
+func _on_research_pressed() -> void:
+	MilestoneManager.try_purchase_research()
+
+func _on_research_stage_purchased(stage: int, _cost: float) -> void:
+	_update_research_btn_label(stage)
+	if stage >= MilestoneManager.RESEARCH_STAGES:
+		research_btn.disabled = true
+		research_btn.text     = "Research Complete"
+
+func _update_research_btn_label(stage: int) -> void:
+	if stage >= MilestoneManager.RESEARCH_STAGES:
+		research_btn.text = "Research Complete"
+		return
+	var cost : float = MilestoneManager.RESEARCH_COSTS[stage]
+	research_btn.text = "Research [%d sch]" % int(cost)
+
+func _on_subpath_committed_hud(_sub_path: String) -> void:
+	## Sub-path confirmed — close panel and re-enable wave start.
+	subpath_panel.visible    = false
+	start_wave_btn.disabled  = false
+	sub_path_label.text      = _sub_path.replace("_", " ").capitalize()
+	EventBus.notification_pushed.emit("Sub-path committed: %s" % _sub_path.replace("_", " ").capitalize(), "positive")
+
+func _on_milestone_progress(_current: int, _target: int, label: String) -> void:
+	## label already formatted as "Defenses: 3/8" etc.
+	var parts := label.split(": ", true, 1)
+	if parts.size() == 2:
+		milestone_icon.text    = parts[0]
+		milestone_progress.text = parts[1]
+	else:
+		milestone_progress.text = label
+
+func _on_milestone_reached_hud(_faction_id: String, _index: int) -> void:
+	milestone_icon.text    = "Milestone"
+	milestone_progress.text = "REACHED"
+	milestone_progress.add_theme_color_override("font_color", Color(0.35, 1.0, 0.45))
 
 # -- Objective handlers -------------------------------------------------------
 

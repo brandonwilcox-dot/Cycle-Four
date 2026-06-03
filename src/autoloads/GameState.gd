@@ -23,6 +23,8 @@ var galaxy_run_number: int = 0         # increments each prestige
 var is_paused: bool = false
 var is_in_pilgrimage: bool = false
 var tutorial_complete: bool = false
+var academy_completed: bool = false  # true after first-run Academy commit; gate for skip logic
+var unsorted: bool = false           # true if player declined Academy recommendation; read by D-2
 
 # -- Called by SaveManager on load --
 func apply_save_data(data: Dictionary) -> void:
@@ -36,6 +38,8 @@ func apply_save_data(data: Dictionary) -> void:
 	milestones_reached.assign(data.get("milestones_reached", []))
 	galaxy_run_number  = data.get("galaxy_run_number", 0)
 	tutorial_complete  = data.get("tutorial_complete", false)
+	academy_completed  = data.get("academy_completed", false)
+	unsorted           = data.get("unsorted", false)
 
 func to_save_data() -> Dictionary:
 	return {
@@ -49,4 +53,6 @@ func to_save_data() -> Dictionary:
 		"milestones_reached": milestones_reached,
 		"galaxy_run_number":  galaxy_run_number,
 		"tutorial_complete":  tutorial_complete,
+		"academy_completed":  academy_completed,
+		"unsorted":           unsorted,
 	}

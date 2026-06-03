@@ -33,6 +33,15 @@ func select_faction(faction_id: String, sub_path: String) -> void:
 	_initialize_faction_economy()
 	EventBus.faction_selected.emit(faction_id, sub_path)
 
+## Called by SubpathCommitPanel between waves 9-10. Updates active_sub_path and
+## emits subpath_committed so AbilityController can unlock the Suppression Field.
+func commit_sub_path(sub_path: String) -> void:
+	if sub_path not in SUB_PATHS.get(active_faction, []):
+		return
+	active_sub_path        = sub_path
+	GameState.current_sub_path = sub_path
+	EventBus.subpath_committed.emit(sub_path)
+
 func restore_faction(faction_id: String, sub_path: String) -> void:
 	## Called on load when a save already has a faction set.
 	## Restores FactionManager state and fires faction_selected so the HUD

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AcademyScenario" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/academy/AcademyScenario.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"scenario_3"
+prompt = "Something old at the edge. It does not move."
+duration = 90.0
+timeout_vote = &"bloom"
+zones = [{"pos": Vector2(-220, 80), "label": "Survey spot", "faction": &"architects", "weight": 1.0}, {"pos": Vector2(220, 80), "label": "Observe from distance", "faction": &"bloom", "weight": 1.0}, {"pos": Vector2(0, -200), "label": "Interface point", "faction": &"mesh", "weight": 1.0}]

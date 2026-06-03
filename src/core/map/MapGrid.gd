@@ -52,6 +52,23 @@ var map_data : MapData = null
 func is_claimed(col: int, row: int) -> bool:
 	return get_cell(col, row) == Cell.CLAIMED
 
+## Returns the total number of GROUND cells on the map.
+## Used by MilestoneManager to compute the Bloom 60% coverage condition.
+func count_ground_cells() -> int:
+	var n : int = 0
+	for c in _cells:
+		if c == Cell.GROUND or c == Cell.CLAIMED:
+			n += 1
+	return n
+
+## Returns the number of CLAIMED cells on the map.
+func count_claimed_cells() -> int:
+	var n : int = 0
+	for c in _cells:
+		if c == Cell.CLAIMED:
+			n += 1
+	return n
+
 ## Phase 10: preload the generator script directly. class_name resolution
 ## intermittently fails for freshly-added scripts in Godot 4 until the editor
 ## rescans; preload avoids the parse-time identifier issue.
@@ -97,6 +114,9 @@ func load_map_data(data: MapData) -> void:
 	## Phase 8: hand the map to the convoy subsystem. It needs map_data for graph
 	## traversal and map_grid for cell→world conversion when spawning convoys.
 	ConvoyManager.set_map(data, self)
+	## D-1: give MilestoneManager a grid reference so it can query cell counts
+	## for the Bloom coverage condition and the Mesh depot-connectivity count.
+	MilestoneManager.set_map_grid(self)
 
 func get_cell(col: int, row: int) -> int:
 	if col < 0 or col >= COLS or row < 0 or row >= ROWS:

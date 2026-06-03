@@ -79,6 +79,7 @@ func _ready() -> void:
 	_build_abilities()
 	_register_input_actions()
 	EventBus.faction_selected.connect(_on_faction_selected)
+	EventBus.subpath_committed.connect(_on_subpath_committed)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
 	_unlock_slot(0)
 
@@ -425,8 +426,11 @@ func _unlock_slot(slot: int) -> void:
 		"normal"
 	)
 
+func _on_subpath_committed(_sub_path: String) -> void:
+	_unlock_slot(1)   ## Identity arc beat — Suppression Field unlocks at sub-path commit
+
 func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
-	_unlock_slot(1)
+	## Slot 1 (Suppression Field) is NOT unlocked here; it waits for subpath_committed.
 	## Set ultimate cooldown and display name based on faction now that it is known.
 	var ultimate = _get_ability(3)
 	if ultimate != null:

@@ -28,6 +28,7 @@ GalaxyManager="*res://src/autoloads/GalaxyManager.gd"
 SaveManager="*res://src/autoloads/SaveManager.gd"
 ObjectiveManager="*res://src/autoloads/ObjectiveManager.gd"
 ConvoyManager="*res://src/autoloads/ConvoyManager.gd"
+MilestoneManager="*res://src/autoloads/MilestoneManager.gd"
 
 [display]
 
