@@ -56,8 +56,10 @@ func _start_game_world() -> void:
 
 ## -- Input --
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	## ESC cancels placement/build mode, or collapses panels to glance state.
+	## Using _unhandled_input so GUI controls (InspectionPanel Upgrade button,
+	## action bar buttons) consume their clicks before this handler sees them.
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_ESCAPE:
 			if _placement_mode:

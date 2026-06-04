@@ -29,6 +29,7 @@ script = ExtResource("6")
 layer = 10
 
 [node name="Academy" parent="UILayer" instance=ExtResource("2")]
+position = Vector2(960, 540)
 
 [node name="HUD" parent="UILayer" instance=ExtResource("4")]
 

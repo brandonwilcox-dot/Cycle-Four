@@ -15,6 +15,10 @@ extends Camera2D
 const ZOOM_MAX  : float = 3.0   ## Maximum zoom-in factor (3x)
 const ZOOM_STEP : float = 0.1   ## Proportional step per scroll click (10% of current zoom)
 
+## Preload MapGrid to read its constants directly.
+## node.get() cannot access GDScript consts — only exported vars.
+const _MAP_GRID_SCRIPT = preload("res://src/core/map/MapGrid.gd")
+
 var _map_width  : float = 1920.0
 var _map_height : float = 1088.0
 var _zoom_min   : float = 1.0
@@ -30,16 +34,12 @@ func _ready() -> void:
 	position = Vector2(_map_width * 0.5, _map_height * 0.5)
 	_clamp_position()
 
-## Reads COLS / ROWS / CELL_SIZE from the sibling MapGrid node.
+## Reads COLS / ROWS / CELL_SIZE from the MapGrid script constants.
+## Uses preload rather than node.get() — GDScript const members are not
+## accessible via duck-typed get() calls; only exported vars are.
 func _read_map_size() -> void:
-	var map_grid : Node = get_parent().get_node_or_null("MapGrid")
-	if map_grid == null:
-		return
-	var cols : int = map_grid.get("COLS")      if map_grid.get("COLS")      != null else 30
-	var rows : int = map_grid.get("ROWS")      if map_grid.get("ROWS")      != null else 17
-	var cell : int = map_grid.get("CELL_SIZE") if map_grid.get("CELL_SIZE") != null else 64
-	_map_width  = float(cols * cell)
-	_map_height = float(rows * cell)
+	_map_width  = float(_MAP_GRID_SCRIPT.COLS * _MAP_GRID_SCRIPT.CELL_SIZE)
+	_map_height = float(_MAP_GRID_SCRIPT.ROWS * _MAP_GRID_SCRIPT.CELL_SIZE)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

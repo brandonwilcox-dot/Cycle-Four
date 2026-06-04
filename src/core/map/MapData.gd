@@ -5,8 +5,8 @@
 class_name MapData
 extends Resource
 
-const DEFAULT_COLS : int = 30
-const DEFAULT_ROWS : int = 17
+const DEFAULT_COLS : int = 60
+const DEFAULT_ROWS : int = 34
 
 ## Bytes per cell in the meta array. One u32 (4 bytes) holds all 30 used bits per cell.
 const META_STRIDE  : int = 4

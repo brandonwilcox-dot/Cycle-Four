@@ -1,7 +1,7 @@
 ## DefaultMapBuilder.gd
-## Constructs the hand-authored default MapData (30×17) that replicates the layout
-## from MapGrid._build_default_paths(). This is the Phase 2 bridge resource.
-## Phase 10 (procedural generator) will replace this for all maps except the tutorial.
+## Constructs a fallback MapData (60×34) used when MapGenerator exhausts its reroll
+## budget. Produces minimal straight L-paths from each cardinal spawn to the FOB.
+## MapGenerator is the live path for all normal runs.
 class_name DefaultMapBuilder
 extends RefCounted
 
@@ -14,22 +14,22 @@ const _BASE    : int = 3
 ## in favour of MapData.spawn_points. Spawn cells are now PATH (already passable from
 ## the _fill_h calls during path construction). Identity is on the SpawnPoint, not the cell.
 
-const _COLS : int = 30
-const _ROWS : int = 17
+const _COLS : int = 60
+const _ROWS : int = 34
 
-const _BASE_POS    := Vector2i(15, 8)
-const _SPAWN_W_POS := Vector2i(0,  8)
-const _SPAWN_N_POS := Vector2i(15, 0)
-const _SPAWN_S_POS := Vector2i(15, 16)
-const _SPAWN_E_POS := Vector2i(29, 8)
+const _BASE_POS    := Vector2i(30, 17)
+const _SPAWN_W_POS := Vector2i(0,  17)
+const _SPAWN_N_POS := Vector2i(30, 0)
+const _SPAWN_S_POS := Vector2i(30, 33)
+const _SPAWN_E_POS := Vector2i(59, 17)
 
 ## Phase 6: initial safe-zone reveal radius around the FOB. Chebyshev (square) distance.
 ## Per core/17 §8 the FOB has 3 resource nodes reachable; a radius of 3 covers that ring.
 const _SAFE_ZONE_RADIUS : int = 3
 
-## Phase 7: stub depot position (top-left ground area, well outside the safe zone).
+## Stub depot position — top-left ground area, well outside the safe zone.
 ## Used as the far endpoint of the default map's one ancient PathEdge.
-const _STUB_DEPOT_POS : Vector2i = Vector2i(4, 1)
+const _STUB_DEPOT_POS : Vector2i = Vector2i(4, 2)
 
 ## Returns a fully initialised MapData matching the hardcoded default layout.
 static func create() -> MapData:
@@ -37,7 +37,7 @@ static func create() -> MapData:
 	data.map_id            = &"default"
 	data.dimensions        = Vector2i(_COLS, _ROWS)
 	data.biome             = &"temperate"
-	data.topology_template = &"default_30x17"
+	data.topology_template = &"default_60x34"
 	data.init_arrays()
 	_build_paths(data)
 	_build_default_spawn_points(data)
@@ -130,44 +130,17 @@ static func _reveal_safe_zone(data: MapData) -> void:
 				continue
 			data.set_meta_revealed(col + row * _COLS, true)
 
-## Ports every fill and stamp call from MapGrid._build_default_paths() into MapData.cell_types.
-## Keep this function a 1-for-1 mirror of that function — if one changes, the other must too.
+## Minimal fallback paths: one straight L from each spawn to the FOB.
+## West:  row 17 from col 0 → 30 (horizontal only, BASE is on this row)
+## East:  row 17 from col 30 → 59
+## North: col 30 from row 0 → 17 (vertical only, BASE is on this column)
+## South: col 30 from row 17 → 33
+## All four overlap at the BASE cell, which is stamped last as _BASE.
 static func _build_paths(data: MapData) -> void:
-	## West path: two-branch network between junction (4,8) and exit (13,8).
-	_fill_h(data, 8,   0,  4,  _PATH)   ## entry: row 8 spawn to junction
-	_fill_v(data, 4,   4,  12, _PATH)   ## junction vertical: col 4 rows 4-12
-	_fill_h(data, 4,   4,  9,  _PATH)   ## branch A north: row 4 east
-	_fill_v(data, 9,   4,  8,  _PATH)   ## branch A: col 9 south to exit row
-	_fill_h(data, 8,   9,  13, _PATH)   ## branch A exit: row 8 east to (13,8)
-	_fill_h(data, 12,  4,  13, _PATH)   ## branch B south: row 12 east
-	_fill_v(data, 13,  8,  12, _PATH)   ## branch B: col 13 north to (13,8)
-	_fill_h(data, 8,  13,  15, _PATH)   ## final approach: (13,8) to base
-
-	## North path: jog from SPAWN_N down to row 8, merges into west branch A exit.
-	_fill_v(data, 15,  0,  3,  _PATH)
-	_fill_h(data, 3,  11,  15, _PATH)
-	_fill_v(data, 11,  3,  8,  _PATH)
-	_fill_h(data, 8,  11,  13, _PATH)   ## overlaps west branch A exit (same cells)
-
-	## East path: two-branch mirror of west between junction (25,8) and exit (16,8).
-	_fill_h(data, 8,  25,  29, _PATH)   ## entry: row 8 spawn to junction
-	_fill_v(data, 25,  4,  12, _PATH)   ## junction vertical: col 25 rows 4-12
-	_fill_h(data, 4,  20,  25, _PATH)   ## branch A north (mirror): row 4 west
-	_fill_v(data, 20,  4,  8,  _PATH)   ## branch A: col 20 south to exit row
-	_fill_h(data, 8,  16,  20, _PATH)   ## branch A exit: row 8 west to (16,8)
-	_fill_h(data, 12, 16,  25, _PATH)   ## branch B south (mirror): row 12 west
-	_fill_v(data, 16,  8,  12, _PATH)   ## branch B: col 16 north to (16,8)
-	_fill_h(data, 8,  15,  16, _PATH)   ## east final approach to base
-
-	## South path: jog from SPAWN_S up to row 8, merges into east exit corridor.
-	_fill_v(data, 15, 13,  16, _PATH)
-	_fill_h(data, 13, 15,  19, _PATH)
-	_fill_v(data, 19,  8,  13, _PATH)
-	_fill_h(data, 8,  15,  19, _PATH)
-
-	## Stamp the base marker last. Spawn positions remain PATH cells (already filled
-	## by _fill_h above); spawn identity lives on SpawnPoint resources, populated
-	## by _build_default_spawn_points().
+	_fill_h(data, _BASE_POS.y, _SPAWN_W_POS.x, _BASE_POS.x, _PATH)  ## West
+	_fill_h(data, _BASE_POS.y, _BASE_POS.x,    _SPAWN_E_POS.x, _PATH)  ## East
+	_fill_v(data, _BASE_POS.x, _SPAWN_N_POS.y, _BASE_POS.y, _PATH)   ## North
+	_fill_v(data, _BASE_POS.x, _BASE_POS.y,    _SPAWN_S_POS.y, _PATH)  ## South
 	_set_raw(data, _BASE_POS.x, _BASE_POS.y, _BASE)
 
 ## Creates the four cardinal SpawnPoint resources for the default map.

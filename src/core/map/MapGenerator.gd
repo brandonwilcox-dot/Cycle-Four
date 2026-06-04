@@ -1,7 +1,7 @@
 ## MapGenerator.gd
 ## Phase 10 — procedural MapData generator. Replaces the hand-authored
 ## DefaultMapBuilder for fresh runs while preserving the default's structural
-## intent: a 30×17 grid, BASE in the centre, 2–4 cardinal-axis spawn points,
+## intent: a 60×34 grid, BASE in the centre, 2–4 cardinal-axis spawn points,
 ## 1 ancient PathEdge from a discovered depot to the FOB, stub objectives per
 ## (faction, sub_path), and an initial safe zone revealed around the FOB.
 ##
@@ -16,24 +16,24 @@
 class_name MapGenerator
 extends RefCounted
 
-const _COLS : int = 30
-const _ROWS : int = 17
+const _COLS : int = 60
+const _ROWS : int = 34
 
 ## Local mirrors of MapGrid.Cell enum values.
 const _GROUND   : int = 0
 const _PATH     : int = 2
 const _BASE     : int = 3
 
-const _BASE_POS         : Vector2i = Vector2i(15, 8)
+const _BASE_POS         : Vector2i = Vector2i(30, 17)
 const _SAFE_ZONE_RADIUS : int      = 3
 const _MAX_ATTEMPTS     : int      = 16
 
 ## The four cardinal axis termini. Procgen picks a subset of size 2..4.
 const _CARDINAL_SPAWNS : Array = [
-	{ "pos": Vector2i(0,  8),  "id": &"spawn_w" },
-	{ "pos": Vector2i(15, 0),  "id": &"spawn_n" },
-	{ "pos": Vector2i(29, 8),  "id": &"spawn_e" },
-	{ "pos": Vector2i(15, 16), "id": &"spawn_s" },
+	{ "pos": Vector2i(0,  17), "id": &"spawn_w" },
+	{ "pos": Vector2i(30, 0),  "id": &"spawn_n" },
+	{ "pos": Vector2i(59, 17), "id": &"spawn_e" },
+	{ "pos": Vector2i(30, 33), "id": &"spawn_s" },
 ]
 
 ## Entry point. seed = 0 picks a time-based seed. biome and topology_template are
@@ -108,8 +108,9 @@ static func _carve_winding_path(data: MapData, rng: RandomNumberGenerator,
 		var base_x  : float = lerpf(float(from.x), float(to.x), t)
 		var base_y  : float = lerpf(float(from.y), float(to.y), t)
 		## Perpendicular offset keeps the bend visually distinct from a straight line.
-		var off_x   : int = rng.randi_range(-5, 5)
-		var off_y   : int = rng.randi_range(-3, 3)
+		## Offsets scaled for 60×34 (roughly 2× the old 30×17 values).
+		var off_x   : int = rng.randi_range(-10, 10)
+		var off_y   : int = rng.randi_range(-6, 6)
 		var wp_x    : int = clampi(int(base_x) + off_x, 1, _COLS - 2)
 		var wp_y    : int = clampi(int(base_y) + off_y, 1, _ROWS - 2)
 		points.append(Vector2i(wp_x, wp_y))

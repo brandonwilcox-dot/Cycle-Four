@@ -1,5 +1,5 @@
 ## MapGrid.gd
-## The game board: a 30×17 cell grid (1920×1088 px at 64 px/cell).
+## The game board: a 60×34 cell grid (3840×2176 px at 64 px/cell).
 ## Owns the AStar2D graph so units can query shortest paths to the base.
 ## Drawn via _draw(); call queue_redraw() after any state change.
 ## Design ref: core/17_units-maps-buildings.md (standard map topology)
@@ -19,15 +19,15 @@ enum Cell {
 }
 
 const CELL_SIZE : int = 64
-const COLS      : int = 30
-const ROWS      : int = 17
+const COLS      : int = 60
+const ROWS      : int = 34
 
 ## Cardinal spawn positions (cell coords)
-const BASE_POS     := Vector2i(15, 8)
-const SPAWN_W_POS  := Vector2i(0,  8)
-const SPAWN_N_POS  := Vector2i(15, 0)
-const SPAWN_S_POS  := Vector2i(15, 16)
-const SPAWN_E_POS  := Vector2i(29, 8)
+const BASE_POS     := Vector2i(30, 17)
+const SPAWN_W_POS  := Vector2i(0,  17)
+const SPAWN_N_POS  := Vector2i(30, 0)
+const SPAWN_S_POS  := Vector2i(30, 33)
+const SPAWN_E_POS  := Vector2i(59, 17)
 
 var _cells : Array[int] = []
 var _astar  : AStar2D   = AStar2D.new()

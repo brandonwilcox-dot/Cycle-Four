@@ -64,6 +64,10 @@ var _pulse_t    : float = 0.0
 var _sigil_buttons : Array[Button] = []
 
 func _ready() -> void:
+	## Disable the Camera2D — it lives in a CanvasLayer so it cannot control
+	## CanvasLayer rendering, but it CAN hijack the world camera at zoom 0.3,
+	## breaking the game-world view. Scale tweening replaces its zoom effect.
+	_camera.enabled = false
 	_sorting_layer.hide()
 	_line_label.modulate.a = 0.0
 	_wash_rect.modulate.a  = 0.0
@@ -73,9 +77,12 @@ func _ready() -> void:
 # -- Chapter 0: camera descent + opening line --
 
 func _run_chapter_0() -> void:
-	_camera.zoom = Vector2(0.30, 0.30)
+	## Zoom-in effect via node scale rather than Camera2D (camera doesn't control
+	## CanvasLayer rendering). Academy is positioned at screen center in Main.tscn,
+	## so its Backdrop fills the screen at scale (1,1) and zooms in from scale (0.3,0.3).
+	scale = Vector2(0.30, 0.30)
 	var tween : Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(_camera, "zoom", Vector2(1.0, 1.0), 3.0)
+	tween.tween_property(self, "scale", Vector2(1.0, 1.0), 3.0)
 	await get_tree().create_timer(3.5).timeout
 	await _show_line("Before you are assigned, you will be observed.")
 	await get_tree().create_timer(0.5).timeout
@@ -260,6 +267,9 @@ func _on_decline_pressed() -> void:
 # -- Transition --
 
 func _commit_faction(faction: StringName) -> void:
+	## Stop the Cadet responding to clicks before we hand off to the game world.
+	_cadet.set_process(false)
+	_cadet.set_process_unhandled_input(false)
 	_chosen_faction = faction
 	_sorting_layer.hide()
 	await _faction_wash(faction)

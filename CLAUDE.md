@@ -441,57 +441,76 @@ call `FactionManager.select_faction(faction, default_sub_path)` → emit `select
 #### D-4 — Wave Scripted Events
 **Recommended model: Sonnet**
 **Prerequisite: D-3 complete ✓**
-**Status: NEXT**
+**Status: COMPLETE + verified (2026-06-03)**
 
-- Wave 3: guarantee a secondary-axis flanker probe (scripted, not random).
-  WaveSpawner gains a `scripted_overrides: Dictionary` that forces spawn composition
-  for specific wave numbers.
-- Faction-voiced one-liners: brief notification toasts on key events (resource node
-  connected, first unit defeat, wave 3 flank hit, sub-path commit). NotificationStack
-  already exists.
-- Ancient activation at milestone: desaturation effect (full-screen ColorRect, alpha
-  0 → 0.7 grey over 0.5s then back), Ancient unit spawns at Ruins position, walks to
-  Ruins edge, delivers one dialogue line, emits faction-counter debuff, despawns.
-  Unit is not in "units" group — it does not participate in wave logic.
+Files: `src/core/waves/WaveSpawner.gd` (scripted_overrides + `_apply_scripted_override`),
+`src/core/FactionDialogue.gd`, `src/ui/FactionDialogueHUD.gd`,
+`src/entities/AncientWatcher.gd`, `scenes/main/AncientWatcher.tscn`,
+`scenes/main/Main.tscn` (WashLayer/MilestoneWash + FactionDialogueHUD nodes),
+`scenes/main/Main.gd` (_on_milestone_reached, _play_milestone_wash, _spawn_ancient_watcher).
+`EventBus.wave_flank_triggered(wave_number)` added.
+
+Key lesson: `class_name RefCounted` scripts must be `preload()`-ed by callers — global
+class registration is unreliable at parse time in Godot 4.6.
 
 ---
 
 ### TRACK E — Economy & Idle Loop
 **Recommended model: Sonnet**
-**Prerequisite: Track D complete (D-1 at minimum for research cost integration)**
+**Status: COMPLETE + verified (2026-06-03)**
 
-Real idle tick income (`idle_tick` signal already in EventBus but never fired),
-offline catch-up (SaveManager stub), resource caps, secondary resource production
-(schematics/lineages/routes — currently never generated). Wire EconomyManager's
-production rates to the idle tick. Prerequisite for the §22 damage indicator.
+Idle tick, production rates, territory rates, building income, caps, and offline
+catch-up math were already wired from earlier tracks. Three gaps fixed:
+1. `territory_rates` now persisted in `SaveManager._collect_all_state()` / `_apply_all_state()` — building income and Commander territory bonuses survive reload.
+2. Offline catch-up toast in `HUD._on_offline_catch_up()` — "Welcome back! Xh Ym of idle income collected."
+3. `SaveManager.mark_dirty()` now wired to `faction_selected`, `building_placed`, `tower_placed` so the 60-second auto-save actually triggers.
 
 ---
 
 ### TRACK F — Wave Content
 **Recommended model: Sonnet**
-**Prerequisite: Track E complete**
+**Status: COMPLETE + verified (2026-06-03)**
 
-Real wave tables per faction (core/17 Tier 1–3 units + 2 milestone signatures each),
-wave escalation curve across waves 1–25+, named commander integration (core/12).
-Currently all waves spawn generic placeholder units.
+6 new unit resources (T2 + T3 per faction):
+- `resources/units/architect_t2.tres` (Auger-Walker: 200 HP, 55 spd, 5 armor)
+- `resources/units/architect_t3.tres` (Compiler: 420 HP, 35 spd, 12 armor)
+- `resources/units/bloom_t2.tres` (Bramble-Walker: 320 HP, 45 spd, evolves at 30% HP)
+- `resources/units/bloom_t3.tres` (Mire-Beast: 700 HP, 28 spd, 15 armor, `status_immune`)
+- `resources/units/mesh_t2.tres` (Spike: 155 HP, 72 spd, hacks on death)
+- `resources/units/mesh_t3.tres` (Carver: 300 HP, 62 spd, wider hack radius)
+
+`src/core/waves/WaveTableBuilder.gd` — builds 30-wave curves in code. T1 waves 1–12
+(count 6→24, interval 1.6→0.9s), T2 waves 13–19 (5→12, 1.6→1.1s), T3 waves 20–25+
+(3→10, 2.0→1.4s). Commander names at waves 11/13/15/18/20/23/25 per faction.
+WaveSpawner falls back to `WaveTableBuilder.build(faction_id)` when no .tres exists.
+HUD shows purple toast "Wave N — Commander Name" at wave 11+.
 
 ---
 
 ### TRACK G — Rapid-Click Hang (Bug)
 **Recommended model: Sonnet — anytime, independent**
+**Status: COMPLETE + verified (2026-06-03)**
 
-Pre-existing UI race when clicking rapidly near tower upgrade interactions. Reproducible
-since Phase 4. Investigation: add input-event logging to `_unhandled_input` in Main.gd
-and HUD.gd; check for double-free or signal double-connect on the InspectionPanel
-upgrade button path.
+Root cause: `Main` used `_input()`, which fires BEFORE Godot's GUI system processes
+events. Every click on the InspectionPanel Upgrade button was intercepted by
+`Main._input()` first — it mapped the button's screen position to a tower cell,
+opened inspection, and marked the event handled. The Upgrade button never saw the click.
+
+Fix: one line — `func _input` → `func _unhandled_input` in `scenes/main/Main.gd`.
+GUI controls (buttons) now consume their clicks first; map clicks (no GUI consumed)
+still reach Main. Commander already used `_unhandled_input` for the same reason.
 
 ---
 
 ### TRACK H — Map Scale-Up to 60×34
 **Recommended model: Sonnet — anytime, independent**
+**Status: COMPLETE + verified (2026-06-03)**
 
-Production target is ~4× the current 30×17 map. Touches `MapData.dimensions` defaults
-in `MapGenerator.gd` and `DefaultMapBuilder.gd`, `MapGrid` cell count, camera
-`min_zoom` formula (already self-adjusting: `max(vp_w/map_w, vp_h/map_h)`), and any
-hardcoded 30/17 constants. Estimated 3–5 files. Spec in
-`planning/map-architecture-implementation-handoff.md §11.5`.
+5 files changed. Map is now 3840×2176 px (60×34 cells at 64 px/cell).
+- `MapData.gd`: DEFAULT_COLS/ROWS 30/17 → 60/34
+- `MapGrid.gd`: COLS/ROWS, BASE_POS (30,17), all 4 spawn positions updated; doc comment
+- `MapGenerator.gd`: _COLS/_ROWS, _BASE_POS, _CARDINAL_SPAWNS, waypoint offsets ×2
+- `DefaultMapBuilder.gd`: constants + simplified 4 straight L-paths replacing old hand-authored 30×17 layout
+- `WorldMap.tscn`: Background 1920×1080→3840×2176; Base+Commander position (992,544)→(1952,1120)
+
+Camera self-adjusted — min_zoom formula was already self-adjusting for any map size.

@@ -30,8 +30,11 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var world_click : Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
-		_target = world_click
+		## Convert screen-space click to Academy (parent) local space.
+		## event.position is in viewport/screen coords; the parent Academy Node2D
+		## is positioned at screen centre in a CanvasLayer, so its inverse transform
+		## maps screen position → local chamber space correctly.
+		_target = get_parent().get_global_transform().affine_inverse() * event.position
 		_moving = true
 
 func _draw() -> void:
