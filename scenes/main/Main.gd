@@ -61,6 +61,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	## Using _unhandled_input so GUI controls (InspectionPanel Upgrade button,
 	## action bar buttons) consume their clicks before this handler sees them.
 	if event is InputEventKey and event.pressed:
+		## DEV: F1 skips Academy → architects. Remove before shipping.
+		if event.keycode == KEY_F1 and not GameState.academy_completed:
+			FactionManager.select_faction("architects", "standard")
+			GameState.academy_completed = true
+			faction_select.hide()
+			_start_game_world()
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode == KEY_ESCAPE:
 			if _placement_mode:
 				_cancel_placement()

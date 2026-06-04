@@ -18,7 +18,7 @@ var _save_dirty: bool = false
 func _ready() -> void:
 	EventBus.wave_ended.connect(_on_wave_ended)
 	EventBus.prestige_completed.connect(_on_prestige_completed)
-	EventBus.faction_selected.connect(_on_dirty_event)
+	EventBus.faction_selected.connect(func(_f: String, _s: String) -> void: mark_dirty())
 	EventBus.building_placed.connect(_on_dirty_event)
 	EventBus.tower_placed.connect(_on_dirty_event)
 	if DEV_CLEAR_SAVE:

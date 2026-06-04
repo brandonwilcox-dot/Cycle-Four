@@ -116,6 +116,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	var mbe := event as InputEventMouseButton
 	if not mbe.pressed or mbe.button_index != MOUSE_BUTTON_LEFT:
 		return
+	## During the Academy phase no faction has been selected yet — leave clicks
+	## for CadetAvatar to handle. Commander movement resumes after selection.
+	if GameState.current_faction.is_empty():
+		return
 	## Respect HUD dead zones: top bar (0-48 px) and bottom bar (last 48 px).
 	var vp_h : float = get_viewport().get_visible_rect().size.y
 	if mbe.position.y < 48.0 or mbe.position.y > vp_h - 48.0:
@@ -298,6 +302,7 @@ func _try_primary_attack() -> void:
 	if _ability_controller != null and _ability_controller.is_overdrive_active:
 		dmg *= _ability_controller.overdrive_damage_mult
 	target.take_damage(dmg)
+	EventBus.commander_attacked.emit()
 	_spawn_shot_line(target.global_position, PRIMARY_LINE_COLOR, 2.0)
 	if _ability_controller != null:
 		_ability_controller.add_lance_charge(dmg)
