@@ -64,6 +64,30 @@ vertical_alignment = 1
 autowrap_mode = 3
 theme_override_font_sizes/font_size = 22
 
+[node name="ScenarioLabel" type="Label" parent="TextLayer"]
+layout_mode = 0
+offset_left = 200.0
+offset_top = 460.0
+offset_right = 1720.0
+offset_bottom = 560.0
+grow_horizontal = 2
+grow_vertical = 2
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 28
+
+[node name="TimerLabel" type="Label" parent="TextLayer"]
+layout_mode = 0
+offset_left = 1760.0
+offset_top = 20.0
+offset_right = 1900.0
+offset_bottom = 60.0
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 24
+
 [node name="SortingLayer" type="CanvasLayer" parent="."]
 layer = 21
 

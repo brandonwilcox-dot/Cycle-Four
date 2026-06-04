@@ -88,6 +88,11 @@ signal observed_status_changed(is_observed: bool)
 # -- Academy --
 signal academy_scenario_resolved(index: int, faction: StringName)  ## telemetry / feel hooks
 signal academy_completed(faction: StringName, unsorted: bool)      ## fired on Academy commit
+signal academy_phase_started()      ## HUD hides wave button during Academy scenarios
+signal academy_phase_ended()        ## HUD restores wave button after sorting
+signal academy_spawn_requested(spawn_idx: int, count: int)  ## WaveSpawner handles
+signal academy_clear_units()        ## WaveSpawner frees all units between scenarios
+signal commander_attacked()         ## Commander primary fire hit — Mesh behavior signal
 
 # -- Memory / Pilgrimage --
 signal memory_tier_unlocked(tier: int)

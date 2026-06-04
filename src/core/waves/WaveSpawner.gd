@@ -48,6 +48,8 @@ func _ready() -> void:
 	EventBus.wave_ended.connect(_on_wave_ended)
 	EventBus.path_changed.connect(_on_path_changed)
 	EventBus.spawn_activated.connect(_on_spawn_activated)
+	EventBus.academy_spawn_requested.connect(_on_academy_spawn)
+	EventBus.academy_clear_units.connect(_on_academy_clear)
 
 func _process(delta: float) -> void:
 	if not _spawning or _units_to_spawn <= 0:
@@ -300,3 +302,36 @@ func _start_procedural_wave(wave_number: int) -> void:
 	_spawn_interval    = clampf(1.6 - w * 0.08, 0.7, 1.6) ## 1.52 / 1.44 / 1.36 ... floor 0.7
 	_spawn_timer       = 0.0
 	_spawning          = true
+
+## -- Academy spawning --
+
+## Spawns one enemy unit at the map spawn point identified by spawn_idx.
+## Uses all spawn_points from MapData regardless of activation state.
+## Wraps idx if fewer spawn points than requested.
+func _on_academy_spawn(spawn_idx: int, count: int) -> void:
+	if _unit_layer == null or _map_grid == null or count <= 0:
+		return
+	var data : MapData = _map_grid.get("map_data") as MapData
+	if data == null or data.spawn_points.is_empty():
+		return
+	var idx : int = spawn_idx % data.spawn_points.size()
+	var sp  : SpawnPoint = data.spawn_points[idx]
+	var unit_res : Resource = load("res://resources/units/architect_t1.tres")
+	if unit_res == null:
+		push_error("WaveSpawner: academy unit resource missing.")
+		return
+	for _i in count:
+		var wp_array : Array = _map_grid.get_path_to_base(sp.position)
+		if wp_array.is_empty():
+			continue
+		var unit : Node2D = UNIT_SCENE.instantiate()
+		unit.call("setup", unit_res, wp_array)
+		_unit_layer.add_child(unit)
+
+## Frees all units in the unit layer. Called between Academy scenarios.
+func _on_academy_clear() -> void:
+	if _unit_layer == null:
+		return
+	for child in _unit_layer.get_children():
+		if is_instance_valid(child):
+			child.queue_free()

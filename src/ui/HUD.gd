@@ -75,6 +75,8 @@ func _ready() -> void:
 	EventBus.milestone_progress_changed.connect(_on_milestone_progress)
 	EventBus.milestone_reached.connect(_on_milestone_reached_hud)
 	EventBus.subpath_committed.connect(_on_subpath_committed_hud)
+	EventBus.academy_phase_started.connect(func() -> void: start_wave_btn.hide())
+	EventBus.academy_phase_ended.connect(func() -> void: start_wave_btn.show())
 	obj_summary_btn.pressed.connect(_toggle_objective_panel)
 	start_wave_btn.pressed.connect(_on_start_wave_pressed)
 	place_tower_btn.pressed.connect(_on_place_tower_pressed)
