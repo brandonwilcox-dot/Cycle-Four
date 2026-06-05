@@ -20,8 +20,10 @@ var _depth : HudDepth = HudDepth.GLANCE
 ## ── Resource cluster ────────────────────────────────────────────────────────
 @onready var faction_label      : Label         = $ResourceCluster/VBox/FactionRow/FactionLabel
 @onready var sub_path_label     : Label         = $ResourceCluster/VBox/FactionRow/SubPathLabel
+@onready var primary_name       : Label         = $ResourceCluster/VBox/PrimaryRes/Name
 @onready var primary_label      : Label         = $ResourceCluster/VBox/PrimaryRes/Amount
 @onready var primary_rate       : Label         = $ResourceCluster/VBox/PrimaryRes/Rate
+@onready var secondary_name     : Label         = $ResourceCluster/VBox/SecondaryRes/Name
 @onready var secondary_label    : Label         = $ResourceCluster/VBox/SecondaryRes/Amount
 @onready var secondary_rate     : Label         = $ResourceCluster/VBox/SecondaryRes/Rate
 @onready var base_hp_label      : Label         = $ResourceCluster/VBox/BaseHP/BaseAmount
@@ -111,6 +113,8 @@ func _on_faction_selected(faction_id: String, sub_path: String) -> void:
 	## resource_changed won't re-fire for values already set in EconomyManager).
 	var p : String = FactionManager.get_primary_resource()
 	var s : String = FactionManager.get_secondary_resource()
+	primary_name.text    = p.capitalize()
+	secondary_name.text  = s.capitalize()
 	primary_label.text   = _format_amount(EconomyManager.resources.get(p, 0.0))
 	primary_rate.text    = FORMAT_RATE % EconomyManager.get_rate(p)
 	secondary_label.text = _format_amount(EconomyManager.resources.get(s, 0.0))
@@ -235,6 +239,9 @@ func _on_place_tower_pressed() -> void:
 	if not EconomyManager.can_afford(
 		{FactionManager.get_primary_resource(): _starter_tower.primary_cost}
 	):
+		EventBus.notification_pushed.emit(
+			"Not enough %s to place a tower." % FactionManager.get_primary_resource(), "warning"
+		)
 		return
 	EventBus.tower_placement_requested.emit(_starter_tower)
 
@@ -251,6 +258,9 @@ func _on_place_building_pressed() -> void:
 		return
 	var b_cost : float = float(_starter_building.get("primary_cost"))
 	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): b_cost}):
+		EventBus.notification_pushed.emit(
+			"Not enough %s to place a building." % FactionManager.get_primary_resource(), "warning"
+		)
 		return
 	EventBus.building_placement_requested.emit(_starter_building)
 

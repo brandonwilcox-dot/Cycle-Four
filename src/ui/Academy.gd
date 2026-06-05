@@ -55,8 +55,8 @@ const SPAWN_STAGGER : float = 0.7
 
 ## -- Text constants -------------------------------------------------------------
 const TEXT_FADE_IN  : float = 0.7
-const TEXT_HOLD     : float = 2.8
-const TEXT_FADE_OUT : float = 0.5
+const TEXT_HOLD     : float = 4.0   ## Chapter 0 opening line hold
+const TEXT_FADE_OUT : float = 0.6
 
 ## -- Scene refs -----------------------------------------------------------------
 @onready var _chamber        : Node2D      = $Chamber
@@ -128,6 +128,7 @@ func _run_all_scenarios() -> void:
 	## Fade chamber out so WorldMap is visible.
 	await _fade_to_black()
 	_chamber.hide()
+	_cadet.hide()                              ## prevent ghost icon over WorldMap
 	_cadet.set_process(false)
 	_cadet.set_process_unhandled_input(false)
 	_wash_rect.modulate.a = 0.0
@@ -138,6 +139,7 @@ func _run_all_scenarios() -> void:
 	## Return to chamber for sorting reveal.
 	await _fade_to_black()
 	_chamber.show()
+	_cadet.show()
 	_cadet.set_process(true)
 	_wash_rect.modulate.a = 0.0
 
@@ -284,7 +286,7 @@ func _show_scenario_text(text: String) -> void:
 	_scenario_label.visible    = true
 	var tween : Tween = create_tween()
 	tween.tween_property(_scenario_label, "modulate:a", 1.0, 0.6)
-	tween.tween_interval(2.5)
-	tween.tween_property(_scenario_label, "modulate:a", 0.0, 0.4)
+	tween.tween_interval(5.0)   ## Long enough to read while also moving the Commander
+	tween.tween_property(_scenario_label, "modulate:a", 0.0, 0.6)
 	await tween.finished
 	_scenario_label.visible = false

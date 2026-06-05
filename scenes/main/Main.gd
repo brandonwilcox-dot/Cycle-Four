@@ -53,6 +53,26 @@ func _on_faction_confirmed() -> void:
 func _start_game_world() -> void:
 	faction_select.hide()
 	hud.show()
+	## Pre-activate every spawn point so waves work immediately on first launch.
+	## The Commander's exploration normally activates them; this ensures the first
+	## session always has enemies regardless of where the player wandered during
+	## the Academy scenarios.
+	_activate_all_spawns()
+	EventBus.notification_pushed.emit(
+		"Place towers on open ground, then press Begin Waves.", "info"
+	)
+
+## Transitions all DORMANT spawn points to ACTIVE. Safe to call on already-active
+## or sealed spawns — activate_spawn_by_id only transitions DORMANT → ACTIVE.
+func _activate_all_spawns() -> void:
+	var data = _map_grid.get("map_data")
+	if data == null:
+		return
+	for sp in data.spawn_points:
+		if sp == null:
+			continue
+		if data.activate_spawn_by_id(sp.id):
+			EventBus.spawn_activated.emit(sp.id)
 
 ## -- Input --
 
@@ -127,8 +147,12 @@ func _on_placement_requested(tower_data: Resource) -> void:
 func _try_place_tower(screen_pos: Vector2) -> void:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
 	if _occupied_cells.has(cell):
+		EventBus.notification_pushed.emit("Cell already occupied.", "warning")
 		return
 	if not _map_grid.can_place_at(cell.x, cell.y):
+		EventBus.notification_pushed.emit(
+			"Can't place here — click open ground away from the enemy path.", "warning"
+		)
 		return
 	var cost : Dictionary = {FactionManager.get_primary_resource(): _pending_tower.primary_cost}
 	if not EconomyManager.can_afford(cost):
@@ -137,6 +161,7 @@ func _try_place_tower(screen_pos: Vector2) -> void:
 	EconomyManager.spend(cost)
 	var route_changed : bool = _map_grid.mark_tower_placed(cell.x, cell.y)
 	_place_tower(cell)
+	EventBus.notification_pushed.emit("Tower placed.", "positive")
 	if route_changed:
 		EventBus.path_changed.emit()
 
@@ -199,18 +224,34 @@ func _on_build_requested(building_data: Resource) -> void:
 
 func _try_place_building(screen_pos: Vector2) -> void:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
+	print("[BUILD] click at screen=%s -> cell=%s  pending=%s" % [screen_pos, cell, _pending_building])
 	## Buildings only go on CLAIMED territory.
-	if not _map_grid.call("is_claimed", cell.x, cell.y):
+	var claimed : bool = _map_grid.call("is_claimed", cell.x, cell.y)
+	print("[BUILD] is_claimed(%d,%d) = %s" % [cell.x, cell.y, claimed])
+	if not claimed:
+		EventBus.notification_pushed.emit(
+			"Buildings go on claimed ground — walk your Commander there first.", "warning"
+		)
 		return
 	## One building per cell.
 	if _building_cells.has(cell):
+		EventBus.notification_pushed.emit("Cell already has a building.", "warning")
 		return
-	var cost : Dictionary = {FactionManager.get_primary_resource(): float(_pending_building.get("primary_cost"))}
+	var primary_res : String = FactionManager.get_primary_resource()
+	var cost_val    : float  = float(_pending_building.get("primary_cost"))
+	var cost : Dictionary = {primary_res: cost_val}
+	var have : float = EconomyManager.get_resource(primary_res)
+	print("[BUILD] cost=%s  have=%.1f  can_afford=%s" % [cost, have, EconomyManager.can_afford(cost)])
 	if not EconomyManager.can_afford(cost):
+		EventBus.notification_pushed.emit(
+			"Not enough %s to place a building." % FactionManager.get_primary_resource(), "warning"
+		)
 		_cancel_build()
 		return
 	EconomyManager.spend(cost)
 	_place_building(cell)
+	print("[BUILD] _place_building done, building_layer children=%d" % building_layer.get_child_count())
+	EventBus.notification_pushed.emit("Building placed.", "positive")
 
 func _place_building(cell: Vector2i) -> void:
 	var building : Node2D = BUILDING_SCENE.instantiate()
