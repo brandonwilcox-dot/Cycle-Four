@@ -8,10 +8,20 @@ const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.
 const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
 const GRID_SIZE             : int = 64
 
+## Sight/sensor sphere every placed structure (tower, building) projects. Structures
+## grant vision, not territory — only the Commander and FOB claim cells.
+const STRUCTURE_SIGHT_RADIUS : int = 3
+const STRUCTURE_SENSOR_EXTRA : int = 2
+
 const WASH_FADE_IN  : float = 0.4
 const WASH_HOLD     : float = 0.3
 const WASH_FADE_OUT : float = 0.4
 const WASH_ALPHA    : float = 0.6
+
+## Placement-preview ghost tints. Green = the hovered cell will accept the
+## tower/building; red = it will be rejected.
+const PREVIEW_VALID   : Color = Color(0.30, 0.95, 0.40, 0.28)
+const PREVIEW_INVALID : Color = Color(0.95, 0.25, 0.20, 0.28)
 
 @onready var faction_select   : Node2D    = $UILayer/Academy
 @onready var hud              : Control   = $UILayer/HUD
@@ -35,7 +45,16 @@ var _building_cells   : Dictionary = {}
 ## Inspection state -- tracks which cell is currently open in the inspection panel.
 var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
 
+## Placement-preview ghost (UX): a cell-sized highlight that follows the cursor
+## while in tower/build mode so the player can see exactly where, and whether,
+## the next placement will land. _preview_cell caches the last hovered cell so
+## can_place_at() (which runs a pathfinding test on PATH cells) is only evaluated
+## when the cursor crosses a cell boundary, not every frame.
+var _placement_preview : ColorRect = null
+var _preview_cell      : Vector2i  = Vector2i(-9999, -9999)
+
 func _ready() -> void:
+	add_to_group("main_controller")
 	hud.hide()
 	faction_select.selection_confirmed.connect(_on_faction_confirmed)
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
@@ -43,6 +62,7 @@ func _ready() -> void:
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
+	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 		_start_game_world()
@@ -52,6 +72,11 @@ func _on_faction_confirmed() -> void:
 
 func _start_game_world() -> void:
 	faction_select.hide()
+	## Fully retire the Academy: stop its processing/input (cadet included) and clear
+	## any scenario enemies it spawned, so nothing leaks into the live game. Covers the
+	## normal-completion, F1-skip, and save-restore entry paths.
+	faction_select.process_mode = Node.PROCESS_MODE_DISABLED
+	EventBus.academy_clear_units.emit()
 	hud.show()
 	## Pre-activate every spawn point so waves work immediately on first launch.
 	## The Commander's exploration normally activates them; this ensures the first
@@ -81,11 +106,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	## Using _unhandled_input so GUI controls (InspectionPanel Upgrade button,
 	## action bar buttons) consume their clicks before this handler sees them.
 	if event is InputEventKey and event.pressed:
-		## DEV: F1 skips Academy → architects. Remove before shipping.
-		if event.keycode == KEY_F1 and not GameState.academy_completed:
+		## DEV: F1 skips Academy → architects. Gated on OS.is_debug_build() so it is
+		## compiled out of release exports and can never ship, while staying available
+		## in editor/debug runs.
+		if event.keycode == KEY_F1 and OS.is_debug_build() and not GameState.academy_completed:
 			FactionManager.select_faction("architects", "standard")
 			GameState.academy_completed = true
 			faction_select.hide()
+			## The Academy may have already emitted academy_phase_started (which hides the
+			## Begin Waves button). Skipping bypasses academy_phase_ended, so restore the
+			## HUD explicitly or the wave button stays hidden after the F1 skip.
+			EventBus.academy_phase_ended.emit()
 			_start_game_world()
 			get_viewport().set_input_as_handled()
 			return
@@ -136,6 +167,52 @@ func _unhandled_input(event: InputEvent) -> void:
 				_cancel_build()
 				get_viewport().set_input_as_handled()
 
+## -- Placement preview ghost --
+
+func _process(_delta: float) -> void:
+	if not (_placement_mode or _build_mode):
+		if _placement_preview.visible:
+			_placement_preview.visible = false
+		return
+	_update_placement_preview()
+
+## Creates the cursor-follow highlight once and parents it under WorldMap so it
+## shares the map transform (camera pan/zoom) and draws on top of the map layers.
+func _build_placement_preview() -> void:
+	_placement_preview = ColorRect.new()
+	_placement_preview.size         = Vector2(GRID_SIZE, GRID_SIZE)
+	_placement_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_placement_preview.visible      = false
+	$WorldMap.add_child(_placement_preview)
+
+## Moves the ghost to the hovered cell and recolours it on cell change. Hidden in
+## the HUD dead-zone so it matches where clicks are actually accepted.
+func _update_placement_preview() -> void:
+	var mouse  : Vector2 = get_viewport().get_mouse_position()
+	var height : float   = get_viewport().get_visible_rect().size.y
+	if mouse.y < 48.0 or mouse.y > height - 48.0:
+		_placement_preview.visible = false
+		return
+	var cell : Vector2i = _screen_to_cell(mouse)
+	_placement_preview.visible  = true
+	_placement_preview.position = Vector2(cell.x * GRID_SIZE, cell.y * GRID_SIZE)
+	if cell != _preview_cell:
+		_preview_cell = cell
+		_placement_preview.color = PREVIEW_VALID if _is_cell_placeable(cell) else PREVIEW_INVALID
+
+## True when the next placement at `cell` would succeed. Mirrors the guards in
+## _try_place_tower / _try_place_building (minus the affordability check, which the
+## action buttons already gate). Off-map cells are rejected so the ghost reads red
+## past the map edge.
+func _is_cell_placeable(cell: Vector2i) -> bool:
+	var data = _map_grid.get("map_data")
+	if data != null:
+		if cell.x < 0 or cell.y < 0 or cell.x >= data.dimensions.x or cell.y >= data.dimensions.y:
+			return false
+	if _build_mode:
+		return not _building_cells.has(cell) and bool(_map_grid.call("is_claimed", cell.x, cell.y))
+	return not _occupied_cells.has(cell) and _map_grid.can_place_at(cell.x, cell.y)
+
 ## -- Tower placement --
 
 func _on_placement_requested(tower_data: Resource) -> void:
@@ -143,6 +220,8 @@ func _on_placement_requested(tower_data: Resource) -> void:
 	hud.close_inspection()   ## Dismiss inspection panel when entering placement
 	_pending_tower  = tower_data
 	_placement_mode = true
+	GameState.placement_active = true   ## Commander yields world clicks while placing
+	_preview_cell   = Vector2i(-9999, -9999)   ## force a recolor on the next frame
 
 func _try_place_tower(screen_pos: Vector2) -> void:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
@@ -171,6 +250,7 @@ func _place_tower(cell: Vector2i) -> void:
 	tower_layer.add_child(tower)
 	tower.position = _cell_to_world(cell)
 	_occupied_cells[cell] = tower
+	_apply_structure_influence(cell)
 	EventBus.tower_placed.emit(_pending_tower, cell)
 	## Stay in placement mode while the player can still afford another tower.
 	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): _pending_tower.primary_cost}):
@@ -178,6 +258,7 @@ func _place_tower(cell: Vector2i) -> void:
 
 func _cancel_placement() -> void:
 	_placement_mode = false
+	GameState.placement_active = false
 	_pending_tower  = null
 	hud.end_placement_mode()
 
@@ -212,7 +293,7 @@ func _try_upgrade_tower(cell: Vector2i) -> void:
 			int(next_data.get("tier"))
 		], "positive"
 	)
-	EventBus.tower_placed.emit(next_data, cell)
+	EventBus.tower_upgraded.emit(next_data, cell)
 
 ## -- Building placement --
 
@@ -221,13 +302,13 @@ func _on_build_requested(building_data: Resource) -> void:
 	hud.close_inspection()    ## Dismiss inspection panel when entering build mode
 	_pending_building = building_data
 	_build_mode       = true
+	GameState.placement_active = true   ## Commander yields world clicks while placing
+	_preview_cell     = Vector2i(-9999, -9999)   ## force a recolor on the next frame
 
 func _try_place_building(screen_pos: Vector2) -> void:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
-	print("[BUILD] click at screen=%s -> cell=%s  pending=%s" % [screen_pos, cell, _pending_building])
 	## Buildings only go on CLAIMED territory.
 	var claimed : bool = _map_grid.call("is_claimed", cell.x, cell.y)
-	print("[BUILD] is_claimed(%d,%d) = %s" % [cell.x, cell.y, claimed])
 	if not claimed:
 		EventBus.notification_pushed.emit(
 			"Buildings go on claimed ground — walk your Commander there first.", "warning"
@@ -240,8 +321,6 @@ func _try_place_building(screen_pos: Vector2) -> void:
 	var primary_res : String = FactionManager.get_primary_resource()
 	var cost_val    : float  = float(_pending_building.get("primary_cost"))
 	var cost : Dictionary = {primary_res: cost_val}
-	var have : float = EconomyManager.get_resource(primary_res)
-	print("[BUILD] cost=%s  have=%.1f  can_afford=%s" % [cost, have, EconomyManager.can_afford(cost)])
 	if not EconomyManager.can_afford(cost):
 		EventBus.notification_pushed.emit(
 			"Not enough %s to place a building." % FactionManager.get_primary_resource(), "warning"
@@ -250,7 +329,6 @@ func _try_place_building(screen_pos: Vector2) -> void:
 		return
 	EconomyManager.spend(cost)
 	_place_building(cell)
-	print("[BUILD] _place_building done, building_layer children=%d" % building_layer.get_child_count())
 	EventBus.notification_pushed.emit("Building placed.", "positive")
 
 func _place_building(cell: Vector2i) -> void:
@@ -259,6 +337,7 @@ func _place_building(cell: Vector2i) -> void:
 	building_layer.add_child(building)
 	building.position = _cell_to_world(cell)
 	_building_cells[cell] = building
+	_apply_structure_influence(cell)
 	EventBus.building_placed.emit(_pending_building, cell)
 	## Stay in build mode while the player can still afford another building.
 	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): float(_pending_building.get("primary_cost"))}):
@@ -266,6 +345,7 @@ func _place_building(cell: Vector2i) -> void:
 
 func _cancel_build() -> void:
 	_build_mode       = false
+	GameState.placement_active = false
 	_pending_building = null
 	hud.end_build_mode()
 
@@ -317,6 +397,21 @@ func _on_panel_upgrade_requested() -> void:
 	_inspected_cell = Vector2i(-1, -1)
 
 ## -- Helpers --
+
+## Projects a placed structure's sphere of influence: reveals fog within its sight
+## radius and senses the ring just beyond. Vision only — towers/buildings don't claim.
+func _apply_structure_influence(cell: Vector2i) -> void:
+	if _map_grid == null:
+		return
+	_map_grid.call("reveal_area", cell, STRUCTURE_SIGHT_RADIUS)
+	_map_grid.call("sense_area", cell, STRUCTURE_SIGHT_RADIUS, STRUCTURE_SIGHT_RADIUS + STRUCTURE_SENSOR_EXTRA)
+
+## True when a tower or building occupies the cell under `screen_pos`. The Commander
+## calls this to yield structure-clicks to Main (which opens the inspection panel)
+## instead of consuming the click as a move order.
+func structure_at_screen(screen_pos: Vector2) -> bool:
+	var cell : Vector2i = _screen_to_cell(screen_pos)
+	return _occupied_cells.has(cell) or _building_cells.has(cell)
 
 ## Converts a screen-space click position to a map cell, accounting for Camera2D
 ## zoom and pan. Falls back to a 1:1 mapping if no camera is present.

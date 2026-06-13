@@ -75,6 +75,9 @@ func count_claimed_cells() -> int:
 const MapGeneratorScript = preload("res://src/core/map/MapGenerator.gd")
 
 func _ready() -> void:
+	## Discoverable by entities that need area reveal/claim (FOB, towers, buildings)
+	## without hard-coding a relative node path.
+	add_to_group("map_grid")
 	_cells.resize(COLS * ROWS)
 	_cells.fill(Cell.GROUND)
 	## Phase 10: procedural generator is the live path. Each session boots a fresh
@@ -137,12 +140,20 @@ func set_cell(col: int, row: int, cell_type: int) -> void:
 ## PATH cells are allowed only when every spawn retains a route to base after
 ## the cell is converted to OBSTACLE.
 func can_place_at(col: int, row: int) -> bool:
+	## Reject off-map cells outright. Without this, an out-of-bounds click maps to a
+	## WALL cell (non-traversable, so "placeable" below) and the tower is spawned at a
+	## world position the camera never shows — placed, but invisible to the player.
+	if col < 0 or col >= COLS or row < 0 or row >= ROWS:
+		return false
 	var ct : int = get_cell(col, row)
 	## Protect the base from being covered.
 	if ct == Cell.BASE:
 		return false
 	## Protect spawn point positions (now PATH cells, identified via MapData).
 	if map_data != null and map_data.is_spawn_at(Vector2i(col, row)):
+		return false
+	## Build only where the player has explored — no placing into unrevealed fog.
+	if map_data != null and not map_data.get_meta_revealed(col + row * COLS):
 		return false
 	## Non-traversable cells (GROUND, WALL, OBSTACLE, CLAIMED) never affect enemy
 	## routing -- placing a tower there cannot disconnect any spawn from the base.
@@ -231,6 +242,73 @@ func claim_cell(col: int, row: int) -> void:
 		return
 	_cells[col + row * COLS] = Cell.CLAIMED
 	queue_redraw()   ## No AStar rebuild needed -- CLAIMED is not enemy-traversable
+
+## -- Sphere-of-influence area operations --
+## These power the Commander's sight-range claim, the FOB's rank-scaling territory,
+## and the sight/sensor spheres every structure projects. Radius is Chebyshev (square).
+
+## Claims every GROUND cell within `radius` of `center`. Returns the list of cells
+## newly converted to CLAIMED so the caller can apply economy + emit territory_claimed.
+## Already-claimed / non-GROUND cells are skipped, so repeated calls are cheap and idempotent.
+func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
+	var newly : Array[Vector2i] = []
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			var c : int = center.x + dx
+			var r : int = center.y + dy
+			if c < 0 or c >= COLS or r < 0 or r >= ROWS:
+				continue
+			if _cells[c + r * COLS] != Cell.GROUND:
+				continue
+			_cells[c + r * COLS] = Cell.CLAIMED
+			newly.append(Vector2i(c, r))
+	if not newly.is_empty():
+		queue_redraw()
+	return newly
+
+## Reveals fog for every in-bounds cell within `radius` of `center`. Emits
+## EventBus.region_revealed with the newly-revealed cells (drives spawn activation /
+## redraw). Returns the count revealed.
+func reveal_area(center: Vector2i, radius: int) -> int:
+	if map_data == null:
+		return 0
+	var newly : Array[Vector2i] = []
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			var c : int = center.x + dx
+			var r : int = center.y + dy
+			if c < 0 or c >= COLS or r < 0 or r >= ROWS:
+				continue
+			var idx : int = c + r * COLS
+			if map_data.get_meta_revealed(idx):
+				continue
+			map_data.set_meta_revealed(idx, true)
+			newly.append(Vector2i(c, r))
+	if not newly.is_empty():
+		queue_redraw()
+		EventBus.region_revealed.emit(newly)
+	return newly.size()
+
+## Sensor sweep: the annulus between `inner_radius` (exclusive) and `outer_radius`
+## (inclusive) of `center`. Detects (but does not reveal) still-fogged cells and emits
+## EventBus.region_sensed so objectives in the outer band show as DETECTED.
+func sense_area(center: Vector2i, inner_radius: int, outer_radius: int) -> void:
+	if map_data == null:
+		return
+	var sensed : Array[Vector2i] = []
+	for dy in range(-outer_radius, outer_radius + 1):
+		for dx in range(-outer_radius, outer_radius + 1):
+			if absi(dx) <= inner_radius and absi(dy) <= inner_radius:
+				continue
+			var c : int = center.x + dx
+			var r : int = center.y + dy
+			if c < 0 or c >= COLS or r < 0 or r >= ROWS:
+				continue
+			if map_data.get_meta_revealed(c + r * COLS):
+				continue
+			sensed.append(Vector2i(c, r))
+	if not sensed.is_empty():
+		EventBus.region_sensed.emit(sensed)
 
 ## Returns the nearest traversable cell to world_pos via BFS.
 ## Used by Unit.reroute() to find a valid start for a fresh AStar query

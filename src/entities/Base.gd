@@ -13,9 +13,20 @@ const ATTACK_SPEED : float = 1.5     ## shots per second
 ## HP -- 300 means 30 breaches at default unit damage (10.0). Tune in balance pass.
 const MAX_HP : float = 300.0
 
-## Phase 9: FOB fortification rank — accumulates from convoy deliveries. Visual only
-## for the moment; later phases may attach HP regen or defense bonuses to rank.
+## Phase 9: FOB fortification rank — accumulates from convoy deliveries. Drives the
+## sphere of influence below (more cargo → more sight + territory).
 const CARGO_PER_RANK : float = 10.0
+
+## Sphere of influence. The FOB reveals a sight sphere, projects a sensor ring beyond
+## it, and claims a territory sphere — all growing one cell per fortification rank.
+const FOB_SIGHT_RADIUS_BASE : int = 5   ## fog reveal radius at rank 0
+const FOB_CLAIM_RADIUS_BASE : int = 2   ## territory claim radius at rank 0
+const FOB_SENSOR_EXTRA      : int = 3   ## sensor ring reaches sight + this
+const FOB_RADIUS_PER_RANK   : int = 1   ## sight and claim each grow this per rank
+const FOB_MAX_RANK          : int = 10  ## fortification cap (sight 5→15, claim 2→12)
+
+## MapGrid is resolved lazily from the "map_grid" group (set in MapGrid._ready).
+var _map_grid : Node = null
 
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
 
@@ -33,15 +44,48 @@ func _ready() -> void:
 	EventBus.base_damaged.connect(_on_base_damaged)
 	EventBus.base_healed.connect(_on_base_healed)
 	EventBus.convoy_arrived.connect(_on_convoy_arrived)
+	## Project the initial sphere of influence once the map is loaded (deferred so
+	## MapGrid._ready has run and joined the "map_grid" group).
+	call_deferred("_apply_influence")
+
+## Resolves and caches the MapGrid from its group.
+func _get_map_grid() -> Node:
+	if _map_grid == null or not is_instance_valid(_map_grid):
+		_map_grid = get_tree().get_first_node_in_group("map_grid")
+	return _map_grid
+
+## Reveals the FOB's sight sphere, projects its sensor ring, and claims its territory
+## sphere. All three radii grow with fortification rank, so leveling the FOB visibly
+## expands its reach. Safe to call repeatedly — claim/reveal skip cells already done.
+func _apply_influence() -> void:
+	var grid : Node = _get_map_grid()
+	if grid == null:
+		return
+	var center : Vector2i = grid.world_to_cell(global_position)
+	var sight  : int = FOB_SIGHT_RADIUS_BASE + _fortification_rank * FOB_RADIUS_PER_RANK
+	var claim  : int = FOB_CLAIM_RADIUS_BASE + _fortification_rank * FOB_RADIUS_PER_RANK
+	grid.call("reveal_area", center, sight)
+	grid.call("sense_area", center, sight, sight + FOB_SENSOR_EXTRA)
+	var claimed = grid.call("claim_area", center, claim)
+	if claimed != null:
+		for nc in claimed:
+			EconomyManager.register_claimed_cell()
+			EventBus.territory_claimed.emit(nc)
 
 ## Phase 9: FOB receives cargo and gains fortification rank. Visual-only stub
 ## for now; future phases can bind regen or defense bonuses to rank.
 func _on_convoy_arrived(_convoy_id: StringName, _to_node: StringName, cargo: float) -> void:
 	_cargo_received += cargo
-	while _cargo_received >= CARGO_PER_RANK:
+	var prev_rank : int = _fortification_rank
+	while _cargo_received >= CARGO_PER_RANK and _fortification_rank < FOB_MAX_RANK:
 		_cargo_received -= CARGO_PER_RANK
 		_fortification_rank += 1
+	if _fortification_rank >= FOB_MAX_RANK:
+		_cargo_received = 0.0   ## maxed — stop banking cargo toward rank
 	_update_rank_bar()
+	## Leveling up expands the sphere of influence: more sight + more territory.
+	if _fortification_rank > prev_rank:
+		_apply_influence()
 
 func _update_rank_bar() -> void:
 	if _rank_bar == null:

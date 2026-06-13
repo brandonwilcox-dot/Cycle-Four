@@ -13,7 +13,7 @@ config_version=5
 config/name="Cycle Four"
 config/description="Idle-Miner / Tower Defense / Endless Wave hybrid. Three factions. Lore-first design."
 config/version="0.1.0"
-run/main_scene="res://scenes/main/Main.tscn"
+run/main_scene="res://scenes/ui/TitleScreen.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://assets/sprites/icon.svg"
 

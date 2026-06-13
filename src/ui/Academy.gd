@@ -85,6 +85,20 @@ var _scenario_running : bool  = false
 # -------------------------------------------------------------------------------
 
 func _ready() -> void:
+	## Only run the Academy on a genuine first-run/new game. When continuing a
+	## saved game (academy already completed) Main restores the world directly and
+	## the Academy must stay fully inert — otherwise its scenario enemies spawn in
+	## the background (phantom FOB damage) and the cadet competes for input.
+	if GameState.academy_completed:
+		hide()
+		## CanvasLayer children render independently of the parent's visibility, so
+		## hide them explicitly or the sorting buttons / text bleed over the live game.
+		_sorting_layer.hide()
+		var text_layer : CanvasLayer = get_node_or_null("TextLayer") as CanvasLayer
+		if text_layer != null:
+			text_layer.visible = false
+		process_mode = Node.PROCESS_MODE_DISABLED
+		return
 	_camera.enabled = false
 	_sorting_layer.hide()
 	_line_label.modulate.a    = 0.0

@@ -21,10 +21,34 @@ var galaxy_run_number: int = 0         # increments each prestige
 
 # -- Flags --
 var is_paused: bool = false
+## True while Main is in tower/building placement mode. The Commander reads this and
+## yields world clicks so Main (processed last in _unhandled_input) can place instead
+## of the Commander consuming the click as a move order. Transient — never saved.
+var placement_active: bool = false
 var is_in_pilgrimage: bool = false
 var tutorial_complete: bool = false
 var academy_completed: bool = false  # true after first-run Academy commit; gate for skip logic
 var unsorted: bool = false           # true if player declined Academy recommendation; read by D-2
+
+## Resets all session + progression state to first-run defaults.
+## Called by TitleScreen "New Game" so a fresh run starts at the Academy even
+## if a previous run's state is still resident in memory.
+func reset_for_new_game() -> void:
+	current_faction   = ""
+	current_sub_path  = ""
+	wave_number       = 0
+	collapse_count    = 0
+	session_start_time = 0
+	memory_tier       = 0
+	mark_progress     = 0.0
+	fragments_collected.clear()
+	milestones_reached.clear()
+	galaxy_run_number = 0
+	is_paused         = false
+	is_in_pilgrimage  = false
+	tutorial_complete = false
+	academy_completed = false
+	unsorted          = false
 
 # -- Called by SaveManager on load --
 func apply_save_data(data: Dictionary) -> void:

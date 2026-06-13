@@ -106,7 +106,7 @@ func _process(delta: float) -> void:
 		if now >= _overdrive_until:
 			is_overdrive_active = false
 			_overdrive_stacks   = 0
-		elif FactionManager.active_faction == "architect" and _overdrive_stacks < 3:
+		elif FactionManager.active_faction == "architects" and _overdrive_stacks < 3:
 			if now >= _overdrive_next_tick:
 				overdrive_damage_mult  *= 1.05
 				_overdrive_stacks      += 1
@@ -223,7 +223,7 @@ func _cast_lance() -> void:
 			if died:
 				kills += 1
 			## Architect: stun non-immune enemies.
-			if FactionManager.active_faction == "architect":
+			if FactionManager.active_faction == "architects":
 				unit.apply_stun(1.0)
 	if hits > 0:
 		_commander.call("_spawn_cannon_ring")
@@ -319,7 +319,7 @@ func _cast_overdrive() -> void:
 	overdrive_damage_mult   = ab.params.get("damage_mult",   1.5)
 	_overdrive_stacks       = 0
 	var now : float = Time.get_ticks_msec() / 1000.0
-	var dur : float = 8.0 if FactionManager.active_faction == "architect" else ab.params.get("duration", 6.0)
+	var dur : float = 8.0 if FactionManager.active_faction == "architects" else ab.params.get("duration", 6.0)
 	_overdrive_until      = now + dur
 	_overdrive_next_tick  = now + 2.0
 	if _commander != null:
@@ -348,12 +348,12 @@ func _on_unit_died_steal(_unit_data: Dictionary) -> void:
 
 func _cast_ultimate() -> void:
 	match FactionManager.active_faction:
-		"architect": _cast_compile_cascade()
+		"architects": _cast_compile_cascade()
 		"bloom":     _cast_verdant_bulwark()
 		"mesh":      _cast_system_seizure()
 	## Faction-specific cooldown overrides the AbilityData default.
 	match FactionManager.active_faction:
-		"architect": _cooldowns[3] = 90.0
+		"architects": _cooldowns[3] = 90.0
 		"bloom":     _cooldowns[3] = 120.0
 		"mesh":      _cooldowns[3] = 100.0
 	EventBus.ability_cooldown_changed.emit(3, _cooldowns[3], _cooldowns[3])
@@ -435,7 +435,7 @@ func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
 	var ultimate = _get_ability(3)
 	if ultimate != null:
 		match faction_id:
-			"architect":
+			"architects":
 				ultimate.cooldown     = 90.0
 				ultimate.display_name = "Compile Cascade"
 				ultimate.color        = Color(1.00, 0.92, 0.30, 1.0)

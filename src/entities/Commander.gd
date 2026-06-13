@@ -29,6 +29,15 @@ const RATE_PER_CLAIMED_CELL : float = 0.05
 const CELLS_PER_RANK        : int   = 25
 const SPEED_PER_RANK        : float = 0.05    ## +5% move speed per rank
 const DAMAGE_PER_RANK       : float = 0.10    ## +10% attack damage per rank
+## Veterancy cap: rank stops here, bounding speed/damage AND the sight/sensor growth
+## below (rank 15 → ×2.08 speed, ×4.18 dmg, LoS 3→6, sensor 9→14).
+const RANK_CAP             : int   = 15
+## Sight/sensor grow with rank: +1 LoS cell per 5 ranks (max +3), +1 sensor per 3
+## ranks (max +5). Since the Commander claims its LoS, leveling widens territory too.
+const LOS_RANKS_PER_STEP   : int   = 5
+const LOS_BONUS_MAX        : int   = 3
+const SENSOR_RANKS_PER_STEP : int  = 3
+const SENSOR_BONUS_MAX     : int   = 5
 
 ## Phase 9: combat. Range matches vision (cells within range are also visible) so
 ## the Commander only attacks what the player can see.
@@ -77,9 +86,9 @@ func _ready() -> void:
 	_target_pos = global_position
 	_build_visual()
 	_ability_controller = get_node_or_null("AbilityController")
-	## Check the starting cell; BASE type won't be claimed (guard in _try_claim_cell),
-	## but this seeds the correct _map_grid reference path and is cheap.
-	_try_claim_cell()
+	## Claim the Commander's starting sight ring (BASE/PATH cells are skipped inside
+	## claim_area), seeding initial territory around the FOB.
+	_claim_around()
 	## Phase 6: do an initial reveal pass from the spawn point so the Commander's
 	## starting vicinity is visible regardless of where it was placed in the scene.
 	_reveal_around()
@@ -105,7 +114,7 @@ func _process(delta: float) -> void:
 		_moving         = false
 	else:
 		global_position += to_target.normalized() * step
-	_try_claim_cell()
+	_claim_around()
 	_reveal_around()
 
 ## -- Input --
@@ -116,6 +125,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	var mbe := event as InputEventMouseButton
 	if not mbe.pressed or mbe.button_index != MOUSE_BUTTON_LEFT:
 		return
+	## Yield to Main during tower/building placement. Main is the root, so it runs
+	## LAST in _unhandled_input; if the Commander consumed (moved) here, the placement
+	## click would never reach Main. Returning without consuming lets it through.
+	if GameState.placement_active:
+		return
+	## Yield clicks that land on a tower/building so Main opens its inspection panel
+	## instead of the Commander moving onto the structure.
+	var main_ctrl : Node = get_tree().get_first_node_in_group("main_controller")
+	if main_ctrl != null and main_ctrl.has_method("structure_at_screen"):
+		if main_ctrl.call("structure_at_screen", mbe.position):
+			return
 	## During the Academy phase no faction has been selected yet — leave clicks
 	## for CadetAvatar to handle. Commander movement resumes after selection.
 	if GameState.current_faction.is_empty():
@@ -138,28 +158,36 @@ func _move_to(world_pos: Vector2) -> void:
 
 ## -- Territory claiming --
 
-func _try_claim_cell() -> void:
+func _claim_around() -> void:
 	if _map_grid == null:
 		return
 	var cell : Vector2i = _map_grid.world_to_cell(global_position)
-	## Only GROUND cells (type 0) can be claimed; PATH/BASE/SPAWN/OBSTACLE are skipped.
-	if _map_grid.get_cell(cell.x, cell.y) != 0:   ## Cell.GROUND = 0
+	## Claim every GROUND cell within the Commander's line-of-sight ring, not just the
+	## one underfoot — territory flows from sight range as the Commander explores. As
+	## rank raises LoS, the claimed swath widens too.
+	var newly = _map_grid.call("claim_area", cell, _los_radius())
+	if newly == null or newly.is_empty():
 		return
-	_map_grid.call("claim_cell", cell.x, cell.y)
-	_claimed_count += 1
-	## Phase 9: track rank progression. Bumps speed + attack damage on each rank.
+	for nc in newly:
+		EconomyManager.register_claimed_cell()
+		EventBus.territory_claimed.emit(nc)
+	_claimed_count += newly.size()
+	## Phase 9: rank progression bumps speed + attack damage as territory grows.
+	## Capped at RANK_CAP so a maxed Commander has bounded stats and sight.
 	var prev_rank : int = _commander_rank
 	@warning_ignore("integer_division")
-	_commander_rank = _claimed_count / CELLS_PER_RANK
+	_commander_rank = mini(_claimed_count / CELLS_PER_RANK, RANK_CAP)
 	if _commander_rank > prev_rank:
 		_recompute_rank_stats()
 	_update_rank_bar()
-	## Each new cell adds a permanent passive income bonus for the primary resource.
-	EconomyManager.add_territory_rate(
-		FactionManager.get_primary_resource(),
-		RATE_PER_CLAIMED_CELL
-	)
-	EventBus.territory_claimed.emit(cell)
+
+## Current line-of-sight radius (cells), growing with veterancy rank up to the cap.
+func _los_radius() -> int:
+	return VISION_RADIUS + mini(_commander_rank / LOS_RANKS_PER_STEP, LOS_BONUS_MAX)
+
+## Current sensor radius (cells), growing with veterancy rank up to the cap.
+func _sensor_radius() -> int:
+	return SENSOR_RADIUS + mini(_commander_rank / SENSOR_RANKS_PER_STEP, SENSOR_BONUS_MAX)
 
 ## -- Spawn activation --
 
@@ -177,11 +205,13 @@ func _reveal_around() -> void:
 	if data == null:
 		return
 	var commander_cell : Vector2i = _map_grid.world_to_cell(global_position)
+	var los    : int = _los_radius()
+	var sensor : int = _sensor_radius()
 
 	## LoS pass.
 	var newly_revealed : Array[Vector2i] = []
-	for dy in range(-VISION_RADIUS, VISION_RADIUS + 1):
-		for dx in range(-VISION_RADIUS, VISION_RADIUS + 1):
+	for dy in range(-los, los + 1):
+		for dx in range(-los, los + 1):
 			var col : int = commander_cell.x + dx
 			var row : int = commander_cell.y + dy
 			if col < 0 or col >= data.dimensions.x:
@@ -197,11 +227,11 @@ func _reveal_around() -> void:
 		EventBus.region_revealed.emit(newly_revealed)
 		_map_grid.queue_redraw()
 
-	## Sensor pass: annular region outside LoS but inside SENSOR_RADIUS.
+	## Sensor pass: annular region outside LoS but inside the sensor radius.
 	var newly_sensed : Array[Vector2i] = []
-	for dy in range(-SENSOR_RADIUS, SENSOR_RADIUS + 1):
-		for dx in range(-SENSOR_RADIUS, SENSOR_RADIUS + 1):
-			if absi(dx) <= VISION_RADIUS and absi(dy) <= VISION_RADIUS:
+	for dy in range(-sensor, sensor + 1):
+		for dx in range(-sensor, sensor + 1):
+			if absi(dx) <= los and absi(dy) <= los:
 				continue   ## inside LoS ring — already handled above
 			var col : int = commander_cell.x + dx
 			var row : int = commander_cell.y + dy
@@ -228,8 +258,8 @@ func get_damage_multiplier() -> float:
 
 ## Draws LoS ring, sensor ring, and active Suppression Field in local space.
 func _draw() -> void:
-	var los_r    : float = (VISION_RADIUS  + 0.5) * CELL_SIZE_PX
-	var sensor_r : float = (SENSOR_RADIUS  + 0.5) * CELL_SIZE_PX
+	var los_r    : float = (_los_radius()    + 0.5) * CELL_SIZE_PX
+	var sensor_r : float = (_sensor_radius() + 0.5) * CELL_SIZE_PX
 	draw_arc(Vector2.ZERO, sensor_r, 0.0, TAU, 64, SENSOR_RING_COLOR, 1.5, true)
 	draw_arc(Vector2.ZERO, los_r,    0.0, TAU, 32, LOS_RING_COLOR,    2.0, true)
 	if _ability_controller != null and _ability_controller.field_active:

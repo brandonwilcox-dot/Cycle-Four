@@ -20,9 +20,16 @@ const BLOOM_COVERAGE_THRESHOLD : float = 0.60
 ## Mesh: number of simultaneously connected depots required.
 const MESH_DEPOT_TARGET : int = 5
 
+## Second Milestone (unlocks the faction Ultimate / slot R). v1 proxy: reaching this
+## wave after the first milestone has fired. The core/21 designs (Singularity II /
+## Biosphere II / Mesh Control II) replace this with faction-specific conditions;
+## the wave gate keeps the Ultimate reachable in the meantime.
+const SECOND_MILESTONE_WAVE : int = 20
+
 ## -- Runtime state --
-var _milestone_fired   : bool   = false
-var _active_faction    : String = ""
+var _milestone_fired    : bool   = false
+var _milestone2_fired   : bool   = false
+var _active_faction     : String = ""
 
 ## Architect-specific
 var _research_stage    : int    = 0   ## stages completed (0–5)
@@ -40,6 +47,7 @@ func _ready() -> void:
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.path_discovered.connect(_on_path_discovered)
 	EventBus.research_stage_purchased.connect(_on_research_stage_purchased)
+	EventBus.wave_started.connect(_on_wave_started)
 
 ## Called by MapGrid.load_map_data so MilestoneManager can query cell counts.
 func set_map_grid(grid: Node) -> void:
@@ -74,9 +82,10 @@ func try_purchase_research() -> bool:
 ## -- Event handlers --
 
 func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
-	_milestone_fired = false
-	_research_stage  = 0
-	_active_faction  = faction_id
+	_milestone_fired  = false
+	_milestone2_fired = false
+	_research_stage   = 0
+	_active_faction   = faction_id
 	_progress        = 0
 	match faction_id:
 		"architects": _target = RESEARCH_STAGES
@@ -96,6 +105,18 @@ func _on_territory_raided(_cell: Vector2i) -> void:
 func _on_path_discovered(_edge_id: StringName) -> void:
 	if _active_faction == "mesh":
 		_evaluate_mesh()
+
+## Second Milestone gate (unlocks the faction Ultimate). Fires once, only after the
+## first milestone, when the player reaches SECOND_MILESTONE_WAVE.
+func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
+	if _milestone2_fired or not _milestone_fired:
+		return
+	if _active_faction.is_empty():
+		return
+	if wave_number >= SECOND_MILESTONE_WAVE:
+		_milestone2_fired = true
+		EventBus.milestone_reached.emit(_active_faction, 1)
+		EventBus.notification_pushed.emit("Second milestone reached — Ultimate unlocked!", "positive")
 
 func _on_research_stage_purchased(stage: int, _cost: float) -> void:
 	if _active_faction != "architects":

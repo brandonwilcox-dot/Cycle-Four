@@ -7,6 +7,11 @@ extends Node
 # Tick rate for idle production (seconds)
 const IDLE_TICK_RATE: float = 1.0
 
+## Per-cell passive income bonus when a GROUND cell becomes friendly territory.
+## Shared by the Commander's sight-range claim and the FOB's fortification claim so
+## both sources of territory pay out identically. (Unit.gd mirrors this for raid loss.)
+const TERRITORY_RATE_PER_CELL: float = 0.05
+
 # Resource pools -- keyed by resource id (e.g. "energy", "biomass", "signal")
 var resources: Dictionary = {}
 var production_rates: Dictionary = {}    ## base per-second rates (set by FactionManager)
@@ -14,7 +19,6 @@ var territory_rates: Dictionary = {}     ## bonus per-second rates from Commande
 var storage_caps: Dictionary = {}        ## max storage per resource
 
 var _tick_accumulator: float = 0.0
-var _last_save_timestamp: int = 0
 
 func _ready() -> void:
 	_initialize_resources()
@@ -43,6 +47,11 @@ func get_rate(resource_id: String) -> float:
 func add_territory_rate(resource_id: String, amount: float) -> void:
 	## Clamp to 0 so flanker raids can never produce a negative (draining) rate.
 	territory_rates[resource_id] = maxf(0.0, territory_rates.get(resource_id, 0.0) + amount)
+
+## Registers one newly-claimed territory cell: adds its passive income to the active
+## faction's primary resource. Called once per cell by the Commander and the FOB.
+func register_claimed_cell() -> void:
+	add_territory_rate(FactionManager.get_primary_resource(), TERRITORY_RATE_PER_CELL)
 
 func can_afford(costs: Dictionary) -> bool:
 	for resource_id in costs:

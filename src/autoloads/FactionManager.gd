@@ -83,7 +83,7 @@ func get_starter_building() -> Resource:
 		return load(path)
 	return null
 
-func get_production_rates(sub_path: String) -> Dictionary:
+func get_production_rates(_sub_path: String) -> Dictionary:
 	## Base production rates before building bonuses.
 	## Override per faction in their faction script.
 	return {}

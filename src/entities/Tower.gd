@@ -11,6 +11,13 @@ const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
 const XP_BASE_THRESHOLD   : float = 50.0   ## XP needed for level 1 → 2
 const XP_LEVEL_EXPONENT   : float = 2.0    ## threshold scales as XP_BASE × level^exp
 const DAMAGE_PER_LEVEL    : float = 0.15   ## +15% damage per level (multiplicative)
+## Veterancy cap + sight growth: a tower's sight sphere widens as it racks up kills,
+## one cell every TOWER_SIGHT_PER_STEP levels, up to the bonus max. Level is capped.
+const TOWER_MAX_LEVEL      : int = 10
+const TOWER_SIGHT_BASE     : int = 3
+const TOWER_SIGHT_PER_STEP : int = 3   ## +1 sight cell every 3 levels
+const TOWER_SIGHT_BONUS_MAX : int = 3  ## sight 3 → 6 at max level
+const TOWER_SENSOR_EXTRA   : int = 2   ## sensor ring reaches sight + this
 
 var data: Resource = null   ## TowerData instance
 var _attack_timer: float = 0.0
@@ -23,6 +30,7 @@ var xp                 : float = 0.0
 var xp_to_next         : float = XP_BASE_THRESHOLD
 var _damage_multiplier : float = 1.0
 var _xp_bar            : Node2D = null   ## ProgressionBar instance
+var _map_grid          : Node   = null   ## resolved lazily from the "map_grid" group
 
 ## Called by Main before adding to scene tree.
 func setup(tower_data: Resource) -> void:
@@ -81,9 +89,11 @@ func _award_xp_for_kill(killed_unit: Node) -> void:
 	if unit_value <= 0.0:
 		return
 	xp += unit_value
-	while xp >= xp_to_next:
+	while level < TOWER_MAX_LEVEL and xp >= xp_to_next:
 		xp -= xp_to_next
 		_level_up()
+	if level >= TOWER_MAX_LEVEL:
+		xp = 0.0   ## maxed — park the XP bar full-empty
 	_update_xp_bar()
 
 func _update_xp_bar() -> void:
@@ -95,6 +105,24 @@ func _level_up() -> void:
 	_damage_multiplier = pow(1.0 + DAMAGE_PER_LEVEL, float(level - 1))
 	xp_to_next = XP_BASE_THRESHOLD * pow(float(level), XP_LEVEL_EXPONENT)
 	EventBus.tower_leveled_up.emit(self, level)
+	_apply_sight()   ## leveling widens the tower's sight/sensor sphere
+
+## Resolves and caches the MapGrid from its group.
+func _get_map_grid() -> Node:
+	if _map_grid == null or not is_instance_valid(_map_grid):
+		_map_grid = get_tree().get_first_node_in_group("map_grid")
+	return _map_grid
+
+## Reveals/senses this tower's sight sphere. Radius widens with veterancy level, so a
+## battle-hardened tower lights up more of the map around it. Idempotent re-reveal.
+func _apply_sight() -> void:
+	var grid : Node = _get_map_grid()
+	if grid == null:
+		return
+	var cell  : Vector2i = grid.world_to_cell(global_position)
+	var sight : int = TOWER_SIGHT_BASE + mini(level / TOWER_SIGHT_PER_STEP, TOWER_SIGHT_BONUS_MAX)
+	grid.call("reveal_area", cell, sight)
+	grid.call("sense_area", cell, sight, sight + TOWER_SENSOR_EXTRA)
 
 ## -- Visual --
 

@@ -9,6 +9,109 @@ making any design decisions in code.
 
 ---
 
+## Review session — 2026-06-13 (full-project review + ship-readiness pass)
+
+Ran a full code review across the autoloads, entities, waves, abilities, and
+HUD. Project compiles and runs clean (no errors; remaining warnings are benign:
+EventBus per-class "signal never used" false-positives, intended integer
+divisions, and the `range` export name in TowerData). Changes made:
+
+1. **BUG (high impact) — Architect ability kit was dead.** `AbilityController.gd`
+   compared `FactionManager.active_faction == "architect"` (singular) in 6 places,
+   but the faction id is `"architects"`. This silently disabled the Architect Lance
+   stun, Overdrive compounding/duration, ultimate display-name/cooldown setup, AND
+   made the Architect ultimate (Compile Cascade) never fire — the `match` fell
+   through. Fixed all 6 to `"architects"`. Bloom/Mesh were already correct.
+2. **Ship flag — `SaveManager.DEV_CLEAR_SAVE` flipped `true → false`.** It was
+   wiping saves every launch, which disabled the entire (completed) save +
+   offline-catch-up system in real play. The code comment already said to flip it
+   before shipping. Persistence + offline income now work across launches.
+3. **Gap — faction Ultimate (slot R) was unreachable.** It unlocks on
+   `milestone_reached(faction, 1)`, but nothing emitted index 1. Added a minimal
+   Second-Milestone trigger in `MilestoneManager` (`_on_wave_started`): once the
+   first milestone has fired, reaching wave `SECOND_MILESTONE_WAVE` (=20) emits
+   index 1 and unlocks the Ultimate. **v1 proxy** — replace with the core/21
+   faction-specific conditions (Singularity II / Biosphere II / Mesh Control II)
+   when that system is built.
+4. Lint hygiene: removed unused `EconomyManager._last_save_timestamp`; renamed
+   unused `FactionManager.get_production_rates(sub_path)` param to `_sub_path`.
+
+Note: `F1` Academy-skip dev bypass in `Main.gd` is gated on `OS.is_debug_build()`
+so it compiles out of release exports — left in place intentionally.
+
+Still genuinely unbuilt (acknowledged, not bugs): galaxy/treaty meta-layer,
+Ancient pacification economy, prestige/Memory-Tier loop, convoy cargo → economy
+hookup. These are large design-driven systems and were out of scope for a
+review/bugfix pass.
+
+---
+
+## Production session — 2026-06-13 (title screen + full playtest)
+
+Added a production entry flow and play-tested the game end-to-end via computer-use
+(driving the real window) cross-checked against the Godot MCP. All verified working.
+
+**New: Title screen** (`scenes/ui/TitleScreen.tscn` + `src/ui/TitleScreen.gd`, now the
+`run/main_scene`). New Game / Continue / Options / Quit, built programmatically.
+- New Game → `GameState.reset_for_new_game()` → Main (Academy plays fresh).
+- Continue → `SaveManager.load_game()` → Main (restores world). Disabled when no save.
+- Options → master volume + fullscreen, persisted to `user://settings.cfg`.
+- `SaveManager` no longer auto-loads on startup; the title screen owns the load decision.
+  Added `SaveManager.has_save()` / `clear_save()`.
+
+**Bugs found & fixed during the playtest:**
+1. **Academy ran in the background on every Main load** (incl. Continue) — `Academy._ready`
+   unconditionally started the sequence, spawning scenario enemies that breached the FOB
+   and leaving the cadet competing for input. Guarded `Academy._ready` on
+   `GameState.academy_completed` (hide + `PROCESS_MODE_DISABLED` + hide its CanvasLayers);
+   `Main._start_game_world` now also disables the Academy and emits `academy_clear_units`.
+2. **Tower placement / inspection clicks were stolen by the Commander.** Track G moved
+   `Main` to `_unhandled_input`; as the root it runs LAST, so the Commander (deeper) consumed
+   world clicks first. Added `GameState.placement_active` (Commander yields during
+   placement) and `Main.structure_at_screen()` via the `main_controller` group (Commander
+   yields clicks that land on a tower/building → Main opens inspection). Place → inspect →
+   upgrade now all work.
+3. **`SaveManager._on_dirty_event()` crashed on `tower_placed`** — it was a 0-arg method
+   connected to 2-arg signals (Godot 4 errors, doesn't drop args). Latent until placement
+   worked; gave it two optional ignored params.
+4. **F1 debug-skip left "Begin Waves" hidden** — Academy emits `academy_phase_started`
+   (hides the button); F1 bypassed `academy_phase_ended`. F1 now emits it.
+
+**Verified in-game (Architects):** title→options→new game→academy→continue (with offline
+catch-up), save persistence, waves + axis diagram, FOB/Commander auto-fire, Lance (Q) charge
++ cast, economy, tower placement, tower inspection panel + upgrade button, Commander movement.
+
+---
+
+## Territory & sphere-of-influence rework — 2026-06-13
+
+Territory no longer claims one tile at a time. It now flows from sight and buildings.
+
+- **MapGrid** gained area ops: `claim_area(center, radius)` (returns newly-claimed
+  GROUND cells), `reveal_area(center, radius)` (fog reveal + emits `region_revealed`),
+  `sense_area(center, inner, outer)` (sensor ring + emits `region_sensed`). MapGrid now
+  joins the `map_grid` group so entities resolve it without a relative path.
+- **EconomyManager** owns the per-cell income: `const TERRITORY_RATE_PER_CELL = 0.05`
+  + `register_claimed_cell()`. Single tuning knob for all territory income.
+- **Commander** claims its whole line-of-sight ring (`VISION_RADIUS`) as it moves —
+  `_claim_around()` replaces the old single-cell `_try_claim_cell()`.
+- **FOB (`Base.gd`)** projects a sphere of influence that grows with fortification rank:
+  reveals sight (`FOB_SIGHT_RADIUS_BASE=5 + rank`), senses beyond it, and **claims a
+  territory sphere** (`FOB_CLAIM_RADIUS_BASE=2 + rank`). Applied at start (deferred) and
+  on every rank-up.
+- **Towers & buildings** project a sight+sensor sphere on placement (vision only, no
+  claim): `Main._apply_structure_influence()` (`STRUCTURE_SIGHT_RADIUS=3`).
+
+Verified in-game: FOB starts inside a claimed sphere; the Commander paints a sight-width
+swath of territory as it moves; fog reveal expands with it. No runtime errors.
+
+**Balance note:** area-claim grows territory income and map coverage much faster than
+before — retune `EconomyManager.TERRITORY_RATE_PER_CELL` and the radii if the economy /
+Bloom-coverage milestone races. Also note `territory_rates` persists in the save while the
+map regenerates each run, so a loaded rate can look high relative to the fresh map.
+
+---
+
 ## The Game
 
 **Title:** Cycle Four
