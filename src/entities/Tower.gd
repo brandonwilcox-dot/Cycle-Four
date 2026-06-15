@@ -120,6 +120,7 @@ func _apply_sight() -> void:
 	if grid == null:
 		return
 	var cell  : Vector2i = grid.world_to_cell(global_position)
+	@warning_ignore("integer_division")
 	var sight : int = TOWER_SIGHT_BASE + mini(level / TOWER_SIGHT_PER_STEP, TOWER_SIGHT_BONUS_MAX)
 	grid.call("reveal_area", cell, sight)
 	grid.call("sense_area", cell, sight, sight + TOWER_SENSOR_EXTRA)

@@ -33,6 +33,14 @@ const PROFICIENCY_BASE     : float = 1.0
 const PROFICIENCY_GROWTH   : float = 0.5     ## controls curve steepness
 const DELIVERIES_PER_RANK  : int   = 10      ## rank up display milestone (visual only)
 
+## Veterancy cap + scout sight. A convoy reveals a small sphere as it travels, so
+## supply lines double as scouts; the radius grows with rank up to the bonus max.
+## (Set CONVOY_SIGHT_BASE/bonus to 0 to restore "hidden in fog" logistics.)
+const CONVOY_MAX_RANK        : int = 6
+const CONVOY_SIGHT_BASE      : int = 2
+const CONVOY_SIGHT_PER_STEP  : int = 2   ## +1 sight cell every 2 ranks
+const CONVOY_SIGHT_BONUS_MAX : int = 3   ## sight 2 → 5 at max rank
+
 @export var convoy_id    : StringName = &""
 @export var from_node_id : StringName = &""   ## the depot (loop endpoint A)
 @export var to_node_id   : StringName = &""   ## the FOB (loop endpoint B)
@@ -73,6 +81,7 @@ func _ready() -> void:
 	_update_fog_visibility()
 
 func _process(delta: float) -> void:
+	_apply_sight()   ## reveal a small sphere around the convoy as it travels
 	if _pause_timer > 0.0:
 		_pause_timer -= delta
 		_update_fog_visibility()   ## still respect fog while idling at endpoints
@@ -87,6 +96,15 @@ func _process(delta: float) -> void:
 	else:
 		position += to_target.normalized() * step
 	_update_fog_visibility()
+
+## Reveals a small scout sphere around the convoy's current cell, widening with rank.
+func _apply_sight() -> void:
+	if _map_grid == null or CONVOY_SIGHT_BASE <= 0:
+		return
+	var cell : Vector2i = _map_grid.world_to_cell(position)
+	@warning_ignore("integer_division")
+	var sight : int = CONVOY_SIGHT_BASE + mini(_convoy_rank / CONVOY_SIGHT_PER_STEP, CONVOY_SIGHT_BONUS_MAX)
+	_map_grid.call("reveal_area", cell, sight)
 
 ## Phase 6/8: convoys obey the same fog rule as enemy units — visible only in
 ## revealed cells. Without this the convoy looks like it "leaves the map" when it
@@ -122,7 +140,7 @@ func _on_waypoint_reached() -> void:
 			EventBus.convoy_proficiency_changed.emit(convoy_id, proficiency)
 		var prev_rank : int = _convoy_rank
 		@warning_ignore("integer_division")
-		_convoy_rank = _deliveries_made / DELIVERIES_PER_RANK
+		_convoy_rank = mini(_deliveries_made / DELIVERIES_PER_RANK, CONVOY_MAX_RANK)
 		if _convoy_rank > prev_rank:
 			_current_speed = CONVOY_BASE_SPEED * pow(1.0 + SPEED_PER_RANK, float(_convoy_rank))
 		_update_rank_bar()

@@ -183,10 +183,12 @@ func _claim_around() -> void:
 
 ## Current line-of-sight radius (cells), growing with veterancy rank up to the cap.
 func _los_radius() -> int:
+	@warning_ignore("integer_division")
 	return VISION_RADIUS + mini(_commander_rank / LOS_RANKS_PER_STEP, LOS_BONUS_MAX)
 
 ## Current sensor radius (cells), growing with veterancy rank up to the cap.
 func _sensor_radius() -> int:
+	@warning_ignore("integer_division")
 	return SENSOR_RADIUS + mini(_commander_rank / SENSOR_RANKS_PER_STEP, SENSOR_BONUS_MAX)
 
 ## -- Spawn activation --

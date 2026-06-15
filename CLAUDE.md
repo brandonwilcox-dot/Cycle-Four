@@ -83,6 +83,24 @@ catch-up), save persistence, waves + axis diagram, FOB/Commander auto-fire, Lanc
 
 ---
 
+## Veterancy sight/sensor growth + level caps — 2026-06-13
+
+Every player unit now grows its sight (and sensor) sphere with experience, all capped.
+
+- **Commander** (rank from territory, cap `RANK_CAP=15`): LoS `_los_radius()` 3→6 (+1/5
+  ranks), sensor `_sensor_radius()` 9→14 (+1/3 ranks). Because the Commander claims its
+  LoS, leveling also widens the territory swath. Speed/damage rank bonuses now capped too.
+- **Tower** (level from kills, cap `TOWER_MAX_LEVEL=10`): sight 3→6 (+1/3 levels),
+  re-revealed on each level-up via `_apply_sight()`.
+- **FOB** (rank from cargo, cap `FOB_MAX_RANK=10`): existing sphere now bounded.
+- **Convoy** (rank from deliveries, cap `CONVOY_MAX_RANK=6`): reveals a small scout sphere
+  2→5 as it travels (set `CONVOY_SIGHT_BASE=0` to restore hidden-in-fog logistics).
+
+All radii/caps are named constants per entity — easy to retune. Verified: compiles + runs
+clean (no errors), rings draw via the dynamic-radius functions every frame.
+
+---
+
 ## Territory & sphere-of-influence rework — 2026-06-13
 
 Territory no longer claims one tile at a time. It now flows from sight and buildings.
