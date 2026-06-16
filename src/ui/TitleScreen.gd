@@ -27,6 +27,8 @@ var _fullscreen_chk : CheckButton     = null
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_load_and_apply_settings()
+	## Pull the window to the foreground on launch so it doesn't open behind other apps.
+	DisplayServer.window_move_to_foreground()
 	_build_ui()
 
 # -- UI construction ----------------------------------------------------------
@@ -185,8 +187,11 @@ func _on_volume_changed(value: float) -> void:
 	_save_settings()
 
 func _on_fullscreen_toggled(on: bool) -> void:
+	## Exclusive fullscreen genuinely covers the taskbar and grabs the display, so the
+	## bottom UI (action bar, sell button) is never clipped. Unchecked → maximized window
+	## (respects the work area, stays above the taskbar) rather than a tiny floating window.
 	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED
+		DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_MAXIMIZED
 	)
 	_save_settings()
 
@@ -212,8 +217,9 @@ func _load_and_apply_settings() -> void:
 	var vol : float = float(cfg.get_value("audio", "master_volume", 1.0))
 	_apply_master_volume(vol)
 	var fs : bool = bool(cfg.get_value("display", "fullscreen", false))
-	if fs:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	DisplayServer.window_set_mode(
+		DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN if fs else DisplayServer.WINDOW_MODE_MAXIMIZED
+	)
 
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()

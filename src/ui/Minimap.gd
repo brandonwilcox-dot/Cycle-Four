@@ -56,6 +56,10 @@ func _resolve_grid() -> void:
 		_rows = dims.y
 		custom_minimum_size = Vector2(_cols * CELL_PX + BORDER * 2.0, _rows * CELL_PX + BORDER * 2.0)
 		size = custom_minimum_size
+		## Anchor to the bottom-left corner (RTS convention), above the action bar, clear
+		## of the top-left resource cluster.
+		var vp : Vector2 = get_viewport_rect().size
+		position = Vector2(8.0, vp.y - size.y - 56.0)
 
 func _draw() -> void:
 	if _grid == null or _map_data == null or _cols == 0:

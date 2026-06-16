@@ -55,12 +55,28 @@ var _minimap : Control = null
 const FORMAT_RATE : String = "+%.2f/s"
 const MAX_TOASTS  : int    = 5
 
+## ── Dashboard theme palette (Supreme Commander–style: dark angular panels,
+## cyan frames, orange action accents). Applied at the HUD root in _ready so it
+## cascades to every panel, button and ability slot. See core/22 §1.
+const COL_PANEL_BG    : Color = Color(0.043, 0.063, 0.098, 0.94)
+const COL_PANEL_EDGE  : Color = Color(0.184, 0.498, 0.576)   ## cyan #2f7f93
+const COL_BTN_BG      : Color = Color(0.075, 0.126, 0.169)
+const COL_BTN_HOVER   : Color = Color(0.110, 0.200, 0.255)
+const COL_BTN_PRESSED : Color = Color(0.160, 0.098, 0.039)
+const COL_BTN_BORDER  : Color = Color(0.227, 0.325, 0.376)
+const COL_ACCENT_CYAN : Color = Color(0.275, 0.780, 0.860)
+const COL_ACCENT_ORNG : Color = Color(1.000, 0.608, 0.239)
+const COL_TEXT_HI     : Color = Color(0.840, 0.894, 0.925)
+const COL_TEXT_DIM    : Color = Color(0.450, 0.480, 0.520)
+
 var _starter_tower         : Resource = null
 var _starter_building      : Resource = null
 var _territory_cells       : int      = 0
 var _subpath_panel_shown   : bool     = false  ## fires once per run after wave 9
 
 func _ready() -> void:
+	## Dark angular dashboard skin — cascades to every child panel/button.
+	theme = _build_dashboard_theme()
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.resource_changed.connect(_on_resource_changed)
 	EventBus.wave_started.connect(_on_wave_started)
@@ -93,9 +109,8 @@ func _ready() -> void:
 	place_tower_btn.disabled    = true   ## Enabled once faction is chosen
 	place_building_btn.disabled = true
 	start_wave_btn.disabled     = false
-	## Tactical minimap, top-left under the resource cluster. Self-updating; reads MapGrid.
+	## Tactical minimap (self-positions to the bottom-left corner). Reads MapGrid.
 	_minimap = MinimapScript.new()
-	_minimap.position = Vector2(8.0, 172.0)
 	add_child(_minimap)
 
 # -- Resource cluster handlers ------------------------------------------------
@@ -439,6 +454,73 @@ func _on_offline_catch_up(seconds_elapsed: float) -> void:
 	else:
 		msg = "Welcome back! %dm of idle income collected." % minutes
 	_push_notification(msg, Color(0.35, 1.0, 0.45))
+
+# -- Dashboard theme ----------------------------------------------------------
+
+## Builds the dark angular HUD skin programmatically (the .tscn parser is brittle;
+## this is house style). Styles PanelContainer, Button and ProgressBar so the
+## whole HUD reads as one Supreme Commander–style dashboard.
+func _build_dashboard_theme() -> Theme:
+	var t := Theme.new()
+
+	## Panels — near-black fill, thin cyan top-edge frame, small chamfered corners.
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = COL_PANEL_BG
+	panel.set_border_width_all(1)
+	panel.border_width_top = 2
+	panel.border_color = COL_PANEL_EDGE
+	panel.set_corner_radius_all(3)
+	panel.content_margin_left   = 8.0
+	panel.content_margin_right  = 8.0
+	panel.content_margin_top    = 6.0
+	panel.content_margin_bottom = 6.0
+	t.set_stylebox("panel", "PanelContainer", panel)
+
+	## Buttons — angular dark slabs; cyan edge on hover, orange edge on press.
+	var b_normal := StyleBoxFlat.new()
+	b_normal.bg_color = COL_BTN_BG
+	b_normal.set_border_width_all(1)
+	b_normal.border_color = COL_BTN_BORDER
+	b_normal.set_corner_radius_all(2)
+	b_normal.content_margin_left   = 12.0
+	b_normal.content_margin_right  = 12.0
+	b_normal.content_margin_top    = 7.0
+	b_normal.content_margin_bottom = 7.0
+	var b_hover := b_normal.duplicate() as StyleBoxFlat
+	b_hover.bg_color = COL_BTN_HOVER
+	b_hover.border_color = COL_ACCENT_CYAN
+	var b_pressed := b_normal.duplicate() as StyleBoxFlat
+	b_pressed.bg_color = COL_BTN_PRESSED
+	b_pressed.border_color = COL_ACCENT_ORNG
+	var b_disabled := b_normal.duplicate() as StyleBoxFlat
+	b_disabled.bg_color = Color(0.055, 0.067, 0.090, 0.9)
+	b_disabled.border_color = Color(0.149, 0.176, 0.204)
+	t.set_stylebox("normal",   "Button", b_normal)
+	t.set_stylebox("hover",    "Button", b_hover)
+	t.set_stylebox("pressed",  "Button", b_pressed)
+	t.set_stylebox("disabled", "Button", b_disabled)
+	t.set_stylebox("focus",    "Button", b_hover)
+	t.set_color("font_color",          "Button", COL_TEXT_HI)
+	t.set_color("font_hover_color",    "Button", Color(1.0, 1.0, 1.0))
+	t.set_color("font_pressed_color",  "Button", COL_ACCENT_ORNG)
+	t.set_color("font_disabled_color", "Button", COL_TEXT_DIM)
+
+	## Default label color reads on the dark strip (explicit overrides still win).
+	t.set_color("font_color", "Label", COL_TEXT_HI)
+
+	## Progress bars (resource gauges, ability sweeps) — dark track, cyan fill.
+	var pb_bg := StyleBoxFlat.new()
+	pb_bg.bg_color = Color(0.059, 0.090, 0.133)
+	pb_bg.set_border_width_all(1)
+	pb_bg.border_color = Color(0.149, 0.196, 0.247)
+	pb_bg.set_corner_radius_all(2)
+	var pb_fill := StyleBoxFlat.new()
+	pb_fill.bg_color = COL_ACCENT_CYAN
+	pb_fill.set_corner_radius_all(2)
+	t.set_stylebox("background", "ProgressBar", pb_bg)
+	t.set_stylebox("fill",       "ProgressBar", pb_fill)
+
+	return t
 
 # -- Helpers ------------------------------------------------------------------
 
