@@ -90,7 +90,7 @@ but benefits from the targeting UI shipped there.
 
 ---
 
-## Pass 3 — "Tower Mastery"  ·  Tower-system depth  ·  Milestone **M3**
+## Pass 3 — "Tower Mastery"  ·  Tower-system depth  ·  Milestone **M3**  ·  ✅ IMPLEMENTED 2026-06-16 (compiles clean; awaiting playtest + push). Deviations: "repair/heal from territory" shipped as a +15% damage empowerment (towers have no HP/attacker yet); branching is one point at T1→T2 (T2→T3 linear); aura-ring visual deferred.
 
 The deep tower features. All live in `Tower.gd` + `TowerData.gd` + `InspectionPanel.gd`,
 so one focused pass over the tower system. Builds on Pass 1 (inspection UI) and Pass 2

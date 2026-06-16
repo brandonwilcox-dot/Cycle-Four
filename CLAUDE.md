@@ -57,6 +57,39 @@ window-focus chaos made automated computer-use playtests unreliable.
 
 ---
 
+## Pass 3 — "Tower Mastery" — 2026-06-16  ·  Milestone M3 (compiles clean)
+
+Branching upgrades, aura/support towers, territory empowerment, max-level
+promotion per `planning/improvement-plan.md`. Verified via Godot MCP (ran
+`Main.tscn`, zero new errors/warnings; the branch `.tres` load clean).
+
+**Branching upgrades.** `TowerData.upgrade_to_b` (second branch). At T1 the player
+picks T2-A (existing, balanced) or **T2-B** (new specialization); both reconverge
+on the shared T3 apex (T2→T3 stays linear — one branch point). `EventBus`
+`panel_upgrade_requested(branch:int)`; InspectionPanel shows up to two upgrade
+buttons (name + cost, per-branch affordability) emitting branch 0/1; `Main._try_upgrade_tower(cell, branch)`
+picks `upgrade_to` / `upgrade_to_b`. New resources: `architects_t2b` (Railgun Array
+— long-range siege), `bloom_t2b` (Blight Mortar — heavy lobber), `mesh_t2b` (Relay
+Pylon — **aura/support** tower). T1 `.tres` rewired with `upgrade_to_b`.
+
+**Aura / support + promotion.** `TowerData.aura_radius` / `aura_damage_bonus`. A
+tower provides an aura if its data sets one OR it hits max level (veteran promotion:
+`VETERAN_AURA_RADIUS=160`, `VETERAN_AURA_BONUS=+10%`). Towers receive the best aura
+in range. `Tower.get_aura_radius/get_aura_bonus/provides_aura`, recomputed on a 0.5s
+cadence in `_recompute_buffs` (not per-frame).
+
+**Territory empowerment.** A tower on a claimed cell deals +15% damage
+(`TERRITORY_DAMAGE_BONUS`, `_on_claimed_ground` via MapGrid `is_claimed`). NOTE: this
+replaces the plan's literal "regen" — towers have no HP/attacker yet, so a heal
+would be invisible; empowerment is the meaningful territory payoff. Effective damage
+= `data.damage × level_mult × aura_mult × territory_mult`. InspectionPanel shows the
+active "+X% aura / +Y% territory / ◈ radiates aura" line.
+
+Deferred: aura-ring visual (mechanics + panel text cover feedback); second branch
+point at T2→T3; tower HP/repair (needs an attacker model first).
+
+---
+
 ## Pass 2 — "Combat Identity" — 2026-06-16  ·  Milestone M2 (compiles clean)
 
 Damage/armor type triangle + stealth detection per `planning/improvement-plan.md`.

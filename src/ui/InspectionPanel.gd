@@ -13,15 +13,20 @@ const Combat = preload("res://src/combat/Combat.gd")
 @onready var close_btn     : Button = $VBox/TitleRow/CloseBtn
 
 ## The tower currently inspected (null for buildings) — used by the targeting toggle.
-var _tower      : Node   = null
-var _target_btn : Button = null   ## cycles tower targeting priority; hidden for buildings
-var _sell_btn   : Button = null   ## sells tower or building
+var _tower         : Node   = null
+var _target_btn    : Button = null   ## cycles tower targeting priority; hidden for buildings
+var _sell_btn      : Button = null   ## sells tower or building
+var _upgrade_b_btn : Button = null   ## second branch (B) upgrade; hidden when no B branch
 
 func _ready() -> void:
 	close_btn.pressed.connect(func() -> void: visible = false)
 	upgrade_btn.pressed.connect(_on_upgrade_pressed)
-	## Build the Target + Sell buttons in code (the .tscn parser is brittle).
+	## Build the branch-B upgrade, Target, and Sell buttons in code (.tscn parser is brittle).
+	## Order under VBox: Title, Stats, UpgradeBtn(A), UpgradeB, Target, Sell.
 	var vbox : VBoxContainer = $VBox
+	_upgrade_b_btn = Button.new()
+	_upgrade_b_btn.pressed.connect(_on_upgrade_b_pressed)
+	vbox.add_child(_upgrade_b_btn)
 	_target_btn = Button.new()
 	_target_btn.pressed.connect(_on_target_pressed)
 	vbox.add_child(_target_btn)
@@ -33,8 +38,8 @@ func _ready() -> void:
 
 ## Populates the panel with tower data and makes it visible.
 ## tower      : the Tower node (duck-typed; reads .data, .level, .xp, .xp_to_next)
-## can_afford : whether the player can currently pay the upgrade cost
-func open_tower(tower: Node, can_afford: bool) -> void:
+## _can_afford : legacy param; affordability is now computed per-branch internally
+func open_tower(tower: Node, _can_afford: bool) -> void:
 	var d : Resource = tower.get("data")
 	if d == null:
 		return
@@ -55,17 +60,16 @@ func open_tower(tower: Node, can_afford: bool) -> void:
 		"DMG: %.1f %s  (×%.2f)     RANGE: %.0fpx     SPD: %.1f/s\n" % [dmg, dtype, mul, rng, spd] +
 		"XP: %.0f / %.0f" % [xp_cur, xp_max]
 	)
+	## Pass 3 empowerment readout: aura received, territory bonus, aura-provider status.
+	stats_label.text += _empowerment_suffix(tower)
 
-	var next : Resource = d.get("upgrade_to")
-	if next != null:
-		var next_tier : int   = int(next.get("tier")         if next.get("tier")         else tier + 1)
-		var next_cost : float = float(next.get("primary_cost") if next.get("primary_cost") else 0.0)
-		upgrade_btn.text     = "Upgrade → Tier %d  [%d]" % [next_tier, int(next_cost)]
+	## Pass 3 branching: configure up to two upgrade buttons (A = upgrade_to, B = upgrade_to_b).
+	## Affordability is computed per branch here (ignores the legacy can_afford param).
+	_configure_upgrade_button(upgrade_btn,    d.get("upgrade_to"))
+	_configure_upgrade_button(_upgrade_b_btn, d.get("upgrade_to_b"))
+	if d.get("upgrade_to") == null and d.get("upgrade_to_b") == null:
+		upgrade_btn.text     = "Max Tier"
 		upgrade_btn.visible  = true
-		upgrade_btn.disabled = not can_afford
-	else:
-		upgrade_btn.text    = "Max Tier"
-		upgrade_btn.visible = true
 		upgrade_btn.disabled = true
 
 	_tower = tower
@@ -88,13 +92,45 @@ func open_building(building: Node) -> void:
 	title_label.text  = name_str
 	stats_label.text  = "Income: +%.2f %s/s" % [rate, primary]
 	upgrade_btn.visible = false
+	_upgrade_b_btn.visible = false
 	_tower = null
 	_target_btn.visible = false   ## targeting is tower-only
 	_sell_btn.visible = true
 	visible = true
 
+## Configures an upgrade button for a branch target (null hides it). Shows the
+## target tower's name + fresh-build cost, and disables it when unaffordable.
+func _configure_upgrade_button(btn: Button, target: Resource) -> void:
+	if btn == null:
+		return
+	if target == null:
+		btn.visible = false
+		return
+	var t_cost : float  = float(target.get("primary_cost") if target.get("primary_cost") != null else 0.0)
+	var t_name : String = str(target.get("tower_name") if target.get("tower_name") else "Upgrade")
+	btn.text     = "→ %s  [%d]" % [t_name, int(t_cost)]
+	btn.visible  = true
+	btn.disabled = not EconomyManager.can_afford({FactionManager.get_primary_resource(): t_cost})
+
+## Builds the " +X% aura / +Y% territory / radiates aura" suffix for the stats line.
+func _empowerment_suffix(tower: Node) -> String:
+	var aura_mult : float = float(tower.get("_aura_recv_mult")) if tower.get("_aura_recv_mult") != null else 1.0
+	var terr_mult : float = float(tower.get("_territory_mult")) if tower.get("_territory_mult") != null else 1.0
+	var parts : Array[String] = []
+	if aura_mult > 1.001:
+		parts.append("+%d%% aura" % int(round((aura_mult - 1.0) * 100.0)))
+	if terr_mult > 1.001:
+		parts.append("+%d%% territory" % int(round((terr_mult - 1.0) * 100.0)))
+	if tower.has_method("provides_aura") and bool(tower.call("provides_aura")):
+		parts.append("◈ radiates aura")
+	return ("\n" + "   ".join(parts)) if not parts.is_empty() else ""
+
 func _on_upgrade_pressed() -> void:
-	EventBus.panel_upgrade_requested.emit()
+	EventBus.panel_upgrade_requested.emit(0)
+	visible = false
+
+func _on_upgrade_b_pressed() -> void:
+	EventBus.panel_upgrade_requested.emit(1)
 	visible = false
 
 ## Cycles the inspected tower's targeting priority and refreshes the button label.

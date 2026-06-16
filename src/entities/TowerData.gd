@@ -23,10 +23,19 @@ class_name TowerData
 ## Economy
 @export var primary_cost: float = 25.0  ## cost in faction primary resource
 
-## Upgrade chain
-## upgrade_to == null means this is the max tier.
-## Upgrade cost = upgrade_to.primary_cost (what the next tier costs to build fresh).
+## Upgrade chain (Pass 3 branching).
+## upgrade_to == null means this is the max tier. When both upgrade_to and
+## upgrade_to_b are set the player picks one specialization (branch A or B); the
+## branches typically reconverge on a shared higher tier. Upgrade cost = the chosen
+## branch's primary_cost (what that tower costs to build fresh).
 @export var upgrade_to: TowerData = null
+@export var upgrade_to_b: TowerData = null
+
+## Pass 3 support/aura. A tower with aura_radius > 0 buffs the damage of friendly
+## towers within aura_radius px by aura_damage_bonus (fraction, e.g. 0.15 = +15%).
+## Max-level towers also gain a veteran aura even without these set (see Tower.gd).
+@export var aura_radius: float = 0.0
+@export var aura_damage_bonus: float = 0.0
 
 ## Visual
 @export var color_hint: Color = Color.WHITE

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="TowerData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/entities/TowerData.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/towers/mesh_t3.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+tower_name = "Relay Pylon"
+faction_id = "mesh"
+tier = 2
+damage = 10.0
+range = 150.0
+attack_speed = 1.5
+damage_type = 1
+primary_cost = 55.0
+upgrade_to = ExtResource("2")
+aura_radius = 180.0
+aura_damage_bonus = 0.15
+color_hint = Color(0.95, 0.55, 0.95, 1.0)

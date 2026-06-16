@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="TowerData" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/entities/TowerData.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/towers/bloom_t3.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+tower_name = "Blight Mortar"
+faction_id = "bloom"
+tier = 2
+damage = 48.0
+range = 256.0
+attack_speed = 1.0
+damage_type = 2
+primary_cost = 55.0
+upgrade_to = ExtResource("2")
+color_hint = Color(0.35, 0.8, 0.45, 1.0)

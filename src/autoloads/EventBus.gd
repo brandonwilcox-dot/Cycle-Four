@@ -108,5 +108,5 @@ signal hud_state_changed(depth: String)  ## "glance" | "tactical" | "active"(new
 signal notification_pushed(message: String, priority: String)
 signal panel_open_requested(panel_id: String, data: Dictionary)
 signal panel_close_requested(panel_id: String)
-signal panel_upgrade_requested   ## InspectionPanel upgrade btn → Main._try_upgrade_tower
+signal panel_upgrade_requested(branch: int)   ## InspectionPanel upgrade btn → Main._try_upgrade_tower (branch 0=A, 1=B)
 signal panel_sell_requested      ## InspectionPanel sell btn → Main sells the inspected cell

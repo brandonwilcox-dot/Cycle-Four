@@ -268,7 +268,7 @@ func _cancel_placement() -> void:
 
 ## -- Tower upgrades --
 
-func _try_upgrade_tower(cell: Vector2i) -> void:
+func _try_upgrade_tower(cell: Vector2i, branch: int = 0) -> void:
 	var tower = _occupied_cells.get(cell)
 	if tower == null or not is_instance_valid(tower):
 		_occupied_cells.erase(cell)
@@ -276,7 +276,8 @@ func _try_upgrade_tower(cell: Vector2i) -> void:
 	var current_data = tower.get("data")
 	if current_data == null:
 		return
-	var next_data = current_data.get("upgrade_to")
+	## Branch 1 = B specialization (if any); branch 0 = the primary upgrade.
+	var next_data = current_data.get("upgrade_to_b") if branch == 1 else current_data.get("upgrade_to")
 	if next_data == null:
 		EventBus.notification_pushed.emit("Already at max tier.", "info")
 		return
@@ -393,10 +394,10 @@ func _open_building_inspection(cell: Vector2i) -> void:
 	_inspected_cell = cell
 	hud.open_building_inspection(building)
 
-func _on_panel_upgrade_requested() -> void:
+func _on_panel_upgrade_requested(branch: int) -> void:
 	if _inspected_cell == Vector2i(-1, -1):
 		return
-	_try_upgrade_tower(_inspected_cell)
+	_try_upgrade_tower(_inspected_cell, branch)
 	_inspected_cell = Vector2i(-1, -1)
 
 ## -- Sell / refund --

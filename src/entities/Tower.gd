@@ -26,6 +26,12 @@ const TOWER_SIGHT_PER_STEP : int = 3   ## +1 sight cell every 3 levels
 const TOWER_SIGHT_BONUS_MAX : int = 3  ## sight 3 → 6 at max level
 const TOWER_SENSOR_EXTRA   : int = 2   ## sensor ring reaches sight + this
 
+## Pass 3 "Tower Mastery": aura/support, territory empowerment, max-level promotion.
+const BUFF_RECOMPUTE_PERIOD  : float = 0.5    ## seconds between aura/territory recompute (cheap, not per-frame)
+const VETERAN_AURA_RADIUS    : float = 160.0  ## a max-level tower radiates a support aura this wide
+const VETERAN_AURA_BONUS     : float = 0.10   ## +10% damage to friendly towers inside a veteran aura
+const TERRITORY_DAMAGE_BONUS : float = 0.15   ## +15% damage while standing on claimed ground
+
 var data: Resource = null   ## TowerData instance
 var _attack_timer: float = 0.0
 
@@ -36,6 +42,9 @@ var level              : int   = 1
 var xp                 : float = 0.0
 var xp_to_next         : float = XP_BASE_THRESHOLD
 var _damage_multiplier : float = 1.0
+var _aura_recv_mult    : float = 1.0   ## best damage aura received from nearby towers (1.0 = none)
+var _territory_mult    : float = 1.0   ## territory empowerment multiplier (1.0 = none)
+var _buff_timer        : float = 0.0   ## throttle for _recompute_buffs
 var _xp_bar            : Node2D = null   ## ProgressionBar instance
 var _chevrons          : Node2D = null   ## RankChevrons instance
 var _map_grid          : Node   = null   ## resolved lazily from the "map_grid" group
@@ -58,6 +67,11 @@ func _process(delta: float) -> void:
 	if _attack_timer >= 1.0 / data.attack_speed:
 		_attack_timer = 0.0
 		_try_attack()
+	## Pass 3: refresh aura/territory empowerment on a slow cadence (not per-frame).
+	_buff_timer -= delta
+	if _buff_timer <= 0.0:
+		_buff_timer = BUFF_RECOMPUTE_PERIOD
+		_recompute_buffs()
 
 ## Replaces this tower's data with the next tier and rebuilds the visual in place.
 ## Called by Main._try_upgrade_tower() after spending the upgrade cost.
@@ -73,7 +87,7 @@ func upgrade(next_data: Resource) -> void:
 func _try_attack() -> void:
 	var target : Node = _select_target()
 	if target != null and target.has_method("take_damage"):
-		var effective_damage : float = data.damage * _damage_multiplier
+		var effective_damage : float = data.damage * _damage_multiplier * _aura_recv_mult * _territory_mult
 		var killed : bool = target.take_damage(effective_damage, int(data.damage_type))
 		if killed:
 			_award_xp_for_kill(target)
@@ -151,7 +165,8 @@ func _level_up() -> void:
 	EventBus.tower_leveled_up.emit(self, level)
 	if _chevrons != null:
 		_chevrons.call("set_rank", level - 1)
-	_apply_sight()   ## leveling widens the tower's sight/sensor sphere
+	_apply_sight()       ## leveling widens the tower's sight/sensor sphere
+	_recompute_buffs()   ## hitting max level grants the veteran aura immediately
 
 ## Resolves and caches the MapGrid from its group.
 func _get_map_grid() -> Node:
@@ -170,6 +185,50 @@ func _apply_sight() -> void:
 	var sight : int = TOWER_SIGHT_BASE + mini(level / TOWER_SIGHT_PER_STEP, TOWER_SIGHT_BONUS_MAX)
 	grid.call("reveal_area", cell, sight)
 	grid.call("sense_area", cell, sight, sight + TOWER_SENSOR_EXTRA)
+
+## -- Pass 3: aura / support / territory --
+
+## True if this tower projects a damage aura (from its data, or as a max-level veteran).
+func provides_aura() -> bool:
+	return get_aura_radius() > 0.0 and get_aura_bonus() > 0.0
+
+## Aura radius in px: the larger of the data-defined aura and (at max level) the veteran aura.
+func get_aura_radius() -> float:
+	var r : float = float(data.aura_radius) if data != null and data.get("aura_radius") != null else 0.0
+	if level >= TOWER_MAX_LEVEL:
+		r = maxf(r, VETERAN_AURA_RADIUS)
+	return r
+
+## Aura damage bonus (fraction): the larger of the data-defined bonus and the veteran bonus.
+func get_aura_bonus() -> float:
+	var b : float = float(data.aura_damage_bonus) if data != null and data.get("aura_damage_bonus") != null else 0.0
+	if level >= TOWER_MAX_LEVEL:
+		b = maxf(b, VETERAN_AURA_BONUS)
+	return b
+
+## Recomputes the aura received from nearby towers and the territory bonus. Throttled.
+func _recompute_buffs() -> void:
+	var best_bonus : float = 0.0
+	for other in get_tree().get_nodes_in_group("towers"):
+		if other == self or not is_instance_valid(other):
+			continue
+		if not other.has_method("get_aura_radius"):
+			continue
+		var radius : float = float(other.call("get_aura_radius"))
+		if radius <= 0.0:
+			continue
+		if global_position.distance_to((other as Node2D).global_position) <= radius:
+			best_bonus = maxf(best_bonus, float(other.call("get_aura_bonus")))
+	_aura_recv_mult = 1.0 + best_bonus
+	_territory_mult = 1.0 + (TERRITORY_DAMAGE_BONUS if _on_claimed_ground() else 0.0)
+
+## True when the tower's own cell is claimed friendly territory.
+func _on_claimed_ground() -> bool:
+	var grid : Node = _get_map_grid()
+	if grid == null:
+		return false
+	var cell : Vector2i = grid.world_to_cell(global_position)
+	return bool(grid.call("is_claimed", cell.x, cell.y))
 
 ## -- Visual --
 
