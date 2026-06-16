@@ -5,6 +5,8 @@
 ## Design ref: core/17_units-maps-buildings.md (FOB concept)
 extends Node2D
 
+const Combat = preload("res://src/combat/Combat.gd")
+
 ## Turret stats -- strong enough to carry early waves solo, challenged past wave 5.
 const RANGE        : float = 256.0   ## pixels -- covers ~4 grid cells
 const DAMAGE       : float = 18.0    ## per shot
@@ -127,12 +129,15 @@ func _try_attack() -> void:
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
+		## Stealth: the FOB turret can't fire on an undetected unit.
+		if unit.has_method("is_detectable") and not unit.call("is_detectable"):
+			continue
 		var dist : float = global_position.distance_to(unit.global_position)
 		if dist < nearest_dist:
 			nearest_dist = dist
 			nearest      = unit
 	if nearest != null and nearest.has_method("take_damage"):
-		nearest.take_damage(DAMAGE)
+		nearest.take_damage(DAMAGE, Combat.faction_damage_type(FactionManager.active_faction))
 
 ## -- Visual --
 

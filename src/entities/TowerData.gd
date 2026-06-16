@@ -16,6 +16,10 @@ class_name TowerData
 @export var range: float = 150.0       ## attack radius in pixels
 @export var attack_speed: float = 1.0  ## attacks per second
 
+## Pass 2 combat identity. damage_type feeds the damage triangle (Combat.gd):
+## Kinetic=Architect, Energy=Mesh, Corrosive=Bloom. Ordinal must match Combat.DamageType.
+@export_enum("Kinetic", "Energy", "Corrosive") var damage_type: int = 0
+
 ## Economy
 @export var primary_cost: float = 25.0  ## cost in faction primary resource
 

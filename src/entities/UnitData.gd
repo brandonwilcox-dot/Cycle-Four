@@ -15,7 +15,13 @@ class_name UnitData
 @export var max_health: float = 100.0
 @export var move_speed: float = 80.0        ## pixels per second along path
 @export var damage_on_arrival: float = 10.0 ## damage dealt to base when unit reaches end
-@export var armor: float = 0.0              ## flat damage reduction
+@export var armor: float = 0.0              ## flat damage reduction (applied after type multiplier)
+
+## Pass 2 combat identity. armor_type feeds the damage triangle (Combat.gd):
+## Plated=Architect, Organic=Bloom, Synthetic=Mesh. Ordinal must match Combat.ArmorType.
+@export_enum("Plated", "Organic", "Synthetic") var armor_type: int = 0
+## Stealth units render and can be targeted only inside a sensor sphere (sensed cells).
+@export var stealth: bool = false
 
 ## Economy
 @export var resource_reward: float = 5.0   ## primary resource dropped on death

@@ -10,6 +10,7 @@ tier = 3
 damage = 32.0
 range = 224.0
 attack_speed = 3.5
+damage_type = 2
 primary_cost = 110.0
 upgrade_to = null
 color_hint = Color(0.55, 1.0, 0.65, 1.0)

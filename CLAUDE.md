@@ -9,6 +9,90 @@ making any design decisions in code.
 
 ---
 
+## UI session — 2026-06-16 (windowing fixes + SupCom-style dashboard)
+
+Three reported bugs, all traced to one root cause, plus a HUD reskin into a
+Supreme Commander: Forged Alliance–style dashboard layout (original art, FA
+layout conventions — no copied assets). Verified clean via Godot MCP: ran both
+the full project and `HUD.tscn` directly; zero errors (only the standing benign
+EventBus "signal never used" warnings).
+
+1. **Can't sell towers / buttons under the taskbar / window won't foreground** —
+   all three were borderless-fullscreen sitting *behind* the always-on-top
+   Windows taskbar, so the InspectionPanel's bottom Sell button was physically
+   un-clickable. The sell *wiring* was always correct
+   (`InspectionPanel._on_sell_pressed` → `EventBus.panel_sell_requested` →
+   `Main._on_panel_sell_requested`). Fixes:
+   - `project.godot`: launch **maximized** (`window/size/mode=2`).
+   - `TitleScreen.gd`: `DisplayServer.window_move_to_foreground()` on `_ready`;
+     fullscreen toggle + settings load now use **EXCLUSIVE_FULLSCREEN** (covers
+     the taskbar) when on, **MAXIMIZED** (respects work area, above taskbar) when
+     off — never a tiny floating window.
+2. **Academy intro misaligned** — the Academy is instanced under a CanvasLayer at
+   a fixed `position = Vector2(960, 540)` (center of the 1920×1080 base). With
+   `window/stretch/aspect="expand"` the canvas anchors top-left and grows on
+   non-16:9 (maximized) windows, drifting that center. Changed aspect to **`keep`**
+   (letterbox), which re-centers every fixed-1920×1080-authored layout, Academy
+   included.
+3. **Final HUD layout (per user direction, revised from the FA mockup):**
+   minimap → **bottom-center** (`Minimap.gd` self-positions); abilities + build
+   options → **bottom-left as a two-row grid** (`AbilityBar` row above the
+   `ActionBar` build row in `HUD.tscn`); selection panel → bottom-right; resources
+   → top strip. `HUD.gd` no longer positions the minimap.
+4. **Dashboard reskin (FA layout language):**
+   - `HUD.gd` builds a programmatic dark/angular **Theme** (`_build_dashboard_theme`)
+     applied at the HUD root — near-black panels with a cyan top-edge frame, dark
+     angular buttons with cyan-hover / orange-press accents, dark-track/cyan-fill
+     progress bars. Cascades to every panel, button, and AbilityBar slot.
+   - `HUD.tscn` re-anchored: `ResourceCluster` → full-width **top economy strip**
+     (inner `VBox` switched to `HBoxContainer`; node name kept so `@onready` paths
+     hold); `InspectionPanel` → **bottom-right**. (Command/ability bars and the
+     minimap were re-placed again per item 3 above.)
+
+Still TODO on the dashboard: true resource **gauge bars** in the top strip
+(resources are uncapped, so a fill needs a meaningful reference — deferred until
+a soft-cap/storage model is chosen). Visual confirmation in-game (selling,
+target cycle, layout) is best done by launching a New Game run; the prior
+window-focus chaos made automated computer-use playtests unreliable.
+
+---
+
+## Pass 2 — "Combat Identity" — 2026-06-16  ·  Milestone M2 (compiles clean)
+
+Damage/armor type triangle + stealth detection per `planning/improvement-plan.md`.
+Verified via Godot MCP (ran `Main.tscn` — full tree incl. preloaded Tower/Unit —
+zero new errors; only the standing benign warnings).
+
+**Damage triangle (`src/combat/Combat.gd`, new).** Static helpers + constants;
+preloaded by consumers (`const Combat = preload(...)`) — not class_name (Godot 4.6
+global-class flakiness). 3 damage × 3 armor, strong ×1.5 / neutral ×1.0 / weak ×0.66:
+- Kinetic → strong vs Organic, weak vs Synthetic
+- Energy → strong vs Plated, weak vs Organic
+- Corrosive → strong vs Synthetic, weak vs Plated
+Faction signatures: Architect = Kinetic/Plated, Bloom = Corrosive/Organic,
+Mesh = Energy/Synthetic. The whole player kit deals its faction's damage type, so
+each faction naturally counters one other (cross-faction RPS; Pass 3 branching
+upgrades will let towers diversify type).
+
+**Data.** `UnitData`: `armor_type` enum + `stealth` bool. `TowerData`: `damage_type`
+enum (ordinals match `Combat`). `.tres` tagged: bloom units armor_type=1, mesh
+units armor_type=2 (mesh_t1 "Shard" `stealth=true`), bloom towers damage_type=2,
+mesh towers damage_type=1; Architect uses defaults (0 = Plated / Kinetic).
+
+**Resolution.** `Unit.take_damage(amount, damage_type := -1)` applies
+`Combat.multiplier(type, armor_type)` then flat armor (−1 = untyped contact damage,
+×1.0). Every player damage source now passes its faction type: `Tower._try_attack`
+(tower's own type), `Base`/`Commander`/`AbilityController` via
+`Combat.faction_damage_type(active_faction)`. InspectionPanel shows the type.
+
+**Stealth.** New persistent `sensed` meta bit (MapData bit 30). `MapGrid.sense_area`
+now flags the full sensor disk as sensed (region_sensed event unchanged). Stealth
+units render only where sensed (`Unit._update_fog_visibility`) and expose
+`is_detectable()` — Tower/Base/Commander skip undetected stealth (AoE abilities
+ignore it). Sensing is permanent-once-swept (transient-sensor counterplay is backlog).
+
+---
+
 ## Review session — 2026-06-13 (full-project review + ship-readiness pass)
 
 Ran a full code review across the autoloads, entities, waves, abilities, and

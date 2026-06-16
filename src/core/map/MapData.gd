@@ -18,13 +18,15 @@ const META_STRIDE  : int = 4
 ## Bits 9-24  hacked_until_tick     (16 bits, wave-tick deadline; 0 = not hacked)
 ## Bits 25-28 ruins_proximity       (4 bits, effect strength 0–15)
 ## Bit 29     relay_covered         (1 bit)
-## Bits 30-31 unused
+## Bit 30     sensed                (1 bit) — covered by a sensor sphere (stealth detection)
+## Bit 31     unused
 const META_BIT_REVEALED           : int = 0
 const META_BIT_CLAIMED_BY         : int = 1
 const META_BIT_BIOMASS_PROGRESS   : int = 5
 const META_BIT_HACKED_UNTIL_TICK  : int = 9
 const META_BIT_RUINS_PROXIMITY    : int = 25
 const META_BIT_RELAY_COVERED      : int = 29
+const META_BIT_SENSED             : int = 30
 
 const META_MASK_REVEALED          : int = 0x1
 const META_MASK_CLAIMED_BY        : int = 0xF
@@ -32,6 +34,7 @@ const META_MASK_BIOMASS_PROGRESS  : int = 0xF
 const META_MASK_HACKED_UNTIL_TICK : int = 0xFFFF
 const META_MASK_RUINS_PROXIMITY   : int = 0xF
 const META_MASK_RELAY_COVERED     : int = 0x1
+const META_MASK_SENSED            : int = 0x1
 
 @export var map_id: StringName = &""
 @export var dimensions: Vector2i = Vector2i(DEFAULT_COLS, DEFAULT_ROWS)
@@ -310,6 +313,12 @@ func get_meta_relay_covered(cell_idx: int) -> bool:
 
 func set_meta_relay_covered(cell_idx: int, value: bool) -> void:
 	_set_field(cell_idx, META_BIT_RELAY_COVERED, META_MASK_RELAY_COVERED, 1 if value else 0)
+
+func get_meta_sensed(cell_idx: int) -> bool:
+	return _get_field(cell_idx, META_BIT_SENSED, META_MASK_SENSED) != 0
+
+func set_meta_sensed(cell_idx: int, value: bool) -> void:
+	_set_field(cell_idx, META_BIT_SENSED, META_MASK_SENSED, 1 if value else 0)
 
 ## -- Private bitfield helpers --
 

@@ -11,6 +11,7 @@ class_name AbilityController
 extends Node
 
 const AbilityDataScript = preload("res://src/abilities/AbilityData.gd")
+const Combat = preload("res://src/combat/Combat.gd")
 
 const SLOT_COUNT : int = 4
 
@@ -218,7 +219,7 @@ func _cast_lance() -> void:
 		if not is_instance_valid(unit):
 			continue
 		if _commander.global_position.distance_to(unit.global_position) <= ATTACK_RANGE_PX:
-			var died : bool = unit.take_damage(base_dmg * dmg_mult)
+			var died : bool = unit.take_damage(base_dmg * dmg_mult, Combat.faction_damage_type(FactionManager.active_faction))
 			hits += 1
 			if died:
 				kills += 1
@@ -298,7 +299,7 @@ func _tick_hazard_damage() -> void:
 		if not is_instance_valid(unit):
 			continue
 		if hazard_center.distance_to(unit.global_position) <= FIELD_RADIUS_PX:
-			unit.take_damage(HAZARD_DPS)
+			unit.take_damage(HAZARD_DPS, Combat.faction_damage_type(FactionManager.active_faction))
 
 func _end_hazard() -> void:
 	hazard_active = false
@@ -368,7 +369,7 @@ func _cast_compile_cascade() -> void:
 	var dmg      : float = (50.0 + 2.0 * N) * dmg_mult
 	for unit in units:
 		if is_instance_valid(unit):
-			unit.take_damage(dmg)
+			unit.take_damage(dmg, Combat.faction_damage_type(FactionManager.active_faction))
 	## Full-screen flash VFX via a brief white ColorRect on Commander.
 	if _commander != null:
 		_commander.call("_spawn_cannon_ring")

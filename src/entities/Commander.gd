@@ -15,6 +15,8 @@
 ## friendly escort units.
 extends Node2D
 
+const Combat = preload("res://src/combat/Combat.gd")
+
 ## Phase 6: vision radius (Chebyshev/square) in cells. Cells within this radius of
 ## the Commander become permanently revealed. ON_REVEAL spawns inside the revealed
 ## region activate via the EventBus.region_revealed → ObjectiveManager path.
@@ -341,7 +343,7 @@ func _try_primary_attack() -> void:
 	var dmg : float = PRIMARY_DAMAGE * _damage_multiplier
 	if _ability_controller != null and _ability_controller.is_overdrive_active:
 		dmg *= _ability_controller.overdrive_damage_mult
-	target.take_damage(dmg)
+	target.take_damage(dmg, Combat.faction_damage_type(FactionManager.active_faction))
 	EventBus.commander_attacked.emit()
 	_spawn_shot_line(target.global_position, PRIMARY_LINE_COLOR, 2.0)
 	if _ability_controller != null:
@@ -353,6 +355,9 @@ func _find_nearest_unit_in_range() -> Node2D:
 	var best_dist : float = ATTACK_RANGE_PX
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
+			continue
+		## Stealth: the Commander's auto-attack can't lock an undetected unit.
+		if unit.has_method("is_detectable") and not unit.call("is_detectable"):
 			continue
 		var dist : float = global_position.distance_to(unit.global_position)
 		if dist < best_dist:

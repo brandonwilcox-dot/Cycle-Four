@@ -304,20 +304,26 @@ func reveal_area(center: Vector2i, radius: int) -> int:
 func sense_area(center: Vector2i, inner_radius: int, outer_radius: int) -> void:
 	if map_data == null:
 		return
-	var sensed : Array[Vector2i] = []
+	## Stealth detection (Pass 2): the FULL sensor disk (inner sight + outer band) flags
+	## the persistent `sensed` bit, so stealth units are visible/targetable anywhere a
+	## detector's sensor reaches. The region_sensed EVENT still fires only for fogged
+	## cells in the outer annulus (objective DETECTED telegraphy — unchanged).
+	var sensed_event : Array[Vector2i] = []
 	for dy in range(-outer_radius, outer_radius + 1):
 		for dx in range(-outer_radius, outer_radius + 1):
-			if absi(dx) <= inner_radius and absi(dy) <= inner_radius:
-				continue
 			var c : int = center.x + dx
 			var r : int = center.y + dy
 			if c < 0 or c >= COLS or r < 0 or r >= ROWS:
 				continue
-			if map_data.get_meta_revealed(c + r * COLS):
+			var idx : int = c + r * COLS
+			map_data.set_meta_sensed(idx, true)
+			if absi(dx) <= inner_radius and absi(dy) <= inner_radius:
 				continue
-			sensed.append(Vector2i(c, r))
-	if not sensed.is_empty():
-		EventBus.region_sensed.emit(sensed)
+			if map_data.get_meta_revealed(idx):
+				continue
+			sensed_event.append(Vector2i(c, r))
+	if not sensed_event.is_empty():
+		EventBus.region_sensed.emit(sensed_event)
 
 ## Returns the nearest traversable cell to world_pos via BFS.
 ## Used by Unit.reroute() to find a valid start for a fresh AStar query

@@ -5,6 +5,8 @@
 ## Phase F: flanker variant targets CLAIMED territory instead of the base.
 extends Node2D
 
+const Combat = preload("res://src/combat/Combat.gd")
+
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
 
@@ -91,7 +93,11 @@ func _update_fog_visibility() -> void:
 	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
 		return
 	var idx : int = cell.x + cell.y * map_data.dimensions.x
-	visible = map_data.get_meta_revealed(idx)
+	## Stealth units hide until a sensor sphere covers them; normal units use sight (fog).
+	if data != null and data.stealth:
+		visible = map_data.get_meta_sensed(idx)
+	else:
+		visible = map_data.get_meta_revealed(idx)
 
 ## Called by WaveSpawner before adding the unit to the scene tree.
 ## waypoints[0] is the spawn world position; unit starts there.
@@ -152,11 +158,30 @@ func apply_stun(duration: float) -> void:
 		return
 	_stun_until = Time.get_ticks_msec() / 1000.0 + duration
 
-## Apply incoming damage. Returns true if the unit died.
-func take_damage(amount: float) -> bool:
+## Stealth gating (Pass 2): non-stealth units are always detectable. Stealth units
+## are only visible/targetable while standing in a sensed cell (a sensor sphere).
+## Attackers call this before locking on; AoE abilities ignore it.
+func is_detectable() -> bool:
+	if data == null or not data.stealth:
+		return true
+	if _map_grid_ref == null:
+		return true
+	var map_data : MapData = _map_grid_ref.get("map_data") as MapData
+	if map_data == null:
+		return true
+	var cell : Vector2i = _map_grid_ref.world_to_cell(global_position)
+	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
+		return true
+	return map_data.get_meta_sensed(cell.x + cell.y * map_data.dimensions.x)
+
+## Apply incoming damage. damage_type (Combat.DamageType, -1 = untyped contact damage)
+## scales the hit against this unit's armor_type before flat armor is subtracted.
+## Returns true if the unit died.
+func take_damage(amount: float, damage_type: int = -1) -> bool:
 	if _is_dead:
 		return true
-	var effective : float = max(0.0, amount - data.armor)
+	var mult : float = Combat.multiplier(damage_type, data.armor_type) if damage_type >= 0 else 1.0
+	var effective : float = max(0.0, amount * mult - data.armor)
 	_current_health -= effective
 	_update_health_visual()
 	if _current_health <= 0.0:

@@ -65,7 +65,7 @@ logic hooks. InspectionPanel is opened once for both targeting + sell; HUD once 
 
 ---
 
-## Pass 2 — "Combat Identity"  ·  Data + resolution core  ·  Milestone **M2**
+## Pass 2 — "Combat Identity"  ·  Data + resolution core  ·  Milestone **M2**  ·  ✅ IMPLEMENTED 2026-06-16 (compiles clean; awaiting playtest + push)
 
 Give factions/units mechanical identity. This is the one pass that rewrites combat
 resolution + the unit/tower data resources, so both data features land together.

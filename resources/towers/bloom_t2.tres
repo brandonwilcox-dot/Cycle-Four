@@ -11,6 +11,7 @@ tier = 2
 damage = 18.0
 range = 192.0
 attack_speed = 3.0
+damage_type = 2
 primary_cost = 55.0
 upgrade_to = ExtResource("2")
 color_hint = Color(0.40, 0.95, 0.52, 1.0)

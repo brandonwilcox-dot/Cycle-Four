@@ -11,6 +11,7 @@ max_health = 700.0
 move_speed = 28.0
 damage_on_arrival = 70.0
 armor = 15.0
+armor_type = 1
 resource_reward = 38.0
 spawn_cost = {}
 cooldown = 240.0

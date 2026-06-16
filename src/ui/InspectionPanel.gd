@@ -5,6 +5,8 @@
 ## Upgrade button emits EventBus.panel_upgrade_requested; Main.gd handles the spend.
 extends PanelContainer
 
+const Combat = preload("res://src/combat/Combat.gd")
+
 @onready var title_label   : Label  = $VBox/TitleRow/TitleLabel
 @onready var stats_label   : Label  = $VBox/StatsLabel
 @onready var upgrade_btn   : Button = $VBox/UpgradeBtn
@@ -48,8 +50,9 @@ func open_tower(tower: Node, can_afford: bool) -> void:
 
 	title_label.text = "%s  —  Tier %d  |  Lv %d" % [name_str, tier, lv]
 
+	var dtype : String = Combat.damage_type_name(int(d.get("damage_type")) if d.get("damage_type") != null else 0)
 	stats_label.text = (
-		"DMG: %.1f  (×%.2f)     RANGE: %.0fpx     SPD: %.1f/s\n" % [dmg, mul, rng, spd] +
+		"DMG: %.1f %s  (×%.2f)     RANGE: %.0fpx     SPD: %.1f/s\n" % [dmg, dtype, mul, rng, spd] +
 		"XP: %.0f / %.0f" % [xp_cur, xp_max]
 	)
 

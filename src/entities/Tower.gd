@@ -74,7 +74,7 @@ func _try_attack() -> void:
 	var target : Node = _select_target()
 	if target != null and target.has_method("take_damage"):
 		var effective_damage : float = data.damage * _damage_multiplier
-		var killed : bool = target.take_damage(effective_damage)
+		var killed : bool = target.take_damage(effective_damage, int(data.damage_type))
 		if killed:
 			_award_xp_for_kill(target)
 
@@ -91,6 +91,9 @@ func _select_target() -> Node:
 			continue
 		var d : float = global_position.distance_to(unit.global_position)
 		if d > data.range:
+			continue
+		## Stealth: can't lock onto an undetected unit (outside any sensor sphere).
+		if unit.has_method("is_detectable") and not unit.call("is_detectable"):
 			continue
 		var score : float
 		match target_mode:
