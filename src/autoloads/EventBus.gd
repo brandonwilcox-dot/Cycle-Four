@@ -17,6 +17,8 @@ signal wave_composition_committed(unit_name: String, count: int)  ## unit type +
 signal unit_spawned(unit_data: Dictionary)
 signal unit_died(unit_data: Dictionary)
 signal wave_flank_triggered(wave_number: int)  ## Scripted secondary-axis probe fired
+signal wave_previewed(wave_number: int, unit_name: String, count: int)  ## next wave intel during standby
+signal wave_called_early()                     ## player started the next wave during the grace period
 signal base_damaged(amount: float, attacker_data: Dictionary)
 signal base_healed(amount: float)           ## Bloom Overdrive / Verdant Bulwark FOB regen
 signal base_destroyed()                     ## base HP reached zero; triggers game-over
@@ -107,3 +109,4 @@ signal notification_pushed(message: String, priority: String)
 signal panel_open_requested(panel_id: String, data: Dictionary)
 signal panel_close_requested(panel_id: String)
 signal panel_upgrade_requested   ## InspectionPanel upgrade btn → Main._try_upgrade_tower
+signal panel_sell_requested      ## InspectionPanel sell btn → Main sells the inspected cell

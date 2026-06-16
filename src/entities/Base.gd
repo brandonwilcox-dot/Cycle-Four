@@ -29,6 +29,7 @@ const FOB_MAX_RANK          : int = 10  ## fortification cap (sight 5→15, clai
 var _map_grid : Node = null
 
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
+const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
 
 var _current_hp        : float     = MAX_HP
 var _hp_bar            : ColorRect = null   ## tracked for live updates
@@ -37,6 +38,7 @@ var _is_destroyed      : bool      = false
 var _cargo_received    : float     = 0.0
 var _fortification_rank : int      = 0
 var _rank_bar          : Node2D    = null
+var _rank_chevrons     : Node2D    = null
 
 func _ready() -> void:
 	add_to_group("base")
@@ -85,6 +87,8 @@ func _on_convoy_arrived(_convoy_id: StringName, _to_node: StringName, cargo: flo
 	_update_rank_bar()
 	## Leveling up expands the sphere of influence: more sight + more territory.
 	if _fortification_rank > prev_rank:
+		if _rank_chevrons != null:
+			_rank_chevrons.call("set_rank", _fortification_rank)
 		_apply_influence()
 
 func _update_rank_bar() -> void:
@@ -208,3 +212,7 @@ func _build_visual() -> void:
 	_rank_bar.position = Vector2(0.0, -62.0)
 	add_child(_rank_bar)
 	_update_rank_bar()
+	## Veterancy chevrons above the rank bar (one per fortification rank).
+	_rank_chevrons = RankChevronsScript.new()
+	_rank_chevrons.position = Vector2(0.0, -70.0)
+	add_child(_rank_chevrons)

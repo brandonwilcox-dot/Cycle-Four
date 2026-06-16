@@ -172,6 +172,15 @@ func mark_tower_placed(col: int, row: int) -> bool:
 		return true
 	return false
 
+## Reverts a sold tower's cell. If the tower had blocked a PATH cell (now OBSTACLE),
+## restore it to PATH and rebuild the enemy graph. Returns true if the layout changed
+## (caller should emit EventBus.path_changed so in-flight units reroute).
+func unmark_tower(col: int, row: int) -> bool:
+	if get_cell(col, row) == Cell.OBSTACLE:
+		set_cell(col, row, Cell.PATH)   ## triggers _rebuild_astar + queue_redraw
+		return true
+	return false
+
 ## Returns world-space waypoints from from_cell to the nearest accessible CLAIMED cell.
 ## "Accessible" means the CLAIMED cell has at least one orthogonally adjacent traversable
 ## (PATH/SPAWN/BASE) cell. The path navigates via AStar to that adjacent cell, then

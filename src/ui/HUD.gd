@@ -15,7 +15,10 @@ extends Control
 
 enum HudDepth { GLANCE, TACTICAL, ACTIVE }
 
+const MinimapScript = preload("res://src/ui/Minimap.gd")
+
 var _depth : HudDepth = HudDepth.GLANCE
+var _minimap : Control = null
 
 ## ── Resource cluster ────────────────────────────────────────────────────────
 @onready var faction_label      : Label         = $ResourceCluster/VBox/FactionRow/FactionLabel
@@ -86,9 +89,14 @@ func _ready() -> void:
 	research_btn.pressed.connect(_on_research_pressed)
 	EventBus.research_stage_purchased.connect(_on_research_stage_purchased)
 	EventBus.offline_catch_up.connect(_on_offline_catch_up)
+	EventBus.wave_called_early.connect(_on_wave_called_early)
 	place_tower_btn.disabled    = true   ## Enabled once faction is chosen
 	place_building_btn.disabled = true
 	start_wave_btn.disabled     = false
+	## Tactical minimap, top-left under the resource cluster. Self-updating; reads MapGrid.
+	_minimap = MinimapScript.new()
+	_minimap.position = Vector2(8.0, 172.0)
+	add_child(_minimap)
 
 # -- Resource cluster handlers ------------------------------------------------
 
@@ -414,6 +422,13 @@ func _depth_label(d: HudDepth) -> String:
 	return "unknown"
 
 # -- Offline catch-up --------------------------------------------------------
+
+## Reward for calling the next wave early (pressed Begin during the grace window).
+func _on_wave_called_early() -> void:
+	var primary : String = FactionManager.get_primary_resource()
+	var bonus   : float  = 10.0 + float(GameState.wave_number) * 2.0
+	EconomyManager.add_resource(primary, bonus)
+	_push_notification("Called early! +%d %s bonus." % [int(bonus), primary], Color(0.55, 0.75, 1.0))
 
 func _on_offline_catch_up(seconds_elapsed: float) -> void:
 	var hours   : int   = int(seconds_elapsed / 3600.0)

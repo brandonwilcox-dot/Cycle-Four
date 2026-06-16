@@ -40,6 +40,10 @@ func begin_waves() -> void:
 	## The _on_wave_ended await will find state != RESULTS and do nothing.
 	if state not in [WaveState.IDLE, WaveState.RESULTS]:
 		return
+	## Pressing Begin during the post-wave grace window (RESULTS) is a deliberate
+	## "call early" — reward the aggression with a small bonus (HUD grants it).
+	if state == WaveState.RESULTS:
+		EventBus.wave_called_early.emit()
 	state = WaveState.COUNTDOWN
 	countdown_timer = WAVE_COUNTDOWN
 

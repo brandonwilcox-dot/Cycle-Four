@@ -20,9 +20,12 @@ const COLOR_DEFEAT    : Color = Color(1.00, 0.30, 0.30)
 const COLOR_AXIS_BAR  : Color = Color(0.90, 0.55, 0.15)
 const COLOR_COMP_TEXT : Color = Color(0.75, 0.75, 0.75)
 
+const COLOR_PREVIEW   : Color = Color(0.55, 0.75, 1.00)
+
 ## Largest unit count seen across all axes this wave -- used to scale bar widths.
 var _max_axis_count    : int  = 1
 var _detail_expanded   : bool = false
+var _preview_label     : Label = null   ## "Next: Wave N — Unit ×Count" during standby
 
 func _ready() -> void:
 	EventBus.wave_started.connect(_on_wave_started)
@@ -30,7 +33,14 @@ func _ready() -> void:
 	EventBus.wave_axis_committed.connect(_on_wave_axis_committed)
 	EventBus.wave_composition_committed.connect(_on_wave_composition_committed)
 	EventBus.enemy_count_changed.connect(_on_enemy_count_changed)
+	EventBus.wave_previewed.connect(_on_wave_previewed)
 	expand_btn.pressed.connect(_on_expand_pressed)
+	## Next-wave preview label (built in code; shown only between waves).
+	_preview_label = Label.new()
+	_preview_label.add_theme_font_size_override("font_size", 12)
+	_preview_label.add_theme_color_override("font_color", COLOR_PREVIEW)
+	_preview_label.visible = false
+	$VBox.add_child(_preview_label)
 	_set_status("STANDBY", COLOR_STANDBY)
 	enemy_label.visible        = false
 	composition_detail.visible = false
@@ -41,11 +51,19 @@ func _ready() -> void:
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	wave_label.text            = "Wave %d" % wave_number
 	enemy_label.visible        = true
+	_preview_label.visible     = false   ## wave is live now — hide the standby preview
 	_set_status("INCOMING", COLOR_INCOMING)
 	## Reset expand state each wave so detail starts collapsed.
 	_detail_expanded           = false
 	composition_detail.visible = false
 	expand_btn.text            = "▶"
+
+## Standby intel for the next wave (emitted by WaveSpawner between waves).
+func _on_wave_previewed(wave_number: int, unit_name: String, count: int) -> void:
+	if _preview_label == null:
+		return
+	_preview_label.text    = "Next: Wave %d — %s ×%d   [Begin = call early]" % [wave_number, unit_name, count]
+	_preview_label.visible = true
 
 func _on_wave_ended(_wave_number: int, result: String) -> void:
 	enemy_label.visible        = false

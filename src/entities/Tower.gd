@@ -6,6 +6,13 @@ extends Node2D
 
 const TowerDataClass    = preload("res://src/entities/TowerData.gd")
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
+const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
+
+## Targeting priority the player can cycle from the InspectionPanel (TD staple).
+## Order must match TARGET_MODE_NAMES.
+enum TargetMode { CLOSEST, FIRST, LAST, STRONGEST }
+const TARGET_MODE_NAMES : Array = ["Closest", "First", "Last", "Strongest"]
+var target_mode : int = TargetMode.CLOSEST
 
 ## Phase 9 progression constants. Step-function scaling per the handoff §8.1.
 const XP_BASE_THRESHOLD   : float = 50.0   ## XP needed for level 1 → 2
@@ -30,6 +37,7 @@ var xp                 : float = 0.0
 var xp_to_next         : float = XP_BASE_THRESHOLD
 var _damage_multiplier : float = 1.0
 var _xp_bar            : Node2D = null   ## ProgressionBar instance
+var _chevrons          : Node2D = null   ## RankChevrons instance
 var _map_grid          : Node   = null   ## resolved lazily from the "map_grid" group
 
 ## Called by Main before adding to scene tree.
@@ -63,20 +71,53 @@ func upgrade(next_data: Resource) -> void:
 ## -- Combat --
 
 func _try_attack() -> void:
-	var nearest: Node = null
-	var nearest_dist: float = data.range
+	var target : Node = _select_target()
+	if target != null and target.has_method("take_damage"):
+		var effective_damage : float = data.damage * _damage_multiplier
+		var killed : bool = target.take_damage(effective_damage)
+		if killed:
+			_award_xp_for_kill(target)
+
+## Picks the in-range enemy that best matches the current targeting mode:
+## Closest (to tower), First (nearest the base = furthest along), Last (least progress),
+## Strongest (highest current HP). Single pass; higher score wins.
+func _select_target() -> Node:
+	var best       : Node  = null
+	var best_score : float = 0.0
+	var have       : bool  = false
+	var base_pos   : Vector2 = _base_pos()
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		var dist: float = global_position.distance_to(unit.global_position)
-		if dist < nearest_dist:
-			nearest_dist = dist
-			nearest = unit
-	if nearest != null and nearest.has_method("take_damage"):
-		var effective_damage : float = data.damage * _damage_multiplier
-		var killed : bool = nearest.take_damage(effective_damage)
-		if killed:
-			_award_xp_for_kill(nearest)
+		var d : float = global_position.distance_to(unit.global_position)
+		if d > data.range:
+			continue
+		var score : float
+		match target_mode:
+			TargetMode.STRONGEST:
+				score = float(unit.get("_current_health")) if unit.get("_current_health") != null else 0.0
+			TargetMode.FIRST:
+				score = -base_pos.distance_to(unit.global_position)   ## nearest the base
+			TargetMode.LAST:
+				score = base_pos.distance_to(unit.global_position)    ## farthest from base
+			_:  ## CLOSEST
+				score = -d
+		if not have or score > best_score:
+			best       = unit
+			best_score = score
+			have       = true
+	return best
+
+func _base_pos() -> Vector2:
+	var b : Node = get_tree().get_first_node_in_group("base")
+	return (b as Node2D).global_position if b is Node2D else global_position
+
+## Cycles to the next targeting mode (called by the InspectionPanel button).
+func cycle_target_mode() -> void:
+	target_mode = (target_mode + 1) % TARGET_MODE_NAMES.size()
+
+func target_mode_name() -> String:
+	return TARGET_MODE_NAMES[target_mode]
 
 ## Phase 9: XP attribution. Award XP proportional to the killed unit's max health
 ## (proxy for its value). On crossing xp_to_next, level up — applies a multiplicative
@@ -105,6 +146,8 @@ func _level_up() -> void:
 	_damage_multiplier = pow(1.0 + DAMAGE_PER_LEVEL, float(level - 1))
 	xp_to_next = XP_BASE_THRESHOLD * pow(float(level), XP_LEVEL_EXPONENT)
 	EventBus.tower_leveled_up.emit(self, level)
+	if _chevrons != null:
+		_chevrons.call("set_rank", level - 1)
 	_apply_sight()   ## leveling widens the tower's sight/sensor sphere
 
 ## Resolves and caches the MapGrid from its group.
@@ -168,3 +211,8 @@ func _build_visual() -> void:
 	_xp_bar.position = Vector2(0.0, -half - 10.0)
 	add_child(_xp_bar)
 	_update_xp_bar()
+	## Veterancy chevrons above the XP bar (one per level earned beyond the first).
+	_chevrons = RankChevronsScript.new()
+	_chevrons.position = Vector2(0.0, -half - 16.0)
+	add_child(_chevrons)
+	_chevrons.call("set_rank", level - 1)

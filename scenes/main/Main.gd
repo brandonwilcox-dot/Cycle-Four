@@ -13,6 +13,9 @@ const GRID_SIZE             : int = 64
 const STRUCTURE_SIGHT_RADIUS : int = 3
 const STRUCTURE_SENSOR_EXTRA : int = 2
 
+## Fraction of a structure's current-tier cost refunded when sold.
+const SELL_REFUND_FRACTION : float = 0.5
+
 const WASH_FADE_IN  : float = 0.4
 const WASH_HOLD     : float = 0.3
 const WASH_FADE_OUT : float = 0.4
@@ -61,6 +64,7 @@ func _ready() -> void:
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
+	EventBus.panel_sell_requested.connect(_on_panel_sell_requested)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
 	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
@@ -252,9 +256,9 @@ func _place_tower(cell: Vector2i) -> void:
 	_occupied_cells[cell] = tower
 	_apply_structure_influence(cell)
 	EventBus.tower_placed.emit(_pending_tower, cell)
-	## Stay in placement mode while the player can still afford another tower.
-	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): _pending_tower.primary_cost}):
-		_cancel_placement()
+	## Single-shot placement: exit placement mode after each tower so the player can
+	## immediately click a tower to inspect/sell/retarget. Re-press Place Tower to add more.
+	_cancel_placement()
 
 func _cancel_placement() -> void:
 	_placement_mode = false
@@ -339,9 +343,8 @@ func _place_building(cell: Vector2i) -> void:
 	_building_cells[cell] = building
 	_apply_structure_influence(cell)
 	EventBus.building_placed.emit(_pending_building, cell)
-	## Stay in build mode while the player can still afford another building.
-	if not EconomyManager.can_afford({FactionManager.get_primary_resource(): float(_pending_building.get("primary_cost"))}):
-		_cancel_build()
+	## Single-shot placement (matches towers). Re-press Place Building to add more.
+	_cancel_build()
 
 func _cancel_build() -> void:
 	_build_mode       = false
@@ -395,6 +398,53 @@ func _on_panel_upgrade_requested() -> void:
 		return
 	_try_upgrade_tower(_inspected_cell)
 	_inspected_cell = Vector2i(-1, -1)
+
+## -- Sell / refund --
+
+func _on_panel_sell_requested() -> void:
+	if _inspected_cell == Vector2i(-1, -1):
+		return
+	if _occupied_cells.has(_inspected_cell):
+		_sell_tower(_inspected_cell)
+	elif _building_cells.has(_inspected_cell):
+		_sell_building(_inspected_cell)
+	_inspected_cell = Vector2i(-1, -1)
+	hud.close_inspection()
+
+func _sell_tower(cell: Vector2i) -> void:
+	var tower = _occupied_cells.get(cell)
+	if tower == null or not is_instance_valid(tower):
+		_occupied_cells.erase(cell)
+		return
+	var d = tower.get("data")
+	var refund : float = floorf(float(d.get("primary_cost")) * SELL_REFUND_FRACTION) if d != null else 0.0
+	EconomyManager.add_resource(FactionManager.get_primary_resource(), refund)
+	## Restore a path-blocking tower's cell so enemies can route through again.
+	var route_changed : bool = bool(_map_grid.call("unmark_tower", cell.x, cell.y))
+	tower.queue_free()
+	_occupied_cells.erase(cell)
+	EventBus.notification_pushed.emit(
+		"Tower sold — refunded %d %s." % [int(refund), FactionManager.get_primary_resource()], "positive"
+	)
+	if route_changed:
+		EventBus.path_changed.emit()
+
+func _sell_building(cell: Vector2i) -> void:
+	var building = _building_cells.get(cell)
+	if building == null or not is_instance_valid(building):
+		_building_cells.erase(cell)
+		return
+	var d = building.get("data")
+	var refund : float = floorf(float(d.get("primary_cost")) * SELL_REFUND_FRACTION) if d != null else 0.0
+	EconomyManager.add_resource(FactionManager.get_primary_resource(), refund)
+	if building.has_method("destroy"):
+		building.call("destroy")   ## removes its income contribution + frees the node
+	else:
+		building.queue_free()
+	_building_cells.erase(cell)
+	EventBus.notification_pushed.emit(
+		"Building sold — refunded %d %s." % [int(refund), FactionManager.get_primary_resource()], "positive"
+	)
 
 ## -- Helpers --
 

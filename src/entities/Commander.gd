@@ -55,6 +55,7 @@ const LOS_RING_COLOR        : Color = Color(1.00, 1.00, 0.80, 0.35)
 const SENSOR_RING_COLOR     : Color = Color(0.40, 0.80, 1.00, 0.18)
 
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
+const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
 
 var _map_grid       : Node      = null   ## duck-typed; resolved in _ready
 var _target_pos     : Vector2   = Vector2.ZERO
@@ -62,6 +63,7 @@ var _moving         : bool      = false
 var _claimed_count  : int       = 0      ## cells claimed so far this session
 var _commander_rank : int       = 0      ## Phase 9 rank derived from _claimed_count
 var _rank_bar       : Node2D    = null   ## ProgressionBar instance
+var _rank_chevrons  : Node2D    = null   ## RankChevrons instance
 var _visual         : ColorRect = null
 var _pip            : ColorRect = null   ## centre indicator
 
@@ -179,6 +181,8 @@ func _claim_around() -> void:
 	_commander_rank = mini(_claimed_count / CELLS_PER_RANK, RANK_CAP)
 	if _commander_rank > prev_rank:
 		_recompute_rank_stats()
+		if _rank_chevrons != null:
+			_rank_chevrons.call("set_rank", _commander_rank)
 	_update_rank_bar()
 
 ## Current line-of-sight radius (cells), growing with veterancy rank up to the cap.
@@ -309,6 +313,10 @@ func _build_visual() -> void:
 	_rank_bar.position = Vector2(0.0, -24.0)
 	add_child(_rank_bar)
 	_update_rank_bar()
+	## Veterancy chevrons above the rank bar.
+	_rank_chevrons = RankChevronsScript.new()
+	_rank_chevrons.position = Vector2(0.0, -30.0)
+	add_child(_rank_chevrons)
 
 func _update_rank_bar() -> void:
 	if _rank_bar == null:

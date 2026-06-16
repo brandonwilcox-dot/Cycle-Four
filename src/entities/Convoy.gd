@@ -15,6 +15,7 @@ class_name Convoy
 extends Node2D
 
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
+const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
 
 const CONVOY_BASE_SPEED    : float = 90.0    ## px/s base, scales with rank
 const SPEED_PER_RANK       : float = 0.05    ## +5% per rank, matches Commander
@@ -62,6 +63,7 @@ var _current_speed   : float = CONVOY_BASE_SPEED
 
 var _visual     : ColorRect = null
 var _rank_bar   : Node2D    = null   ## ProgressionBar instance
+var _rank_chevrons : Node2D = null   ## RankChevrons instance
 var _convoy_rank : int      = 0
 var _map_grid   : Node      = null   ## cached parent; used for fog visibility lookups
 
@@ -143,6 +145,8 @@ func _on_waypoint_reached() -> void:
 		_convoy_rank = mini(_deliveries_made / DELIVERIES_PER_RANK, CONVOY_MAX_RANK)
 		if _convoy_rank > prev_rank:
 			_current_speed = CONVOY_BASE_SPEED * pow(1.0 + SPEED_PER_RANK, float(_convoy_rank))
+			if _rank_chevrons != null:
+				_rank_chevrons.call("set_rank", _convoy_rank)
 		_update_rank_bar()
 		_pause_timer    = LOAD_UNLOAD_TIME
 		_direction      = -1
@@ -191,6 +195,10 @@ func _build_visual() -> void:
 	_rank_bar.position = Vector2(0.0, -VISUAL_SIZE * 0.5 - 8.0)
 	add_child(_rank_bar)
 	_update_rank_bar()
+	## Veterancy chevrons above the rank bar (one per delivery rank).
+	_rank_chevrons = RankChevronsScript.new()
+	_rank_chevrons.position = Vector2(0.0, -VISUAL_SIZE * 0.5 - 14.0)
+	add_child(_rank_chevrons)
 
 func _set_visual_color(c: Color) -> void:
 	if _visual != null:

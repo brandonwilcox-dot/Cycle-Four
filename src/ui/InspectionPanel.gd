@@ -10,9 +10,23 @@ extends PanelContainer
 @onready var upgrade_btn   : Button = $VBox/UpgradeBtn
 @onready var close_btn     : Button = $VBox/TitleRow/CloseBtn
 
+## The tower currently inspected (null for buildings) — used by the targeting toggle.
+var _tower      : Node   = null
+var _target_btn : Button = null   ## cycles tower targeting priority; hidden for buildings
+var _sell_btn   : Button = null   ## sells tower or building
+
 func _ready() -> void:
 	close_btn.pressed.connect(func() -> void: visible = false)
 	upgrade_btn.pressed.connect(_on_upgrade_pressed)
+	## Build the Target + Sell buttons in code (the .tscn parser is brittle).
+	var vbox : VBoxContainer = $VBox
+	_target_btn = Button.new()
+	_target_btn.pressed.connect(_on_target_pressed)
+	vbox.add_child(_target_btn)
+	_sell_btn = Button.new()
+	_sell_btn.text = "Sell"
+	_sell_btn.pressed.connect(_on_sell_pressed)
+	vbox.add_child(_sell_btn)
 	visible = false
 
 ## Populates the panel with tower data and makes it visible.
@@ -51,7 +65,13 @@ func open_tower(tower: Node, can_afford: bool) -> void:
 		upgrade_btn.visible = true
 		upgrade_btn.disabled = true
 
+	_tower = tower
+	_target_btn.visible = tower.has_method("target_mode_name")
+	if _target_btn.visible:
+		_target_btn.text = "Target: %s" % tower.call("target_mode_name")
+	_sell_btn.visible = true
 	visible = true
+	move_to_front()   ## draw above the minimap and other late-added HUD children
 
 ## Populates the panel with building data and makes it visible.
 func open_building(building: Node) -> void:
@@ -65,8 +85,21 @@ func open_building(building: Node) -> void:
 	title_label.text  = name_str
 	stats_label.text  = "Income: +%.2f %s/s" % [rate, primary]
 	upgrade_btn.visible = false
+	_tower = null
+	_target_btn.visible = false   ## targeting is tower-only
+	_sell_btn.visible = true
 	visible = true
 
 func _on_upgrade_pressed() -> void:
 	EventBus.panel_upgrade_requested.emit()
+	visible = false
+
+## Cycles the inspected tower's targeting priority and refreshes the button label.
+func _on_target_pressed() -> void:
+	if _tower != null and is_instance_valid(_tower) and _tower.has_method("cycle_target_mode"):
+		_tower.call("cycle_target_mode")
+		_target_btn.text = "Target: %s" % _tower.call("target_mode_name")
+
+func _on_sell_pressed() -> void:
+	EventBus.panel_sell_requested.emit()
 	visible = false

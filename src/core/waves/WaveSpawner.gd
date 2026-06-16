@@ -70,6 +70,21 @@ func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
 		_wave_table = load(path)
 	else:
 		_wave_table = _WAVE_TABLE_BUILDER.build(faction_id)
+	_emit_preview(1)   ## show wave-1 intel as soon as the faction is known
+
+## Computes a wave's composition WITHOUT spawning, for the standby preview.
+func _peek_composition(wave_number: int) -> Dictionary:
+	if _wave_table != null:
+		var wd : Dictionary = _wave_table.get_wave(wave_number)
+		var ud = wd.get("unit", null)
+		var nm : String = str(ud.unit_name) if ud != null and ud.get("unit_name") != null else "Unknown"
+		var ct : int = int(wd.get("count", 5 + wave_number * 2))
+		return {"unit_name": nm, "count": ct}
+	return {"unit_name": "Remnant", "count": 4 + wave_number * 2}
+
+func _emit_preview(wave_number: int) -> void:
+	var comp : Dictionary = _peek_composition(wave_number)
+	EventBus.wave_previewed.emit(wave_number, str(comp.unit_name), int(comp.count))
 
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
 	if _wave_table == null:
@@ -106,6 +121,8 @@ func _on_wave_ended(_wave_number: int, _result: String) -> void:
 	if _unit_layer != null:
 		for child in _unit_layer.get_children():
 			child.queue_free()
+	## Preview the next wave during the standby/grace period.
+	_emit_preview(WaveManager.current_wave + 1)
 
 ## -- Spawn logic --
 
