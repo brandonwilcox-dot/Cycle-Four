@@ -145,6 +145,20 @@ Branch `main`. (Optionally branch per pass and PR — current flow commits to `m
 | 2 | Combat identity | medium | M0 | M2 (push) |
 | 3 | Tower mastery | medium | M1, M2 | M3 (push) |
 
+## Vision phases (scheduled — full detail in `vision-roadmap.md`)
+
+The post-MVP direction. Dependency-ordered A→D.
+
+| Phase | Theme | Status |
+|---|---|---|
+| **A** | **Enemy factions in waves** — waves spawn the enemy faction the player is weak against (single enemy per map; engages the combat triangle / FOB doctrine / tower branches). | in progress 2026-06-16 |
+| **B** | **Faction-flavored enemy pathing** — Architect direct routes / Bloom sprawl-and-block / Mesh directional-spread. Bias AStar weights per faction. | queued |
+| **C** | **Garrisons & friendly army** — structures spawn role-based units (Inf/Cav/Armor/Support/Recon); patrols; garrison XP/leveling; resource investment; standing-order raids; offline territory claims. The active-RTS + endless-offline pillar (largest). | queued |
+| **D** | **Micro→galactic zoom / multi-front** — camera + scene architecture for concurrent fronts. | later |
+
+Open design Qs for B/C captured in `vision-roadmap.md` (enemy selection per map, 3-way
+convergence, pathing-bias vs distinct algorithms, unit-role RPS, offline sim tick model).
+
 ## Backlog (not scheduled — pull into a later pass on request)
 
 - Rally points / RTS unit-production polish.

@@ -64,12 +64,18 @@ func _process(delta: float) -> void:
 
 ## -- Signal handlers --
 
-func _on_faction_selected(faction_id: String, _sub_path: String) -> void:
-	var path : String = "res://resources/factions/%s/wave_table.tres" % faction_id
+func _on_faction_selected(player_faction: String, _sub_path: String) -> void:
+	## Phase A: waves are an ENEMY faction (the other factions contest the same
+	## territory), not the player's own units. This engages the damage/armor triangle —
+	## the player faces an armor type their signature damage is weak against and must
+	## adapt via FOB doctrine / tower branches.
+	var enemy : String = _WAVE_TABLE_BUILDER.enemy_of(player_faction)
+	var path : String = "res://resources/factions/%s/wave_table.tres" % enemy
 	if ResourceLoader.exists(path):
 		_wave_table = load(path)
 	else:
-		_wave_table = _WAVE_TABLE_BUILDER.build(faction_id)
+		_wave_table = _WAVE_TABLE_BUILDER.build(enemy)
+	EventBus.notification_pushed.emit("Hostile faction on this front: %s." % enemy.capitalize(), "alert")
 	_emit_preview(1)   ## show wave-1 intel as soon as the faction is known
 
 ## Computes a wave's composition WITHOUT spawning, for the standby preview.

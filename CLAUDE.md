@@ -57,6 +57,40 @@ window-focus chaos made automated computer-use playtests unreliable.
 
 ---
 
+## Phase A — Enemy factions in waves — 2026-06-16 (compiles clean)
+
+Waves now spawn an **enemy faction**, not the player's own units — the combat triangle
+(and FOB doctrine / tower branches) is finally live. `WaveTableBuilder.enemy_of(player)`
+returns the faction the player is WEAK against (Architect→Mesh, Mesh→Bloom,
+Bloom→Architect), so the player must adapt to win. `WaveSpawner._on_faction_selected`
+builds the wave table from that enemy and pushes a "Hostile faction on this front: X"
+notification. Single enemy per run (vision: most maps = one enemy; alternating + 3-way
+convergence are later enhancements, see vision-roadmap.md). B (faction pathing) and C
+(garrisons/army) are queued in improvement-plan.md.
+
+NOTE: faction_selected also fires during the Academy pre-seed (architects), so the
+"hostile faction" toast may flash in the chamber — harmless, re-fires correctly on the
+real faction commit. Flip the default enemy in `WaveTableBuilder._DEFAULT_ENEMY` if the
+weak-matchup start feels too punishing.
+
+---
+
+## Vision roadmap + veterancy condense — 2026-06-16 (compiles clean)
+
+- **Veterancy icons condense.** `RankChevrons.gd` rewritten: every 3 ranks collapse
+  into a filled "star" diamond pip (gold → cyan past 3 stars), remainder shown as small
+  chevrons. Rank 9 = 3 stars instead of 9 triangles. Used by Commander / Tower / Base /
+  Convoy. Q ability stays charge-gated (design decision).
+- **`planning/vision-roadmap.md`** captures the post-MVP direction: (1) enemies = the
+  other two factions converging on shared territory, (2) faction-flavored enemy pathing
+  (Architect direct / Bloom sprawl / Mesh directional-spread), (3) garrisons that spawn a
+  role-based friendly army (Inf/Cav/Armor/Support/Recon) with patrols, garrison leveling,
+  standing-order raids, and offline territory claims, (4) micro→galactic zoom / multi-front.
+  Proposed phasing A→D in that doc; **Phase A (enemy factions in waves)** is the
+  foundational unlock that makes the combat triangle live.
+
+---
+
 ## Controls overhaul + FOB doctrine + hit box — 2026-06-16 (compiles clean)
 
 1. **RTS commander controls (centralized in Main).** The Commander no longer moves on

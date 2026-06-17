@@ -60,6 +60,21 @@ const _COMMANDERS : Dictionary = {
 	},
 }
 
+## Phase A: the default single enemy faction for a run — the faction the player's
+## signature damage is WEAK against, so the combat triangle (and FOB doctrine / tower
+## branches) is meaningful and the player must adapt to win. Mapping follows the triangle:
+## Architect Kinetic → Mesh (Synthetic), Mesh Energy → Bloom (Organic),
+## Bloom Corrosive → Architect (Plated). Vision: most maps have ONE enemy faction;
+## alternating enemies and 3-way convergence are later enhancements (see vision-roadmap.md).
+const _DEFAULT_ENEMY : Dictionary = {
+	"architects": "mesh",
+	"mesh":       "bloom",
+	"bloom":      "architects",
+}
+
+static func enemy_of(player_faction: String) -> String:
+	return str(_DEFAULT_ENEMY.get(player_faction, "bloom"))
+
 ## Builds and returns a WaveTable for the given faction.
 ## Returns null if the faction is unknown or unit paths are missing.
 static func build(faction_id: String) -> WaveTable:
