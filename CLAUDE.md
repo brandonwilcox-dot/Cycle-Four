@@ -91,6 +91,35 @@ weak-matchup start feels too punishing.
 
 ---
 
+## Fix — Commander couldn't be selected (lingering Academy ate left-clicks) — 2026-06-16 (verified live)
+
+**Symptom (user):** "Unable to move the commander… can't get it selected… selection box
+might be too small." Couldn't select even when zoomed all the way in/out.
+
+**Root cause (found via live diagnostics over Godot MCP + computer-use):** the Academy
+(`$UILayer/Academy`, a `Node2D`) was only **hidden + process-disabled** on entering the game
+world, never freed. `hide()` on a Node2D does **not** hide its child **CanvasLayer** nodes
+(`TextLayer`, `SortingLayer` with their Buttons). Those overlays stayed visible and
+interactive. A Godot `Button` **consumes left-clicks but lets right-clicks fall through to
+`_unhandled_input`** — which is exactly why **right-click move worked but left-click select
+never reached `Main._handle_select_click`** (proved with temp `push_warning` probes: F1 key and
+RMB reached Main, LMB never did). This affected the **real Academy-completion path too**, not
+just the F1 dev-skip — both route through `_start_game_world`.
+
+**Fixes (`Main._start_game_world`, `Commander.gd`):**
+1. `_start_game_world` now **`queue_free()`s the whole Academy subtree** (guarded by
+   `is_instance_valid`), killing the CanvasLayer overlays and the CadetAvatar's input handler.
+   Covers normal-completion, F1-skip, and save-restore entry paths.
+2. Selection radius was genuinely too tight: a dead-center click measured **104 world-units**
+   from the Commander vs a **93-unit** radius. Bumped `COMMANDER_SELECT_SCREEN_PX` 38 → **58**
+   (~140 world-units / ~2.2 cells) and the visible `SELECT_RING_RADIUS` 32 → **44** for a
+   clearer "selected" indicator.
+
+**Verified live:** click empty ground → deselects; click Commander → selects (ring shows);
+right-click → moves. Zero new errors.
+
+---
+
 ## Controls overhaul + FOB doctrine + hit box — 2026-06-16 (compiles clean)
 
 1. **RTS commander controls (centralized in Main).** The Commander no longer moves on

@@ -59,7 +59,7 @@ const SENSOR_RING_COLOR     : Color = Color(0.40, 0.80, 1.00, 0.18)
 ## RTS selection + move-order visuals (right-click to move, shift to chain).
 const SELECT_RING_COLOR  : Color = Color(0.40, 1.00, 0.55, 0.90)
 const MOVE_PATH_COLOR    : Color = Color(0.55, 0.85, 1.00, 0.85)
-const SELECT_RING_RADIUS : float = 22.0
+const SELECT_RING_RADIUS : float = 44.0
 
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
 const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
@@ -280,9 +280,12 @@ func _draw() -> void:
 	var sensor_r : float = (_sensor_radius() + 0.5) * CELL_SIZE_PX
 	draw_arc(Vector2.ZERO, sensor_r, 0.0, TAU, 64, SENSOR_RING_COLOR, 1.5, true)
 	draw_arc(Vector2.ZERO, los_r,    0.0, TAU, 32, LOS_RING_COLOR,    2.0, true)
-	## Selection ring + queued move path (shown only while selected).
+	## Selection ring + queued move path (shown only while selected). A faint outer halo
+	## + a thick bright ring make the selected state obvious even at the zoomed-out default.
 	if _selected:
-		draw_arc(Vector2.ZERO, SELECT_RING_RADIUS, 0.0, TAU, 28, SELECT_RING_COLOR, 2.0, true)
+		var halo : Color = Color(SELECT_RING_COLOR.r, SELECT_RING_COLOR.g, SELECT_RING_COLOR.b, 0.30)
+		draw_arc(Vector2.ZERO, SELECT_RING_RADIUS + 7.0, 0.0, TAU, 40, halo, 2.0, true)
+		draw_arc(Vector2.ZERO, SELECT_RING_RADIUS, 0.0, TAU, 40, SELECT_RING_COLOR, 4.0, true)
 		if not _move_queue.is_empty():
 			var pts : PackedVector2Array = PackedVector2Array()
 			pts.append(Vector2.ZERO)

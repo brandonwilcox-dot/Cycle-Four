@@ -7,10 +7,13 @@ const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tsc
 const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.tscn")
 const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
 const GRID_SIZE             : int = 64
-## Click within this many px of a structure's centre selects it (generous hit box —
-## no precision required). The Commander's own select radius is tighter.
-const STRUCTURE_HIT_RADIUS    : float = 40.0
-const COMMANDER_SELECT_RADIUS : float = 26.0
+## Hit radii in SCREEN pixels (converted to world via camera zoom) so selection stays
+## forgiving at any zoom — generous when zoomed out, precise when zoomed in.
+const STRUCTURE_HIT_SCREEN_PX    : float = 30.0
+## Generous so clicking near (not pixel-perfect on) the Commander still selects it.
+## At default zoom this is ~140 world-units (~2.2 cells) — see the user feedback that
+## the old 38px (~93 world) hit box felt too small to click reliably.
+const COMMANDER_SELECT_SCREEN_PX : float = 58.0
 const FOB_DOCTRINE_COST       : float = 80.0   ## primary-resource cost to set/switch an FOB doctrine
 
 ## Sight/sensor sphere every placed structure (tower, building) projects. Structures
@@ -81,11 +84,17 @@ func _on_faction_confirmed() -> void:
 	_start_game_world()
 
 func _start_game_world() -> void:
-	faction_select.hide()
-	## Fully retire the Academy: stop its processing/input (cadet included) and clear
-	## any scenario enemies it spawned, so nothing leaks into the live game. Covers the
+	## Fully retire the Academy: free the whole subtree so nothing leaks into the live
+	## game. hide() on the Academy *Node2D* does NOT hide its CanvasLayer children
+	## (TextLayer / SortingLayer with their Buttons) — those stay visible and keep
+	## intercepting left-clicks over the map (a Button consumes left-clicks but lets
+	## right-clicks fall through, which is exactly why move worked but select didn't).
+	## The CadetAvatar's _unhandled_input goes away with it too. Freeing covers the
 	## normal-completion, F1-skip, and save-restore entry paths.
-	faction_select.process_mode = Node.PROCESS_MODE_DISABLED
+	if is_instance_valid(faction_select):
+		faction_select.hide()
+		faction_select.process_mode = Node.PROCESS_MODE_DISABLED
+		faction_select.queue_free()
 	EventBus.academy_clear_units.emit()
 	hud.show()
 	## Pre-activate every spawn point so waves work immediately on first launch.
@@ -93,8 +102,12 @@ func _start_game_world() -> void:
 	## session always has enemies regardless of where the player wandered during
 	## the Academy scenarios.
 	_activate_all_spawns()
+	## Start with the Commander selected so the move controls are immediately usable.
+	var cmd : Node = _commander()
+	if cmd != null:
+		cmd.call("set_selected", true)
 	EventBus.notification_pushed.emit(
-		"Place towers on open ground, then press Begin Waves.", "info"
+		"Commander selected — right-click to move it. Place towers, then Begin Waves.", "info"
 	)
 
 ## Transitions all DORMANT spawn points to ACTIVE. Safe to call on already-active
@@ -430,14 +443,25 @@ func _on_fob_doctrine_requested(doctrine_id: String) -> void:
 func _commander() -> Node:
 	return get_node_or_null("WorldMap/CommanderLayer/Commander")
 
-## Left-click: select the Commander (tight radius), else inspect a structure under the
-## click (generous radius), else clear selection + close the panel.
+## Converts a screen-pixel radius to world units using the current camera zoom.
+func _world_radius(screen_px: float) -> float:
+	var cam : Camera2D = get_node_or_null("WorldMap/Camera") as Camera2D
+	var zoom : float = cam.zoom.x if cam != null else 1.0
+	return screen_px / maxf(zoom, 0.01)
+
+## Left-click: select the Commander (generous radius), else inspect a structure under the
+## click, else clear selection + close the panel.
 func _handle_select_click(screen_pos: Vector2) -> void:
 	var world : Vector2 = _screen_to_world(screen_pos)
 	var cmd : Node = _commander()
-	if cmd != null and (cmd as Node2D).global_position.distance_to(world) <= COMMANDER_SELECT_RADIUS:
+	if cmd != null and (cmd as Node2D).global_position.distance_to(world) <= _world_radius(COMMANDER_SELECT_SCREEN_PX):
+		var was_selected : bool = bool(cmd.call("is_selected"))
 		cmd.call("set_selected", true)
 		hud.close_inspection()
+		if not was_selected:
+			EventBus.notification_pushed.emit(
+				"Commander selected — right-click to move (Shift-click to chain).", "info"
+			)
 		return
 	var hit : Dictionary = _structure_at_world(world)
 	match str(hit.get("kind", "")):
@@ -460,7 +484,7 @@ func _handle_move_click(screen_pos: Vector2, append: bool) -> void:
 func _structure_at_world(world: Vector2) -> Dictionary:
 	var best_kind : String  = ""
 	var best_cell : Vector2i = Vector2i(-9999, -9999)
-	var best_dist : float   = STRUCTURE_HIT_RADIUS
+	var best_dist : float   = _world_radius(STRUCTURE_HIT_SCREEN_PX)
 	for cell in _occupied_cells:
 		var dt : float = world.distance_to(_cell_to_world(cell))
 		if dt <= best_dist:
