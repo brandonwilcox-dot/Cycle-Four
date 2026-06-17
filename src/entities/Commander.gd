@@ -56,12 +56,17 @@ const CELL_SIZE_PX          : float = 64.0
 const LOS_RING_COLOR        : Color = Color(1.00, 1.00, 0.80, 0.35)
 const SENSOR_RING_COLOR     : Color = Color(0.40, 0.80, 1.00, 0.18)
 
+## RTS selection + move-order visuals (right-click to move, shift to chain).
+const SELECT_RING_COLOR  : Color = Color(0.40, 1.00, 0.55, 0.90)
+const MOVE_PATH_COLOR    : Color = Color(0.55, 0.85, 1.00, 0.85)
+const SELECT_RING_RADIUS : float = 22.0
+
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
 const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
 
 var _map_grid       : Node      = null   ## duck-typed; resolved in _ready
-var _target_pos     : Vector2   = Vector2.ZERO
-var _moving         : bool      = false
+var _move_queue     : Array[Vector2] = []   ## queued move waypoints (world space); RTS chaining
+var _selected       : bool      = false     ## true when the player has the Commander selected
 var _claimed_count  : int       = 0      ## cells claimed so far this session
 var _commander_rank : int       = 0      ## Phase 9 rank derived from _claimed_count
 var _rank_bar       : Node2D    = null   ## ProgressionBar instance
@@ -76,6 +81,7 @@ var _sensed_cell_set    : Dictionary = {}
 var _current_move_speed : float = MOVE_BASE_SPEED
 var _damage_multiplier  : float = 1.0
 var _primary_timer      : float = 0.0
+var _cannon_ring_t      : float = 0.0   ## seconds remaining to draw the Lance/cannon AOE ring
 
 ## Untyped: AbilityController class_name isn't registered when Commander.gd parses.
 ## Same pattern as ConvoyManager/Convoy. Duck-typed access is safe at runtime.
@@ -83,11 +89,11 @@ var _ability_controller = null
 
 func _ready() -> void:
 	add_to_group("commander")
+	add_to_group("detectors")   ## the Commander is a mobile stealth detector (line of sight)
 	## Path: WorldMap/CommanderLayer/Commander -> ../../MapGrid
 	_map_grid = get_node_or_null("../../MapGrid")
 	if _map_grid == null:
 		push_error("Commander: could not resolve ../../MapGrid from %s." % get_path())
-	_target_pos = global_position
 	_build_visual()
 	_ability_controller = get_node_or_null("AbilityController")
 	## Claim the Commander's starting sight ring (BASE/PATH cells are skipped inside
@@ -108,14 +114,23 @@ func _process(delta: float) -> void:
 		_primary_timer = interval
 		_try_primary_attack()
 
-	if not _moving:
+	## Fade the Lance/cannon AOE ring (drawn in _draw); keep redrawing while it shows.
+	if _cannon_ring_t > 0.0:
+		_cannon_ring_t -= delta
+		queue_redraw()
+
+	## Queue-driven movement: walk toward the first waypoint, pop it on arrival, and
+	## continue down any chained waypoints (shift-queued). Idle when the queue is empty.
+	if _move_queue.is_empty():
 		return
-	var to_target : Vector2 = _target_pos - global_position
+	var target    : Vector2 = _move_queue[0]
+	var to_target : Vector2 = target - global_position
 	var dist      : float   = to_target.length()
 	var step      : float   = _current_move_speed * delta
 	if dist <= step:
-		global_position = _target_pos
-		_moving         = false
+		global_position = target
+		_move_queue.pop_front()
+		queue_redraw()   ## the drawn path just got shorter
 	else:
 		global_position += to_target.normalized() * step
 	_claim_around()
@@ -123,42 +138,37 @@ func _process(delta: float) -> void:
 
 ## -- Input --
 
+## The Commander no longer moves on left-click. Selection (left-click) and move orders
+## (right-click, shift to chain) are routed by Main. This handler only delivers a
+## ground-targeted ability cast (e.g. Suppression Field) to the AbilityController.
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton):
 		return
 	var mbe := event as InputEventMouseButton
 	if not mbe.pressed or mbe.button_index != MOUSE_BUTTON_LEFT:
 		return
-	## Yield to Main during tower/building placement. Main is the root, so it runs
-	## LAST in _unhandled_input; if the Commander consumed (moved) here, the placement
-	## click would never reach Main. Returning without consuming lets it through.
-	if GameState.placement_active:
-		return
-	## Yield clicks that land on a tower/building so Main opens its inspection panel
-	## instead of the Commander moving onto the structure.
-	var main_ctrl : Node = get_tree().get_first_node_in_group("main_controller")
-	if main_ctrl != null and main_ctrl.has_method("structure_at_screen"):
-		if main_ctrl.call("structure_at_screen", mbe.position):
-			return
-	## During the Academy phase no faction has been selected yet — leave clicks
-	## for CadetAvatar to handle. Commander movement resumes after selection.
-	if GameState.current_faction.is_empty():
-		return
-	## Respect HUD dead zones: top bar (0-48 px) and bottom bar (last 48 px).
-	var vp_h : float = get_viewport().get_visible_rect().size.y
-	if mbe.position.y < 48.0 or mbe.position.y > vp_h - 48.0:
-		return
-	## Ground-targeting mode: deliver click to AbilityController instead of moving.
 	if _ability_controller != null and _ability_controller.targeting_active:
 		_ability_controller.deliver_target(get_global_mouse_position())
 		get_viewport().set_input_as_handled()
-		return
-	_move_to(get_global_mouse_position())
-	get_viewport().set_input_as_handled()
 
-func _move_to(world_pos: Vector2) -> void:
-	_target_pos = world_pos
-	_moving     = true
+## -- Selection + move orders (called by Main) --
+
+func set_selected(value: bool) -> void:
+	if _selected == value:
+		return
+	_selected = value
+	queue_redraw()
+
+func is_selected() -> bool:
+	return _selected
+
+## Issues a move order to world_pos. append=true (shift) chains it after existing
+## waypoints; append=false replaces the queue with a single destination.
+func move_command(world_pos: Vector2, append: bool) -> void:
+	if not append:
+		_move_queue.clear()
+	_move_queue.append(world_pos)
+	queue_redraw()
 
 ## -- Territory claiming --
 
@@ -270,6 +280,21 @@ func _draw() -> void:
 	var sensor_r : float = (_sensor_radius() + 0.5) * CELL_SIZE_PX
 	draw_arc(Vector2.ZERO, sensor_r, 0.0, TAU, 64, SENSOR_RING_COLOR, 1.5, true)
 	draw_arc(Vector2.ZERO, los_r,    0.0, TAU, 32, LOS_RING_COLOR,    2.0, true)
+	## Selection ring + queued move path (shown only while selected).
+	if _selected:
+		draw_arc(Vector2.ZERO, SELECT_RING_RADIUS, 0.0, TAU, 28, SELECT_RING_COLOR, 2.0, true)
+		if not _move_queue.is_empty():
+			var pts : PackedVector2Array = PackedVector2Array()
+			pts.append(Vector2.ZERO)
+			for wp in _move_queue:
+				pts.append(wp - global_position)
+			draw_polyline(pts, MOVE_PATH_COLOR, 2.0, true)
+			for wp in _move_queue:
+				draw_circle(wp - global_position, 4.0, MOVE_PATH_COLOR)
+	## Lance / cannon AOE — a circle at attack range, kept inside the sightline boundary.
+	if _cannon_ring_t > 0.0:
+		draw_circle(Vector2.ZERO, ATTACK_RANGE_PX, Color(CANNON_RING_COLOR.r, CANNON_RING_COLOR.g, CANNON_RING_COLOR.b, 0.16))
+		draw_arc(Vector2.ZERO, ATTACK_RANGE_PX, 0.0, TAU, 48, CANNON_RING_COLOR, 2.5, true)
 	if _ability_controller != null and _ability_controller.field_active:
 		var field_local : Vector2 = _ability_controller.field_center - global_position
 		var field_r     : float   = _ability_controller.FIELD_RADIUS_PX
@@ -313,11 +338,14 @@ func _build_visual() -> void:
 	## Phase 9: rank progression bar above the Commander.
 	_rank_bar = ProgressionBarScript.new()
 	_rank_bar.position = Vector2(0.0, -24.0)
+	_rank_bar.z_index = 20
 	add_child(_rank_bar)
 	_update_rank_bar()
-	## Veterancy chevrons above the rank bar.
+	## Veterancy chevrons above the rank bar. High z_index so the moving Commander's
+	## sight/sensor rings (drawn in _draw) never visually swallow them.
 	_rank_chevrons = RankChevronsScript.new()
 	_rank_chevrons.position = Vector2(0.0, -30.0)
+	_rank_chevrons.z_index = 20
 	add_child(_rank_chevrons)
 
 func _update_rank_bar() -> void:
@@ -365,6 +393,10 @@ func _find_nearest_unit_in_range() -> Node2D:
 			best      = unit
 	return best
 
+## Stealth detection (px): the Commander reveals stealth within its line of sight.
+func get_detector_radius() -> float:
+	return float(VISION_RADIUS) * CELL_SIZE_PX
+
 ## Brief yellow Line2D from Commander to target, auto-frees after SHOT_FLASH_DURATION.
 func _spawn_shot_line(target_world: Vector2, col: Color, width: float) -> void:
 	var line := Line2D.new()
@@ -375,12 +407,7 @@ func _spawn_shot_line(target_world: Vector2, col: Color, width: float) -> void:
 	add_child(line)
 	get_tree().create_timer(SHOT_FLASH_DURATION).timeout.connect(line.queue_free)
 
-## Brief orange ring centred on the Commander, marking the cannon AOE.
+## Flashes the Lance/cannon AOE as a circle (drawn in _draw) for a brief moment.
 func _spawn_cannon_ring() -> void:
-	var ring := ColorRect.new()
-	var size : float = ATTACK_RANGE_PX * 2.0
-	ring.size     = Vector2(size, size)
-	ring.position = Vector2(-size * 0.5, -size * 0.5)
-	ring.color    = CANNON_RING_COLOR
-	add_child(ring)
-	get_tree().create_timer(SHOT_FLASH_DURATION * 2.0).timeout.connect(ring.queue_free)
+	_cannon_ring_t = SHOT_FLASH_DURATION * 6.0
+	queue_redraw()

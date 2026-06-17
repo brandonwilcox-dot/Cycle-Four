@@ -176,12 +176,19 @@ func deliver_target(world_pos: Vector2) -> void:
 ## -- Casting --
 
 func _try_cast(slot: int) -> void:
+	## Feedback on every gate so a key press is never a silent no-op.
 	if not _unlocked[slot]:
+		EventBus.notification_pushed.emit("Ability not unlocked yet.", "warning")
 		return
 	if slot == 0:
 		if not lance_charged:
+			var pct : int = int(100.0 * lance_charge / LANCE_CHARGE_MAX)
+			EventBus.notification_pushed.emit(
+				"Lance charging — %d%%. Attack enemies to charge it." % pct, "warning"
+			)
 			return
 	elif _cooldowns[slot] > 0.0:
+		EventBus.notification_pushed.emit("On cooldown — %.1fs." % _cooldowns[slot], "warning")
 		return
 	var ab = _get_ability(slot)
 	if ab == null:
@@ -213,21 +220,19 @@ func _cast_lance() -> void:
 	var dmg_mult : float = _commander.get_damage_multiplier()
 	var ab = _get_ability(0)
 	var base_dmg : float = ab.params.get("damage", 45.0) if ab != null else 45.0
-	var hits     : int   = 0
 	var kills    : int   = 0
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
 		if _commander.global_position.distance_to(unit.global_position) <= ATTACK_RANGE_PX:
 			var died : bool = unit.take_damage(base_dmg * dmg_mult, Combat.faction_damage_type(FactionManager.active_faction))
-			hits += 1
 			if died:
 				kills += 1
 			## Architect: stun non-immune enemies.
 			if FactionManager.active_faction == "architects":
 				unit.apply_stun(1.0)
-	if hits > 0:
-		_commander.call("_spawn_cannon_ring")
+	## Always flash the AOE ring so the player sees the Lance fire, even on a clean miss.
+	_commander.call("_spawn_cannon_ring")
 	## Reset charge; Mesh refunds from kills.
 	lance_charge  = 0.0
 	lance_charged = false

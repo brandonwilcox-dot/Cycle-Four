@@ -7,6 +7,13 @@ extends PanelContainer
 
 const Combat = preload("res://src/combat/Combat.gd")
 
+## FOB doctrine options (RPS upgrade). [faction_id, button label].
+const DOCTRINE_DEFS : Array = [
+	["architects", "Architect — Kinetic + fire rate"],
+	["bloom",      "Bloom — Corrosive + regen"],
+	["mesh",       "Mesh — Energy + detection"],
+]
+
 @onready var title_label   : Label  = $VBox/TitleRow/TitleLabel
 @onready var stats_label   : Label  = $VBox/StatsLabel
 @onready var upgrade_btn   : Button = $VBox/UpgradeBtn
@@ -17,6 +24,7 @@ var _tower         : Node   = null
 var _target_btn    : Button = null   ## cycles tower targeting priority; hidden for buildings
 var _sell_btn      : Button = null   ## sells tower or building
 var _upgrade_b_btn : Button = null   ## second branch (B) upgrade; hidden when no B branch
+var _doctrine_btns : Array[Button] = []   ## FOB doctrine buttons (shown only for the FOB)
 
 func _ready() -> void:
 	close_btn.pressed.connect(func() -> void: visible = false)
@@ -34,7 +42,17 @@ func _ready() -> void:
 	_sell_btn.text = "Sell"
 	_sell_btn.pressed.connect(_on_sell_pressed)
 	vbox.add_child(_sell_btn)
+	## FOB doctrine buttons (RPS upgrade) — hidden unless the FOB is inspected.
+	for d in DOCTRINE_DEFS:
+		var db := Button.new()
+		db.visible = false
+		db.pressed.connect(_on_doctrine_pressed.bind(str(d[0])))
+		vbox.add_child(db)
+		_doctrine_btns.append(db)
 	visible = false
+
+func _on_doctrine_pressed(doctrine_id: String) -> void:
+	EventBus.fob_doctrine_requested.emit(doctrine_id)
 
 ## Populates the panel with tower data and makes it visible.
 ## tower      : the Tower node (duck-typed; reads .data, .level, .xp, .xp_to_next)
@@ -57,8 +75,9 @@ func open_tower(tower: Node, _can_afford: bool) -> void:
 
 	var dtype : String = Combat.damage_type_name(int(d.get("damage_type")) if d.get("damage_type") != null else 0)
 	stats_label.text = (
-		"DMG: %.1f %s  (×%.2f)     RANGE: %.0fpx     SPD: %.1f/s\n" % [dmg, dtype, mul, rng, spd] +
-		"XP: %.0f / %.0f" % [xp_cur, xp_max]
+		"DMG %.1f %s  (×%.2f)\n" % [dmg, dtype, mul] +
+		"RANGE %.0f   ·   SPD %.1f/s\n" % [rng, spd] +
+		"XP %.0f / %.0f" % [xp_cur, xp_max]
 	)
 	## Pass 3 empowerment readout: aura received, territory bonus, aura-provider status.
 	stats_label.text += _empowerment_suffix(tower)
@@ -77,6 +96,8 @@ func open_tower(tower: Node, _can_afford: bool) -> void:
 	if _target_btn.visible:
 		_target_btn.text = "Target: %s" % tower.call("target_mode_name")
 	_sell_btn.visible = true
+	for b in _doctrine_btns:
+		b.visible = false
 	visible = true
 	move_to_front()   ## draw above the minimap and other late-added HUD children
 
@@ -96,7 +117,37 @@ func open_building(building: Node) -> void:
 	_tower = null
 	_target_btn.visible = false   ## targeting is tower-only
 	_sell_btn.visible = true
+	for b in _doctrine_btns:
+		b.visible = false
 	visible = true
+
+## Populates the panel with FOB stats. The FOB can't be upgraded, retargeted, or sold.
+func open_fob(base: Node) -> void:
+	var hp   : float = float(base.get("_current_hp")) if base.get("_current_hp") != null else 0.0
+	var rank : int   = int(base.get("_fortification_rank")) if base.get("_fortification_rank") != null else 0
+	var det  : float = float(base.call("get_detector_radius")) if base.has_method("get_detector_radius") else 0.0
+	var cur : String = str(base.call("get_doctrine")) if base.has_method("get_doctrine") else ""
+	title_label.text = "Forward Operating Base"
+	var doc_line : String = ("Doctrine: %s" % cur.capitalize()) if cur != "" else "Doctrine: none — pick one"
+	stats_label.text = (
+		"HP %d   ·   Fort rank %d\n" % [int(hp), rank] +
+		"Detects stealth within %.0f px\n" % det +
+		doc_line
+	)
+	upgrade_btn.visible    = false
+	_upgrade_b_btn.visible = false
+	_target_btn.visible    = false
+	_sell_btn.visible      = false   ## the FOB can't be sold
+	## Show the three doctrine options; mark the active one.
+	for i in _doctrine_btns.size():
+		var did : String = str(DOCTRINE_DEFS[i][0])
+		var b   : Button = _doctrine_btns[i]
+		b.visible  = true
+		b.text     = ("✓ " + str(DOCTRINE_DEFS[i][1])) if did == cur else str(DOCTRINE_DEFS[i][1])
+		b.disabled = (did == cur)
+	_tower = null
+	visible = true
+	move_to_front()
 
 ## Configures an upgrade button for a branch target (null hides it). Shows the
 ## target tower's name + fresh-build cost, and disables it when unaffordable.
@@ -123,6 +174,8 @@ func _empowerment_suffix(tower: Node) -> String:
 		parts.append("+%d%% territory" % int(round((terr_mult - 1.0) * 100.0)))
 	if tower.has_method("provides_aura") and bool(tower.call("provides_aura")):
 		parts.append("◈ radiates aura")
+	if tower.has_method("provides_detection") and bool(tower.call("provides_detection")):
+		parts.append("◎ detects stealth")
 	return ("\n" + "   ".join(parts)) if not parts.is_empty() else ""
 
 func _on_upgrade_pressed() -> void:

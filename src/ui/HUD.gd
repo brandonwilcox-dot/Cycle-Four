@@ -303,6 +303,11 @@ func open_building_inspection(building: Node) -> void:
 	inspection_panel.open_building(building)
 	_set_depth(HudDepth.TACTICAL)
 
+## Opens the FOB inspection panel (HP / fortification / detection) and enters tactical state.
+func open_fob_inspection(base: Node) -> void:
+	inspection_panel.open_fob(base)
+	_set_depth(HudDepth.TACTICAL)
+
 ## Closes the inspection panel. Returns to glance if no other panel is open.
 func close_inspection() -> void:
 	inspection_panel.visible = false

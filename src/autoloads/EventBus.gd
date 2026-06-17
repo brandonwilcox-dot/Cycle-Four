@@ -110,3 +110,4 @@ signal panel_open_requested(panel_id: String, data: Dictionary)
 signal panel_close_requested(panel_id: String)
 signal panel_upgrade_requested(branch: int)   ## InspectionPanel upgrade btn → Main._try_upgrade_tower (branch 0=A, 1=B)
 signal panel_sell_requested      ## InspectionPanel sell btn → Main sells the inspected cell
+signal fob_doctrine_requested(doctrine_id: String)   ## FOB doctrine button → Main applies the RPS upgrade

@@ -148,7 +148,7 @@ Branch `main`. (Optionally branch per pass and PR — current flow commits to `m
 ## Backlog (not scheduled — pull into a later pass on request)
 
 - Rally points / RTS unit-production polish.
-- Detection counterplay depth (faction-specific stealth, detector units).
+- ✅ Detection counterplay depth — DONE 2026-06-16. Live transient detection: FOB + Commander + detector towers (mesh_t2b Relay Pylon, T3 apexes) reveal stealth only within radius. Replaced the permanent sensed-bit model. (Deferred: detector ring visual, detector buildings, detector-specific stealth resistance.)
 - Accessibility pass (colorblind-safe territory/fog, motion options).
 - Balance retune of `EconomyManager.TERRITORY_RATE_PER_CELL` + sphere radii once the
   above ship (area-claim economy currently grows fast).

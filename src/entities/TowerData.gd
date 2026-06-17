@@ -37,5 +37,9 @@ class_name TowerData
 @export var aura_radius: float = 0.0
 @export var aura_damage_bonus: float = 0.0
 
+## Detection counterplay. A tower with detector_radius > 0 reveals stealth units
+## within this radius (px) while they are inside it — live, not permanent.
+@export var detector_radius: float = 0.0
+
 ## Visual
 @export var color_hint: Color = Color.WHITE

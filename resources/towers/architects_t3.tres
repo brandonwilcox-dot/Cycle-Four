@@ -12,4 +12,5 @@ range = 256.0
 attack_speed = 1.5
 primary_cost = 130.0
 upgrade_to = null
+detector_radius = 240.0
 color_hint = Color(0.60, 0.88, 1.0, 1.0)

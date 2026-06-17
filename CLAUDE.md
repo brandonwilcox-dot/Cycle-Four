@@ -57,6 +57,120 @@ window-focus chaos made automated computer-use playtests unreliable.
 
 ---
 
+## Controls overhaul + FOB doctrine + hit box — 2026-06-16 (compiles clean)
+
+1. **RTS commander controls (centralized in Main).** The Commander no longer moves on
+   left-click. Main owns all world clicks: **LEFT = select** (Commander / tower /
+   building / FOB), **RIGHT = move** the selected Commander, **Shift+RIGHT = chain**
+   waypoints. The Commander draws a **selection ring + queued move path** when selected.
+   `Commander`: `_move_queue` + `set_selected`/`is_selected`/`move_command`; its
+   `_unhandled_input` now only delivers ground-targeted ability casts. This also kills
+   the old Commander-vs-Main click race (source of the inconsistent panel opening). A
+   New Game guard skips world clicks until `academy_completed`.
+2. **Generous hit box.** Structure selection is now distance-based
+   (`_structure_at_world`, `STRUCTURE_HIT_RADIUS=40`) instead of exact-cell — clicking
+   anywhere on/near a tower/building/FOB selects it. Commander select radius is tighter
+   (26px) and takes priority.
+3. **FOB doctrine (RPS upgrade).** Click the FOB → pick one of three faction-aligned
+   doctrines (re-selectable, costs `FOB_DOCTRINE_COST=80` primary). Each sets the FOB
+   turret's damage type in the combat triangle + a playstyle perk:
+   Architect = Kinetic + ×1.6 fire rate; Bloom = Corrosive + 4 HP/s regen; Mesh =
+   Energy + 3-cell detection. `Base._doctrine` + `set_doctrine`/`get_doctrine`/
+   `_turret_damage_type`; `EventBus.fob_doctrine_requested`; `Main._on_fob_doctrine_requested`;
+   doctrine buttons in `InspectionPanel.open_fob`.
+
+---
+
+## Fixes — playtest round 3 — 2026-06-16 (compiles clean)
+
+1. **Tower panel inconsistent / wouldn't reliably open + FOB had no menu** — root
+   issues: (a) the FOB wasn't clickable, so with towers packed around it imprecise
+   clicks hit the menu-less FOB → felt random; (b) the panel auto-sizing was flaky.
+   Fixes: added **FOB inspection** (click FOB → HP / fortification rank / detection
+   radius; not sellable/upgradable) — `Main._open_fob_inspection` + `_fob_cell()` in
+   `structure_at_screen`, `HUD.open_fob_inspection`, `InspectionPanel.open_fob`. Made
+   the InspectionPanel deterministic: fixed 360px width via `custom_minimum_size`,
+   content-height with `grow_vertical=0` (pinned bottom-right, grows up). Now every
+   click on the FOB/tower cluster opens a relevant panel.
+2. **Wave panel off-screen** — the "Next: Wave N … [Begin = call early]" preview is a
+   long single line that overflowed the 216px panel off the right edge. WavePanel now
+   insets further (`offset_right=-12`), widened, and `grow_horizontal=0` so long lines
+   grow left instead of off-screen.
+3. **Q ability AOE invisible** — `_cast_lance` only spawned the ring when it hit a
+   unit (`if hits > 0`); pressing Q with no enemies adjacent fired but showed nothing.
+   Now always flashes the ring on cast.
+
+NOTE: the "panel delayed by a wave" symptom should be resolved by the deterministic
+sizing + clickable FOB; if it recurs, capture exact repro (during/between waves,
+tower position) — likely an input-precision case the FOB click now absorbs.
+
+---
+
+## Fixes — playtest round 2 — 2026-06-16 (compiles clean)
+
+1. **Stealth regression** — the FOB's stealth-detector used `(sight+sensor)*64` and
+   scaled with fortification, ballooning past 1000px so a leveled FOB revealed units
+   at the spawns. Now a fixed `FOB_DETECTOR_RADIUS_CELLS = 6` (384px) bubble — covers
+   the base approach, never reaches map-edge spawns. (`Base.get_detector_radius`.)
+2. **Tower/building panel didn't open** — the `autowrap` Label I'd added to
+   `InspectionPanel` collapsed the `PanelContainer` layout (Godot feedback loop), so
+   the panel rendered as a sliver. Removed autowrap, enlarged to a fixed 360×320 (grows
+   up via `grow_vertical=0`), and split the stats into short lines so nothing overflows.
+3. **Commander rank icon unstable/vanishing during movement** — gave `_rank_bar` and
+   `_rank_chevrons` `z_index = 20` so the moving sight/sensor rings can't visually
+   swallow them. (Tentative — confirm in playtest; if it persists the cause is likely
+   per-frame claim/reveal churn, which we'd throttle.)
+4. **Q ability radius was a square** — `_spawn_cannon_ring` drew a `ColorRect`. Now
+   drawn as a **circle** in `Commander._draw` at `ATTACK_RANGE_PX` (= base sightline),
+   faded over ~0.5s via `_cannon_ring_t`.
+
+---
+
+## Fix — Map framed clear of HUD bars — 2026-06-16 (compiles clean)
+
+Playtest report: enemies entering from the NORTH spawn were hidden under the
+full-width top header bar. Root cause — `CameraController._update_zoom_min` used
+`maxf` (cover: the board fills the whole viewport, so its top row sits under the
+66px header). Fix: the camera now **contains** the board within the band between
+the top header (`HUD_TOP_INSET=72`) and the bottom HUD (`HUD_BOTTOM_INSET=120`),
+centred in that band. The board is narrower than 16:9, so this leaves dark side
+margins (~176px) — intentional framing, and free space for future SupCom-style
+side panels. `_clamp_position` generalized to keep the playable band (not the full
+viewport) within the map; horizontal clamp unchanged. No Camera2D.offset is used,
+so screen↔world math (clicks, placement, zoom-to-cursor) is untouched. Zooming in
+(up to 3×) + panning still work; the default view shows the whole board clear of UI.
+
+---
+
+## Phase 4 — "Detection Counterplay" — 2026-06-16 (backlog; compiles clean)
+
+First backlog item after the scheduled Passes 0–3. Upgrades Pass 2 stealth from
+"permanent-once-swept" to live transient detection. Verified via Godot MCP
+(`Main.tscn`, zero new errors/warnings).
+
+- **Detectors group.** The FOB, the Commander, and any tower with
+  `TowerData.detector_radius > 0` join the `"detectors"` group and expose
+  `get_detector_radius()` (px). FOB = full sensor sphere `(sight+FOB_SENSOR_EXTRA)*64`
+  (grows with fortification); Commander = `VISION_RADIUS*64` (192, line-of-sight);
+  towers = their `detector_radius`. `Tower._refresh_detector_group()` runs in
+  `_ready` and on upgrade.
+- **Live stealth.** `Unit` now recomputes detection on a 0.15s throttle
+  (`_within_active_detector()` scans the detectors group). Stealth units are visible
+  (`_update_fog_visibility`) and targetable (`is_detectable`) only while inside a
+  detector's radius — replacing the Pass 2 `sensed`-bit read. Stealth units get a
+  cloaked cyan-translucent tint when revealed. (The MapData `sensed` bit + the
+  `region_sensed` event remain for objective telegraphy; the bit is now vestigial
+  for stealth.)
+- **Content.** Detector towers: `mesh_t2b` Relay Pylon (256px, on top of its aura),
+  and the three T3 apexes (240px). So every faction has a buildable detector, plus
+  baseline FOB/Commander coverage. InspectionPanel shows "◎ detects stealth".
+
+Deferred: detector-radius ring visual; detector buildings; stealth that resists
+specific detectors. Backlog now: rally points/RTS unit production, accessibility
+pass (core/22 §10), balance retune (territory rate + sphere radii).
+
+---
+
 ## Pass 3 — "Tower Mastery" — 2026-06-16  ·  Milestone M3 (compiles clean)
 
 Branching upgrades, aura/support towers, territory empowerment, max-level

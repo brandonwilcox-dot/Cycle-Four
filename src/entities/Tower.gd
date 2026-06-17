@@ -59,6 +59,7 @@ func _ready() -> void:
 		push_error("Tower: no TowerData -- call setup() before adding to tree.")
 		return
 	_build_visual()
+	_refresh_detector_group()
 
 func _process(delta: float) -> void:
 	if data == null:
@@ -81,6 +82,7 @@ func upgrade(next_data: Resource) -> void:
 	for child in get_children():
 		child.queue_free()
 	_build_visual()
+	_refresh_detector_group()   ## the new tier may gain/lose stealth detection
 
 ## -- Combat --
 
@@ -221,6 +223,21 @@ func _recompute_buffs() -> void:
 			best_bonus = maxf(best_bonus, float(other.call("get_aura_bonus")))
 	_aura_recv_mult = 1.0 + best_bonus
 	_territory_mult = 1.0 + (TERRITORY_DAMAGE_BONUS if _on_claimed_ground() else 0.0)
+
+## Stealth detection: radius (px) within which this tower reveals stealth units.
+func get_detector_radius() -> float:
+	return float(data.detector_radius) if data != null and data.get("detector_radius") != null else 0.0
+
+func provides_detection() -> bool:
+	return get_detector_radius() > 0.0
+
+## Joins/leaves the "detectors" group based on the current data's detector_radius.
+func _refresh_detector_group() -> void:
+	if provides_detection():
+		if not is_in_group("detectors"):
+			add_to_group("detectors")
+	elif is_in_group("detectors"):
+		remove_from_group("detectors")
 
 ## True when the tower's own cell is claimed friendly territory.
 func _on_claimed_ground() -> bool:

@@ -15,6 +15,13 @@ extends Camera2D
 const ZOOM_MAX  : float = 3.0   ## Maximum zoom-in factor (3x)
 const ZOOM_STEP : float = 0.1   ## Proportional step per scroll click (10% of current zoom)
 
+## HUD bars overlay the top header strip and the bottom command/minimap area. The map
+## is framed within the band BETWEEN them so spawns/units near the edges are never hidden
+## under opaque UI. Values are in the fixed 1920×1080 canvas (stretch = keep), matching
+## the HUD offsets in HUD.tscn (header bottom ≈ 66; bottom minimap top ≈ 966).
+const HUD_TOP_INSET    : float = 72.0
+const HUD_BOTTOM_INSET : float = 120.0
+
 ## Preload MapGrid to read its constants directly.
 ## node.get() cannot access GDScript consts — only exported vars.
 const _MAP_GRID_SCRIPT = preload("res://src/core/map/MapGrid.gd")
@@ -79,26 +86,40 @@ func _apply_zoom(direction: float, screen_pos: Vector2) -> void:
 	position += world_before - world_after
 	_clamp_position()
 
-## Clamps camera position so the viewport never shows outside the map.
+## Clamps camera position so the map never shows outside the playable band.
+## Horizontal: the viewport spans full width, clamped to the map as usual.
+## Vertical: the map is framed within the band [HUD_TOP_INSET, vp.y - HUD_BOTTOM_INSET]
+## so its edges stay clear of the top header and bottom HUD. `position` is the world
+## point shown at the viewport centre (no Camera2D.offset), so screen↔world math used
+## elsewhere (clicks, zoom-to-cursor) is unaffected.
 func _clamp_position() -> void:
 	var vp     : Vector2 = get_viewport().get_visible_rect().size
 	var half_w : float   = vp.x / (2.0 * zoom.x)
-	var half_h : float   = vp.y / (2.0 * zoom.y)
-	## If the visible half exceeds the map half, center on the map axis.
 	if half_w >= _map_width * 0.5:
 		position.x = _map_width * 0.5
 	else:
 		position.x = clampf(position.x, half_w, _map_width - half_w)
-	if half_h >= _map_height * 0.5:
-		position.y = _map_height * 0.5
+
+	var vp_center_y  : float = vp.y * 0.5
+	var band_h_world : float = (vp.y - HUD_TOP_INSET - HUD_BOTTOM_INSET) / zoom.y
+	if band_h_world >= _map_height:
+		## Whole map fits the band: centre the map within the band (not the screen).
+		var shift_px_y : float = (HUD_TOP_INSET - HUD_BOTTOM_INSET) * 0.5
+		position.y = _map_height * 0.5 - shift_px_y / zoom.y
 	else:
-		position.y = clampf(position.y, half_h, _map_height - half_h)
+		## Map taller than the band: keep the band's top/bottom inside the map.
+		var top_world    : float = (HUD_TOP_INSET - vp_center_y) / zoom.y
+		var bottom_world : float = ((vp.y - HUD_BOTTOM_INSET) - vp_center_y) / zoom.y
+		position.y = clampf(position.y, -top_world, _map_height - bottom_world)
 
 ## Recomputes minimum zoom from current map dimensions and viewport size.
-## min_zoom ensures the map always fills the screen (no black bars).
+## min_zoom CONTAINS the whole map within the playable band (full width × the band
+## height), so the entire board is visible and framed clear of the HUD bars. The map
+## is narrower than 16:9, so this leaves dark side margins — intentional framing.
 func _update_zoom_min() -> void:
 	var vp : Vector2 = get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0 or _map_width <= 0.0 or _map_height <= 0.0:
 		_zoom_min = 1.0
 		return
-	_zoom_min = maxf(vp.x / _map_width, vp.y / _map_height)
+	var band_h : float = maxf(1.0, vp.y - HUD_TOP_INSET - HUD_BOTTOM_INSET)
+	_zoom_min = minf(vp.x / _map_width, band_h / _map_height)

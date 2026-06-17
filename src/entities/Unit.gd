@@ -22,6 +22,12 @@ var _visual           : ColorRect = null   ## placeholder until sprites exist
 var _speed_multiplier : float    = 1.0    ## set by AbilityController (Suppression Field)
 var _stun_until       : float    = -1.0   ## timestamp; movement skipped while now < _stun_until
 
+## Stealth detection counterplay: recomputed on a throttle; true while this unit is
+## inside an active detector's radius (FOB / Commander / detector tower).
+const DETECT_RECOMPUTE_PERIOD : float = 0.15
+var _detect_timer     : float    = 0.0
+var _is_detected      : bool     = false
+
 ## Phase F -- flanker state.
 ## Flankers target a CLAIMED cell instead of the base.
 ## _target_cell = Vector2i(-1,-1) means "not a flanker / target already gone".
@@ -51,6 +57,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead or _waypoints.is_empty():
 		return
+	## Stealth: refresh live detection on a throttle (scans the detectors group).
+	if data != null and data.stealth:
+		_detect_timer -= delta
+		if _detect_timer <= 0.0:
+			_detect_timer = DETECT_RECOMPUTE_PERIOD
+			_is_detected = _within_active_detector()
 	## Phase 6/8: hide while inside unrevealed cells. Enemies emerging from the fog
 	## should only appear once their cell enters the Commander's vision.
 	_update_fog_visibility()
@@ -93,9 +105,10 @@ func _update_fog_visibility() -> void:
 	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
 		return
 	var idx : int = cell.x + cell.y * map_data.dimensions.x
-	## Stealth units hide until a sensor sphere covers them; normal units use sight (fog).
+	## Stealth units are visible only while inside an active detector (live); normal
+	## units use sight/fog (revealed cell).
 	if data != null and data.stealth:
-		visible = map_data.get_meta_sensed(idx)
+		visible = _is_detected
 	else:
 		visible = map_data.get_meta_revealed(idx)
 
@@ -164,15 +177,21 @@ func apply_stun(duration: float) -> void:
 func is_detectable() -> bool:
 	if data == null or not data.stealth:
 		return true
-	if _map_grid_ref == null:
-		return true
-	var map_data : MapData = _map_grid_ref.get("map_data") as MapData
-	if map_data == null:
-		return true
-	var cell : Vector2i = _map_grid_ref.world_to_cell(global_position)
-	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
-		return true
-	return map_data.get_meta_sensed(cell.x + cell.y * map_data.dimensions.x)
+	return _is_detected
+
+## True if any active detector (FOB, Commander, detector tower) currently covers us.
+func _within_active_detector() -> bool:
+	for d in get_tree().get_nodes_in_group("detectors"):
+		if not (d is Node2D) or not is_instance_valid(d):
+			continue
+		if not d.has_method("get_detector_radius"):
+			continue
+		var radius : float = float(d.call("get_detector_radius"))
+		if radius <= 0.0:
+			continue
+		if global_position.distance_to((d as Node2D).global_position) <= radius:
+			return true
+	return false
 
 ## Apply incoming damage. damage_type (Combat.DamageType, -1 = untyped contact damage)
 ## scales the hit against this unit's armor_type before flat armor is subtracted.
@@ -263,6 +282,9 @@ func _build_placeholder_visual() -> void:
 	_visual.size     = Vector2(24.0, 24.0)
 	_visual.position = Vector2(-12.0, -12.0)
 	_visual.color    = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
+	## Stealth units read as cloaked (translucent cyan shimmer) when a detector reveals them.
+	if data != null and data.stealth:
+		_visual.modulate = Color(0.6, 0.85, 1.0, 0.85)
 	add_child(_visual)
 	## Dark health-bar background
 	var bar_bg          := ColorRect.new()

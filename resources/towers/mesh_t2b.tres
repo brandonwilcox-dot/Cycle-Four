@@ -16,4 +16,5 @@ primary_cost = 55.0
 upgrade_to = ExtResource("2")
 aura_radius = 180.0
 aura_damage_bonus = 0.15
+detector_radius = 256.0
 color_hint = Color(0.95, 0.55, 0.95, 1.0)

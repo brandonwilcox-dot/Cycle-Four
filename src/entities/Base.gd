@@ -27,6 +27,13 @@ const FOB_SENSOR_EXTRA      : int = 3   ## sensor ring reaches sight + this
 const FOB_RADIUS_PER_RANK   : int = 1   ## sight and claim each grow this per rank
 const FOB_MAX_RANK          : int = 10  ## fortification cap (sight 5→15, claim 2→12)
 
+## FOB doctrine (RPS upgrade). "" = none; "architects"/"bloom"/"mesh" set the turret
+## damage type (combat triangle) + a playstyle perk: Architect = faster fire,
+## Bloom = HP regen, Mesh = wider stealth detection.
+const DOCTRINE_FIRE_RATE_MULT       : float = 1.6
+const DOCTRINE_REGEN_PER_SEC        : float = 4.0
+const DOCTRINE_DETECTOR_BONUS_CELLS : int   = 3
+
 ## MapGrid is resolved lazily from the "map_grid" group (set in MapGrid._ready).
 var _map_grid : Node = null
 
@@ -39,11 +46,13 @@ var _attack_timer      : float     = 0.0
 var _is_destroyed      : bool      = false
 var _cargo_received    : float     = 0.0
 var _fortification_rank : int      = 0
+var _doctrine           : String   = ""    ## FOB doctrine: "" / "architects" / "bloom" / "mesh"
 var _rank_bar          : Node2D    = null
 var _rank_chevrons     : Node2D    = null
 
 func _ready() -> void:
 	add_to_group("base")
+	add_to_group("detectors")   ## the FOB reveals stealth across its sensor sphere
 	_build_visual()
 	EventBus.base_damaged.connect(_on_base_damaged)
 	EventBus.base_healed.connect(_on_base_healed)
@@ -51,6 +60,17 @@ func _ready() -> void:
 	## Project the initial sphere of influence once the map is loaded (deferred so
 	## MapGrid._ready has run and joined the "map_grid" group).
 	call_deferred("_apply_influence")
+
+## Stealth detection (px): a fixed, modest bubble around the FOB. Deliberately does
+## NOT scale with fortification — a leveled FOB would otherwise reveal stealth across
+## the whole map (its sensor sphere balloons past 1000px), defeating stealth entirely.
+## 6 cells covers the base approach without reaching the map-edge spawns.
+const FOB_DETECTOR_RADIUS_CELLS : int = 6
+
+func get_detector_radius() -> float:
+	## Mesh doctrine widens stealth detection.
+	var cells : int = FOB_DETECTOR_RADIUS_CELLS + (DOCTRINE_DETECTOR_BONUS_CELLS if _doctrine == "mesh" else 0)
+	return float(cells * 64)
 
 ## Resolves and caches the MapGrid from its group.
 func _get_map_grid() -> Node:
@@ -101,10 +121,28 @@ func _update_rank_bar() -> void:
 func _process(delta: float) -> void:
 	if _is_destroyed:
 		return
+	## Bloom doctrine: passive FOB HP regen.
+	if _doctrine == "bloom" and _current_hp < MAX_HP:
+		_current_hp = minf(MAX_HP, _current_hp + DOCTRINE_REGEN_PER_SEC * delta)
+		_update_hp_bar()
 	_attack_timer += delta
-	if _attack_timer >= 1.0 / ATTACK_SPEED:
+	## Architect doctrine: faster turret fire rate.
+	var rate : float = ATTACK_SPEED * (DOCTRINE_FIRE_RATE_MULT if _doctrine == "architects" else 1.0)
+	if _attack_timer >= 1.0 / rate:
 		_attack_timer = 0.0
 		_try_attack()
+
+## FOB doctrine accessors (the RPS upgrade). Sets the turret damage type + perk.
+func set_doctrine(doctrine_id: String) -> void:
+	_doctrine = doctrine_id
+
+func get_doctrine() -> String:
+	return _doctrine
+
+## Turret damage type: the doctrine's type if set, else the player faction's signature.
+func _turret_damage_type() -> int:
+	var fid : String = _doctrine if _doctrine != "" else FactionManager.active_faction
+	return Combat.faction_damage_type(fid)
 
 ## -- Combat --
 
@@ -137,7 +175,7 @@ func _try_attack() -> void:
 			nearest_dist = dist
 			nearest      = unit
 	if nearest != null and nearest.has_method("take_damage"):
-		nearest.take_damage(DAMAGE, Combat.faction_damage_type(FactionManager.active_faction))
+		nearest.take_damage(DAMAGE, _turret_damage_type())
 
 ## -- Visual --
 

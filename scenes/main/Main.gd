@@ -7,6 +7,11 @@ const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tsc
 const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.tscn")
 const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
 const GRID_SIZE             : int = 64
+## Click within this many px of a structure's centre selects it (generous hit box —
+## no precision required). The Commander's own select radius is tighter.
+const STRUCTURE_HIT_RADIUS    : float = 40.0
+const COMMANDER_SELECT_RADIUS : float = 26.0
+const FOB_DOCTRINE_COST       : float = 80.0   ## primary-resource cost to set/switch an FOB doctrine
 
 ## Sight/sensor sphere every placed structure (tower, building) projects. Structures
 ## grant vision, not territory — only the Commander and FOB claim cells.
@@ -65,6 +70,7 @@ func _ready() -> void:
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
 	EventBus.panel_sell_requested.connect(_on_panel_sell_requested)
+	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine_requested)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
 	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
@@ -142,7 +148,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	var height : float = get_viewport().get_visible_rect().size.y
 	if y < 48.0 or y > height - 48.0:
 		return
+	## During the Academy, leave world clicks to the CadetAvatar.
+	if not GameState.academy_completed:
+		return
 
+	## Controls: LEFT = select (Commander / tower / building / FOB), RIGHT = move the
+	## selected Commander (Shift chains waypoints). Left never moves, so the player can
+	## click freely without ordering a move.
 	match event.button_index:
 		MOUSE_BUTTON_LEFT:
 			if _placement_mode:
@@ -152,23 +164,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				_try_place_building(event.position)
 				get_viewport().set_input_as_handled()
 			else:
-				## Occupied tower/building cell → open inspection panel.
-				## Empty cell → close inspection (player looked away), let Commander move.
-				var cell := _screen_to_cell(event.position)
-				if _occupied_cells.has(cell):
-					_open_tower_inspection(cell)
-					get_viewport().set_input_as_handled()
-				elif _building_cells.has(cell):
-					_open_building_inspection(cell)
-					get_viewport().set_input_as_handled()
-				else:
-					hud.close_inspection()
+				_handle_select_click(event.position)
+				get_viewport().set_input_as_handled()
 		MOUSE_BUTTON_RIGHT:
 			if _placement_mode:
 				_cancel_placement()
 				get_viewport().set_input_as_handled()
 			elif _build_mode:
 				_cancel_build()
+				get_viewport().set_input_as_handled()
+			else:
+				_handle_move_click(event.position, event.shift_pressed)
 				get_viewport().set_input_as_handled()
 
 ## -- Placement preview ghost --
@@ -394,6 +400,88 @@ func _open_building_inspection(cell: Vector2i) -> void:
 	_inspected_cell = cell
 	hud.open_building_inspection(building)
 
+func _open_fob_inspection() -> void:
+	var base : Node = get_node_or_null("WorldMap/Base")
+	if base == null:
+		return
+	_inspected_cell = Vector2i(-1, -1)
+	hud.open_fob_inspection(base)
+
+## Applies an FOB doctrine (RPS upgrade) after spending its cost, then refreshes the panel.
+func _on_fob_doctrine_requested(doctrine_id: String) -> void:
+	var base : Node = get_node_or_null("WorldMap/Base")
+	if base == null:
+		return
+	var primary : String = FactionManager.get_primary_resource()
+	var cost : Dictionary = {primary: FOB_DOCTRINE_COST}
+	if not EconomyManager.can_afford(cost):
+		EventBus.notification_pushed.emit(
+			"Not enough %s for an FOB doctrine. (need %d)" % [primary, int(FOB_DOCTRINE_COST)], "warning"
+		)
+		return
+	EconomyManager.spend(cost)
+	base.call("set_doctrine", doctrine_id)
+	EventBus.notification_pushed.emit("FOB doctrine set: %s." % doctrine_id.capitalize(), "positive")
+	hud.open_fob_inspection(base)   ## refresh the panel to show the new doctrine
+
+# -- Selection + move orders (left = select, right = move) --------------------
+
+## Resolves the Commander node (WorldMap/CommanderLayer/Commander).
+func _commander() -> Node:
+	return get_node_or_null("WorldMap/CommanderLayer/Commander")
+
+## Left-click: select the Commander (tight radius), else inspect a structure under the
+## click (generous radius), else clear selection + close the panel.
+func _handle_select_click(screen_pos: Vector2) -> void:
+	var world : Vector2 = _screen_to_world(screen_pos)
+	var cmd : Node = _commander()
+	if cmd != null and (cmd as Node2D).global_position.distance_to(world) <= COMMANDER_SELECT_RADIUS:
+		cmd.call("set_selected", true)
+		hud.close_inspection()
+		return
+	var hit : Dictionary = _structure_at_world(world)
+	match str(hit.get("kind", "")):
+		"tower":    _open_tower_inspection(hit["cell"])
+		"building": _open_building_inspection(hit["cell"])
+		"fob":      _open_fob_inspection()
+		_:          hud.close_inspection()
+	if cmd != null:
+		cmd.call("set_selected", false)
+
+## Right-click: order the selected Commander to move (append=Shift chains waypoints).
+func _handle_move_click(screen_pos: Vector2, append: bool) -> void:
+	var cmd : Node = _commander()
+	if cmd == null or not cmd.has_method("is_selected") or not cmd.call("is_selected"):
+		return
+	cmd.call("move_command", _screen_to_world(screen_pos), append)
+
+## Finds the structure whose centre is nearest the world point, within
+## STRUCTURE_HIT_RADIUS. Returns {"kind": "tower"|"building"|"fob"|"", "cell": Vector2i}.
+func _structure_at_world(world: Vector2) -> Dictionary:
+	var best_kind : String  = ""
+	var best_cell : Vector2i = Vector2i(-9999, -9999)
+	var best_dist : float   = STRUCTURE_HIT_RADIUS
+	for cell in _occupied_cells:
+		var dt : float = world.distance_to(_cell_to_world(cell))
+		if dt <= best_dist:
+			best_dist = dt
+			best_kind = "tower"
+			best_cell = cell
+	for cell in _building_cells:
+		var db : float = world.distance_to(_cell_to_world(cell))
+		if db <= best_dist:
+			best_dist = db
+			best_kind = "building"
+			best_cell = cell
+	var fc : Vector2i = _fob_cell()
+	if fc != Vector2i(-9999, -9999):
+		var df : float = world.distance_to(_cell_to_world(fc))
+		if df <= best_dist:
+			best_dist = df
+			best_kind = "fob"
+			best_cell = fc
+	return {"kind": best_kind, "cell": best_cell}
+
 func _on_panel_upgrade_requested(branch: int) -> void:
 	if _inspected_cell == Vector2i(-1, -1):
 		return
@@ -462,18 +550,27 @@ func _apply_structure_influence(cell: Vector2i) -> void:
 ## instead of consuming the click as a move order.
 func structure_at_screen(screen_pos: Vector2) -> bool:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
-	return _occupied_cells.has(cell) or _building_cells.has(cell)
+	return _occupied_cells.has(cell) or _building_cells.has(cell) or cell == _fob_cell()
 
-## Converts a screen-space click position to a map cell, accounting for Camera2D
+## The map cell the FOB occupies (for click-to-inspect). Computed from the Base node.
+func _fob_cell() -> Vector2i:
+	var base : Node = get_node_or_null("WorldMap/Base")
+	if base == null or _map_grid == null:
+		return Vector2i(-9999, -9999)
+	return _map_grid.call("world_to_cell", (base as Node2D).global_position)
+
+## Converts a screen-space position to a world position, accounting for Camera2D
 ## zoom and pan. Falls back to a 1:1 mapping if no camera is present.
-func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
+func _screen_to_world(screen_pos: Vector2) -> Vector2:
 	var camera : Camera2D = get_node_or_null("WorldMap/Camera") as Camera2D
-	var world_pos : Vector2
-	if camera != null:
-		var vp_center : Vector2 = get_viewport().get_visible_rect().size * 0.5
-		world_pos = camera.global_position + (screen_pos - vp_center) / camera.zoom
-	else:
-		world_pos = screen_pos
+	if camera == null:
+		return screen_pos
+	var vp_center : Vector2 = get_viewport().get_visible_rect().size * 0.5
+	return camera.global_position + (screen_pos - vp_center) / camera.zoom
+
+## Converts a screen-space click position to a map cell.
+func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
+	var world_pos : Vector2 = _screen_to_world(screen_pos)
 	return Vector2i(
 		int(floor(world_pos.x / float(GRID_SIZE))),
 		int(floor(world_pos.y / float(GRID_SIZE)))
