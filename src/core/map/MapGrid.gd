@@ -275,6 +275,39 @@ func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
 		queue_redraw()
 	return newly
 
+## C3 (raids): the nearest GROUND cell on the CLAIMED frontier — a GROUND cell orthogonally
+## adjacent to a CLAIMED or BASE cell — within `max_radius` (Chebyshev) of `from_cell`. A
+## garrison raids this so the player's territory grows outward contiguously. (-1,-1) if none.
+func get_raid_target(from_cell: Vector2i, max_radius: int) -> Vector2i:
+	var best   : Vector2i = Vector2i(-1, -1)
+	var best_d : int      = 0x7fffffff
+	for dy in range(-max_radius, max_radius + 1):
+		for dx in range(-max_radius, max_radius + 1):
+			var c : int = from_cell.x + dx
+			var r : int = from_cell.y + dy
+			if c < 0 or c >= COLS or r < 0 or r >= ROWS:
+				continue
+			if _cells[c + r * COLS] != Cell.GROUND:
+				continue
+			if not _has_claimed_neighbor(c, r):
+				continue
+			var d : int = absi(dx) + absi(dy)
+			if d < best_d:
+				best_d = d
+				best   = Vector2i(c, r)
+	return best
+
+func _has_claimed_neighbor(col: int, row: int) -> bool:
+	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var nc : int = col + off.x
+		var nr : int = row + off.y
+		if nc < 0 or nc >= COLS or nr < 0 or nr >= ROWS:
+			continue
+		var t : int = _cells[nc + nr * COLS]
+		if t == Cell.CLAIMED or t == Cell.BASE:
+			return true
+	return false
+
 ## Reveals fog for every in-bounds cell within `radius` of `center`. Emits
 ## EventBus.region_revealed with the newly-revealed cells (drives spawn activation /
 ## redraw). Returns the count revealed.
@@ -419,6 +452,49 @@ func get_path_to_base(spawn_cell: Vector2i) -> Array[Vector2]:
 	for cp in cell_pts:
 		result.append(cell_to_world(int(cp.x), int(cp.y)))
 	return result
+
+## Phase B (faction-flavored pathing): returns up to `k` DISTINCT world-space routes
+## from spawn_cell to base, ordered shortest-first. Uses the penalty method — find the
+## shortest path, temporarily inflate the weight_scale of its interior cells, re-query
+## for a detour, repeat — then restore all weights. Where the map offers no alternate
+## corridor the routes collapse to one (the array is shorter than k). Callers map the
+## set to faction behavior: Architects take route[0] (most direct), Bloom spread evenly
+## across the set (sprawl), Mesh pick the least-defended (weak-point seek).
+## Each element is an Array[Vector2] of cell-centre waypoints; index 0 is the spawn cell.
+func get_diverse_paths_to_base(spawn_cell: Vector2i, k: int = 3) -> Array:
+	var from_id : int = _cell_id(spawn_cell.x, spawn_cell.y)
+	var to_id   : int = _cell_id(BASE_POS.x,   BASE_POS.y)
+	if not _astar.has_point(from_id) or not _astar.has_point(to_id):
+		return []
+	const PENALTY : float = 3.0
+	var routes        : Array         = []
+	var seen_sigs     : Array[String] = []
+	var penalized_ids : Array[int]    = []
+	for _i in range(maxi(1, k)):
+		var pts : PackedVector2Array = _astar.get_point_path(from_id, to_id)
+		if pts.is_empty():
+			break
+		## Signature of the cell sequence — detect when no new alternative exists.
+		var sig : String = ""
+		for p in pts:
+			sig += "%d,%d;" % [int(p.x), int(p.y)]
+		if sig in seen_sigs:
+			break
+		seen_sigs.append(sig)
+		var world_path : Array[Vector2] = []
+		for p in pts:
+			world_path.append(cell_to_world(int(p.x), int(p.y)))
+		routes.append(world_path)
+		## Penalize this route's INTERIOR cells (skip the unavoidable entry/approach
+		## chokepoints) so the next query is pushed onto a parallel corridor if one exists.
+		for i in range(2, pts.size() - 2):
+			var pid : int = _cell_id(int(pts[i].x), int(pts[i].y))
+			_astar.set_point_weight_scale(pid, _astar.get_point_weight_scale(pid) * PENALTY)
+			penalized_ids.append(pid)
+	## Restore every weight we touched so other AStar queries are unaffected.
+	for pid in penalized_ids:
+		_astar.set_point_weight_scale(pid, 1.0)
+	return routes
 
 ## Cell ↔ world conversions.
 func cell_to_world(col: int, row: int) -> Vector2:

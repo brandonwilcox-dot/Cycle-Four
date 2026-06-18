@@ -65,3 +65,16 @@ full map; the galaxy is a web of concurrent fronts.
 ## Decided
 - Q ability stays **charge-gated** (not converting to cooldown).
 - Veterancy icons **condense** (stars collapse 3 ranks each) — done 2026-06-16.
+
+## Progress
+- **Phase A — DONE 2026-06-16.** Waves spawn the player's weak-matchup faction (`WaveTableBuilder.enemy_of`).
+- **Phase B — DONE 2026-06-17.** Diverse-route set + per-faction assignment policy
+  (Architect direct / Bloom sprawl / Mesh weak-point seek), penalty-method bias on AStar.
+  Playtest exposed that maps gave 1 route/spawn → followed up with a **branching map-generator
+  pass** (`MapGenerator._carve_branching_path`: 2 parallel corridors/spawn; verified ≥2 routes).
+  Divergence now expressible on every generated map. See `CLAUDE.md`.
+- **Map persistence / galactic alignment (decided 2026-06-17).** No new map format — `MapData`
+  already serializes (Resource) and `generate(seed)` is deterministic. Added `MapData.map_seed`:
+  Phase D's galaxy = a **graph of territory nodes**, each storing a seed + {adjacency, owner,
+  distance-to-core}; battle maps regenerate from seed on demand. Total-War-style expansion toward
+  the galactic core. (Future-Phase-D direction, not built yet.)

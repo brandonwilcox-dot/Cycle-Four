@@ -9,6 +9,258 @@ making any design decisions in code.
 
 ---
 
+## Fix — Commander select regression: world-space Controls ate the click — 2026-06-17 (verified live)
+
+The 2026-06-16 Academy-`queue_free()` fix only *masked* this. Root cause: entity visuals are
+built from `ColorRect`/`Label` nodes (`Control`s), which default to `MOUSE_FILTER_STOP` and
+consume LMB in `_gui_input` **before** `_unhandled_input` runs — so a dead-centre click on the
+Commander (where the FOB body + gold `_visual` overlap) reached **neither** the Commander nor
+`Main`. Off-centre clicks within the 58px select radius worked, which hid the bug.
+
+**Fix:** every entity's `_build_visual` now loops its `Control` children and sets them to
+`Control.MOUSE_FILTER_IGNORE`. Applied to `Base` (FOB), `Commander`, `Unit`, `FriendlyUnit`,
+`Building`, `Tower`, `Convoy`. Diagnosed with temp `push_warning` probes in
+`Commander._unhandled_input` + `Main._unhandled_input` (removed); when neither fired on a
+click, a GUI `Control` was the culprit. **Verified live:** deselect (empty ground) → reselect
+dead-centre on the Commander → green ring reappears; clean compile, no new warnings.
+Rule going forward: any decorative `Control` in world space must be `MOUSE_FILTER_IGNORE`.
+
+## Phase D1 — Galaxy layer: continuous zoom + seeded-territory deploy — 2026-06-17 (verified live)
+
+First slice of the Total-War campaign pillar. Design chosen with the user: **continuous
+tactical→galactic zoom** (not a separate screen) + **battle integration** (deploy to a node
+loads its battle map; winning captures it).
+
+- **Galaxy graph** (`GalaxyManager`): `generate_galaxy` builds concentric rings of territory
+  nodes around a central **core**, webbed to adjacent rings + ring neighbours; player starts
+  owning one rim node. Each node = JSON-safe `{owner, ring, px/py, adj[], seed}`. `frontier()` =
+  nodes adjacent to an owned node (capturable). `ensure_galaxy` generates once per save;
+  deterministic per `galaxy_run_number`. `active_node` / `invading_node` track "you are here" /
+  the node a win captures.
+- **Continuous zoom** = literal spatial zoom: `GalaxyView` (`src/ui/GalaxyView.gd`, mounted under
+  WorldMap) draws the graph in world space **recentred so the active node sits at the board
+  centre**, far larger than the board. `CameraController` now zooms out past board-min down to
+  `GALAXY_ZOOM_MIN` and pans freely there (`is_galaxy_zoom()`/`board_min_zoom()`); the view only
+  renders while zoomed out, so wheeling out shrinks the board to the home node and reveals the
+  rings. Nodes coloured by owner (yours/neutral/rival/core); active = white ring, frontier =
+  yellow ring.
+- **Deploy + capture loop** (`Main`): a left-click while zoomed out picks a frontier node
+  (`_handle_galaxy_click`) → `_deploy_to_node` clears the battle's transient entities and
+  `MapGrid.load_map_data(MapGenerator.generate(node.seed))` (the territory's own seeded map),
+  zooms back in. Capturing triggers on **`map_completed`** (`_on_map_completed` →
+  `GalaxyManager.capture_system`) — winning the territory's objectives flips ownership and opens
+  new frontier.
+
+**Verified live:** zoomed out → galaxy graph (home node + frontier + adjacency edges) → clicked a
+frontier node → its seeded battle map loaded and the camera zoomed back in; zero errors (one
+`owner` shadow warning fixed). **Capture-on-win is wired but not yet played-out live** (needs the
+territory's claim objective completed). **Key follow-up:** persist per-territory state (buildings,
+claims, ownership) — the `map_seed` model holds the layout, but a territory's *progress* isn't
+saved yet, so this + Phase-C offline resolution only fully land once that persistence exists. Also
+deferred: HUD/labels in galaxy view, win-condition design per territory, diplomacy layer
+(treaty/alliance stubs already in `GalaxyManager`, core/11+20).
+
+---
+
+## Phase C4 — Live offline resolution — 2026-06-17 (verified live) — PHASE C COMPLETE
+
+Closes the garrison pillar and the "endless offline" promise: time away is resolved by
+fast-forwarding the army's REAL behavior, not a hand-wavy formula.
+
+- **`Building.simulate_offline_raids(seconds)`** runs the garrison's standing-order raids
+  cycle-by-cycle over elapsed time (`OFFLINE_RAID_CYCLE` 30s/raid, capped `OFFLINE_MAX_RAIDS`
+  20), using the *same* `get_raid_target` + `claim_area` against the live map — so each claim
+  advances the frontier exactly as it would have online. Naturally bounded by `RAID_RANGE_CELLS`
+  around the garrison. Returns cells claimed.
+- **`Main._resolve_offline_army(seconds)`** sums every garrison's offline raids and pushes one
+  summary: "While you were away (N min), your garrisons claimed N cells of territory."
+- **Wired to `EventBus.offline_catch_up`** (`Main._on_offline_catch_up`) — the existing
+  `SaveManager` → `EconomyManager.apply_offline_time` (8h cap) path. **Caveat:** placed buildings
+  and claimed cells are NOT persisted in the save yet, so a real Continue has no garrisons to run
+  — correctly wired for when that persistence lands (it belongs with the galactic-map territory
+  state, `map_seed` model). Exercisable now via **dev key F4** (debug build, in-game) = simulate
+  1 hour.
+
+**Verified live:** F1 → place garrison → F4 → Territory jumped to 44 cells (from ~12), claimed
+region expanded, income rose, claim objective complete; zero errors.
+
+**Phase C (Garrisons & friendly army) is COMPLETE** — C1 production, C2 two-way combat + patrols
++ leveling, C3 standing-order raids, C4 offline resolution. **Follow-ups before this fully
+lands in normal play:** persist buildings + claimed cells in the save (ties into the per-territory
+galactic-map state) so offline resolution and territory survive a Continue; explicit standing-order
+toggle UI; resource-investment to develop garrisons; role/tier unlocks at higher garrison levels.
+Next pillar: **D — macro→galactic zoom / multi-front** (the Total-War campaign layer).
+
+---
+
+## Phase C3 — Standing-order raids (territory expansion) — 2026-06-17 (verified live)
+
+The army goes offensive: garrisons expand the player's territory during lulls — the on-map
+seed of the galactic "capture adjacent ground toward the core" vision, and the loop C4 will
+fast-forward offline.
+
+- **Raid-target finder:** `MapGrid.get_raid_target(from_cell, max_radius)` → nearest GROUND cell
+  on the CLAIMED frontier (orthogonally adjacent to CLAIMED/BASE) within range, so territory
+  grows outward contiguously (`_has_claimed_neighbor` helper). Claiming reuses `claim_area`.
+- **Raid mode on units:** `FriendlyUnit.set_raid_target/clear_raid` — a raiding unit marches to
+  the target with the **leash released** (`_move_toward(..., clamp_leash=false)`). Priority in
+  `update()` is **defense > raid > patrol > guard**, so raiders drop everything to fight.
+- **Garrison raid logic:** `Building._update_raid()` (each production tick) — when the squad is
+  full (`RAID_MIN_SQUAD`) and **safe** (`_enemy_within(RAID_THREAT_RADIUS)` false), it picks a
+  frontier target and points the squad at it; on a raider reaching it (`RAID_REACH_DIST`), it
+  `claim_area`s a pocket (`RAID_CLAIM_RADIUS`), registers economy + `territory_claimed`, and
+  notifies. Enemies near the garrison **withhold/abort** the raid (defense first) → the army
+  expands in lulls, defends in waves.
+- This is the "standing order" implicitly = *expand when strong and safe* (no toggle UI yet).
+
+**Verified live:** placed a garrison, no waves → squad filled, raided the frontier, "Raiding
+party claimed 6 cells", Territory 12 cells, claim objective 1/1; zero errors. **Next:** C4 live
+offline resolution (fast-forward the `update()`/raid ticks over elapsed time). Deferred: explicit
+standing-order toggle UI; raids scaling with garrison level; raiders self-defending far from home.
+
+---
+
+## Phase C2 — Two-way combat, patrols, garrison leveling — 2026-06-17 (verified live)
+
+Makes the friendly army feel alive — the real RTS clash on top of C1's defenders.
+
+- **Two-way combat (enemies blocked):** `Unit.gd` (enemy) — when a `friendly_units` member is
+  within `MELEE_ENGAGE_RANGE` (40px), the enemy STOPS advancing and attacks it on
+  `MELEE_INTERVAL` via the one triangle (`Combat.faction_damage_type(data.faction_id)` vs the
+  friendly's armor; `_melee_damage()` = `max(attack_damage, ENEMY_MELEE_DAMAGE)` fallback).
+  Multiple enemies on one defender swarm it. `_engaged_friendly()` helper.
+- **Defenders body-block + report kills:** `FriendlyUnit.gd` — now closes to `BLOCK_RANGE`
+  (28px) to physically stop a foe (replacing C1's self-attrition; enemies now deal the damage),
+  and on a killing blow calls its garrison's `report_kill()`.
+- **Patrols:** idle defenders roam a slow loop (`PATROL_RADIUS`/`PATROL_ANGULAR_SPEED`,
+  phase-staggered) once the squad reaches `GARRISON_PATROL_THRESHOLD` (2); the garrison toggles
+  `set_patrol()` each production tick. Below threshold they return to the guard post.
+- **Garrison leveling:** `Building.gd` — `report_kill()` banks XP; every
+  `GARRISON_XP_PER_LEVEL × level` kills → level up (notification). Level raises the squad cap
+  (`_max_units` = base + level−1) and speeds production (`_produce_interval`, floored at 2s).
+
+**Verified live:** placed a garrison, ran wave 1 — it produced a spread squad that held the
+line; FOB ended at 294/300 vs 6 enemies; zero runtime errors. Tick logic stays in `update()`/
+`_process` so the C4 offline sim can fast-forward it. **Next:** C3 standing-order raids; C4 live
+offline resolution. (Deferred polish: resource-investment UI to develop a garrison; role/tier
+unlocks at higher garrison levels.)
+
+---
+
+## Phase C1 — Garrison foundation (friendly army) — 2026-06-17 (verified live)
+
+First slice of the biggest pillar (active-RTS + offline army, `planning/vision-roadmap.md` §3).
+Design locked with the user: **(1) one combat triangle** — the 5 roles (Inf/Cav/Armor/Support/
+Recon) are behaviors, not a second RPS; **(2) live offline simulation** — so the army layer is
+built tick-driven (`FriendlyUnit.update(delta)`) to fast-forward later; **(3) faction-specific
+rosters** (core/17) — friendly units reuse the same roster as the waves (your faction's Drone
+defends; the enemy faction's Drone attacks).
+
+**What C1 ships:**
+- `UnitData` += `attack_damage` / `attack_range` / `attack_interval` (default 0 — enemies stay
+  inert non-combatants; only friendly combat units use them).
+- `src/core/army/FriendlyRoster.gd` — maps player faction → its Tier-1 roster unit (loads the
+  real `*_t1.tres`, duplicates it, applies default T1 attack stats if unset; note singular file
+  names vs plural faction ids).
+- `src/entities/FriendlyUnit.gd` — friendly combat unit (group `friendly_units`). Leashed to its
+  home garrison (`MAX_LEASH`), acquires nearest detectable enemy in `AGGRO_RADIUS`, fires via
+  `Combat.faction_damage_type(active_faction)` → the triangle, takes attrition from adjacent
+  enemies (`CONTACT_DPS_PER_ENEMY` — swarms punish a lone defender), dies. Behavior is in
+  `update(delta)` so the C4 offline sim can drive it headlessly/accelerated.
+- `Building.gd` → every production building is now also a **garrison**: produces a defender on a
+  `GARRISON_PRODUCE_INTERVAL` (5 s) cooldown up to `GARRISON_MAX_UNITS` (3). Spawns into the
+  shared `WorldMap/UnitLayer` (`../../UnitLayer`), pruning dead units each tick.
+
+Towers target group `units` only, so they ignore friendlies; enemies don't yet target friendlies
+(C2). **Verified:** placed a building → it produced a cyan defender → wave 1 dropped 6→2 with the
+FOB untouched as defenders engaged. Zero new errors.
+
+**Next sub-passes:** C2 patrols + garrison leveling (and enemies retaliating / being blocked by
+friendlies); C3 standing-order raids claiming adjacent ground; C4 live offline resolution.
+
+---
+
+## Phase B — Map-generator pass: branching corridors + galactic-persistence hook — 2026-06-17 (verified)
+
+Resolves the Phase B "divergence is latent" finding: `MapGenerator` carved exactly ONE
+corridor per spawn, so `get_diverse_paths_to_base` always returned a single route and the
+faction policy had nothing to express.
+
+**Branching corridors.** Replaced `_carve_winding_path` (single winding L-chain per spawn)
+with **`_carve_branching_path`**: two parallel corridors per spawn that bend to OPPOSITE sides
+of the spawn→base axis and rejoin only at the endpoints (`_carve_h_corridor` / `_carve_v_corridor`,
+lane offset ±`spread` 5–9 cells). Each spawn now offers ≥2 genuinely distinct routes; corridors
+from different spawns also cross, multiplying options (the RTS-loose feel). **Verified live:
+every spawn → 2 routes** (temp `BPATH-VERIFY` log, since removed); the map now renders as a
+parallel-rail network around the FOB instead of a single cross. Faction divergence (Architect
+direct / Bloom sprawl / Mesh weak-point) is now expressible on every generated map.
+
+**Persistence / galactic-map architecture decision (answer to "do we switch map formats?").**
+**No format switch.** `MapData` already `extends Resource` with all state `@export`-ed — it
+serializes to `.tres` natively ("saving and reloading restores the full runtime state"). And we
+don't need to *store* maps either: `MapGenerator.generate(seed)` is deterministic, so a battle
+map is reproducible from its seed alone. Added **`MapData.map_seed`** (set to `rng.seed` at
+generation; named `map_seed` not `seed` to avoid shadowing the built-in). **Galactic vision
+(Total-War-style, future Phase D):** the galaxy is a graph of *territory nodes*, each storing a
+`map_seed` + campaign metadata (adjacency, owner, distance-to-core); you expand by capturing
+nodes adjacent to your holdings, pushing toward the core, and each node's battle map regenerates
+from its seed on demand — persistence without bulky storage, and random-spawn testing still works
+(seed 0 = random). The cardinal spawns a territory exposes would eventually mirror that node's
+graph adjacency.
+
+---
+
+## Phase B — Faction-flavored enemy pathing — 2026-06-16 (core landed; compiles clean, units path live)
+
+Vision pillar #2 (`planning/vision-roadmap.md`, codex §05): enemy movement follows faction
+norms instead of one fixed lane. Built on the existing AStar lane graph + waypoint units —
+no rewrite. Two pieces:
+
+1. **`MapGrid.get_diverse_paths_to_base(spawn_cell, k=3)`** — returns up to `k` DISTINCT
+   world-space routes, shortest-first, via the **penalty method**: query shortest path,
+   inflate the `weight_scale` of its interior cells (×3), re-query for a detour, repeat,
+   then restore all weights so other AStar queries are unaffected. Where the map has no
+   alternate corridor the routes collapse to one (returns fewer than k). Dedupes by cell
+   signature.
+2. **`WaveSpawner` per-faction assignment policy** (`_faction_path`, reads
+   `_current_unit_data.faction_id`): **Architects → route 0** (direct/efficient);
+   **Bloom → least-used route** (`_least_used_route_idx`, even sprawl across all corridors);
+   **Mesh → least-defended route** (`_weakpoint_route_idx` scores towers within 160px of each
+   route, picks the softest, with a 25% probe of a random alternate — raider weak-point seek).
+   Route sets are cached per spawn cell and invalidated on `wave_started` / `wave_ended` /
+   `path_changed` (so a tower placed mid-wave reshapes the routes).
+
+Flankers and the Academy keep their own pathing (unchanged). Reroute on `path_changed` still
+uses the plain shortest path (faction-agnostic fallback — acceptable for the rare mid-wave
+block). Verified: F1→architects, Begin Waves — Mesh enemies spawn from 4 axes and path to the
+FOB, wave resolves, zero new errors.
+
+**DEV keys (debug builds only, `OS.is_debug_build()`):** F1 = Architects, **F2 = Mesh,
+F3 = Bloom** — skip the Academy straight into a game as that faction (each faces a different
+enemy: Architects→Mesh, Mesh→Bloom, Bloom→Architects). Used to playtest all three enemy
+pathing styles. (F2/F3 hardcode each faction's own first sub-path — `standard`/`networked`/
+`purist`; passing the wrong sub-path trips an `assert` in `FactionManager.select_faction`.)
+
+### Playtest findings — 2026-06-16 (instrumented route logging + all three factions)
+
+Ran F1/F2 with temporary `BPATH-DIAG` logging of route counts + per-faction assignment. **The
+mechanism is verified correct and crash-free for all three enemy factions**; the assignment
+policy executed exactly as designed (Architect→route 0; Bloom→least-used; Mesh→least-defended,
+which correctly == route 0 when no towers are down). **Key finding: divergence is currently
+LATENT because maps rarely offer parallel corridors.** `get_diverse_paths_to_base` returned 2
+equal-length routes on one procedural seed (proving the penalty method works) but **1 route per
+spawn on most maps — both the procedural generator and the hand-authored `DefaultMapBuilder`**
+(verified: forcing DefaultMapBuilder still gave 1 route/spawn — its corridors are single, not
+the two-branch layout that lives in `MapGrid._build_default_paths`). When AStar finds no genuine
+alternate, the penalty method correctly returns one route, so Bloom sprawl / Mesh weak-point
+seek have nothing to express. **The real Phase B "make it expressive" follow-up is to make the
+map generator produce parallel corridors / loops reliably** (then the existing policy lights up
+for free). Other follow-ups: optional lateral jitter; faction-aware reroute; possibly a stronger
+diverse-route penalty. (Also surfaced: rapid F-key presses during the Academy chamber can trip
+the known rapid-click hang — unrelated to Phase B.)
+
+---
+
 ## UI session — 2026-06-16 (windowing fixes + SupCom-style dashboard)
 
 Three reported bugs, all traced to one root cause, plus a HUD reskin into a
@@ -125,7 +377,11 @@ right-click → moves. Zero new errors.
 1. **RTS commander controls (centralized in Main).** The Commander no longer moves on
    left-click. Main owns all world clicks: **LEFT = select** (Commander / tower /
    building / FOB), **RIGHT = move** the selected Commander, **Shift+RIGHT = chain**
-   waypoints. The Commander draws a **selection ring + queued move path** when selected.
+   waypoints. The Commander always draws a **selection ring** when selected; the **queued
+   move path is SupCom-style — drawn only while Shift is held** (`_shift_held`, polled via
+   `Input.is_key_pressed(KEY_SHIFT)` in `_process`), so it no longer trails the Commander
+   during normal movement. Holding Shift previews the path and chains more waypoints; while
+   shown during movement it redraws each frame to stay anchored. (2026-06-17 UX tweak.)
    `Commander`: `_move_queue` + `set_selected`/`is_selected`/`move_command`; its
    `_unhandled_input` now only delivers ground-targeted ability casts. This also kills
    the old Commander-vs-Main click race (source of the inconsistent panel opening). A

@@ -295,3 +295,9 @@ func _build_visual() -> void:
 	_chevrons.position = Vector2(0.0, -half - 16.0)
 	add_child(_chevrons)
 	_chevrons.call("set_rank", level - 1)
+
+	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
+	## would consume LMB before it reaches selection/placement handlers).
+	for child in get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -41,6 +41,14 @@ const META_MASK_SENSED            : int = 0x1
 @export var biome: StringName = &""
 @export var topology_template: StringName = &""
 
+## The RNG seed this map was generated from. A territory on the galactic map (future
+## Total-War-style campaign layer) stores this seed plus its graph metadata (adjacency,
+## owner, distance-to-core); the battle map is reproduced deterministically by calling
+## MapGenerator.generate(seed) — persistence without storing the full cell grid. 0 means
+## hand-authored / not procgen. (Named map_seed, not seed, to avoid shadowing the
+## built-in seed() RNG function.)
+@export var map_seed: int = 0
+
 ## Flat cell-type array. Length = dimensions.x * dimensions.y.
 ## Values match MapGrid.Cell enum. Enemy AStar reads only this array — never meta.
 @export var cell_types: PackedByteArray = PackedByteArray()

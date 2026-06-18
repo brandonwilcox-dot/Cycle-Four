@@ -151,10 +151,10 @@ The post-MVP direction. Dependency-ordered A→D.
 
 | Phase | Theme | Status |
 |---|---|---|
-| **A** | **Enemy factions in waves** — waves spawn the enemy faction the player is weak against (single enemy per map; engages the combat triangle / FOB doctrine / tower branches). | in progress 2026-06-16 |
-| **B** | **Faction-flavored enemy pathing** — Architect direct routes / Bloom sprawl-and-block / Mesh directional-spread. Bias AStar weights per faction. | queued |
-| **C** | **Garrisons & friendly army** — structures spawn role-based units (Inf/Cav/Armor/Support/Recon); patrols; garrison XP/leveling; resource investment; standing-order raids; offline territory claims. The active-RTS + endless-offline pillar (largest). | queued |
-| **D** | **Micro→galactic zoom / multi-front** — camera + scene architecture for concurrent fronts. | later |
+| **A** | **Enemy factions in waves** — waves spawn the enemy faction the player is weak against (single enemy per map; engages the combat triangle / FOB doctrine / tower branches). | DONE 2026-06-16 |
+| **B** | **Faction-flavored enemy pathing** — Architect direct routes / Bloom sprawl-and-block / Mesh directional-spread. Bias AStar weights per faction. | DONE 2026-06-17 — diverse-route set + per-faction assignment (WaveSpawner) + **branching map generator** (`MapGenerator._carve_branching_path`: 2 corridors/spawn, verified ≥2 routes). Divergence now expressible on every map. `MapData.map_seed` added as the galactic-persistence hook. |
+| **C** | **Garrisons & friendly army** — structures spawn role-based units (Inf/Cav/Armor/Support/Recon); patrols; garrison XP/leveling; resource investment; standing-order raids; offline territory claims. The active-RTS + endless-offline pillar (largest). | **COMPLETE (C1–C4) 2026-06-17.** C1 production · C2 two-way combat + patrols + leveling · C3 standing-order raids (claim frontier ground) · C4 live offline resolution (fast-forward garrison raids over elapsed time, reusing the real raid rules; wired to `offline_catch_up`, dev key F4). **Blocker for offline in normal play: buildings + claimed cells aren't persisted in saves yet (ties into per-territory galactic state).** Next pillar: D — macro→galactic zoom / Total-War campaign. |
+| **D** | **Micro→galactic zoom / Total-War campaign** — camera + scene architecture for concurrent fronts. | **D1 DONE 2026-06-17** — galaxy graph (rings→core) + continuous tactical→galactic zoom (`GalaxyView` + camera zoom-out) + deploy to a frontier node's seeded battle map; capture on `map_completed` (wired). **Blocker for full loop: per-territory state persistence (buildings/claims/ownership) — shared with C4 offline.** Next: that persistence, then per-territory win conditions + diplomacy layer. |
 
 Open design Qs for B/C captured in `vision-roadmap.md` (enemy selection per map, 3-way
 convergence, pathing-bias vs distinct algorithms, unit-role RPS, offline sim tick model).

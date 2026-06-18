@@ -67,6 +67,9 @@ const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
 var _map_grid       : Node      = null   ## duck-typed; resolved in _ready
 var _move_queue     : Array[Vector2] = []   ## queued move waypoints (world space); RTS chaining
 var _selected       : bool      = false     ## true when the player has the Commander selected
+## SupCom-style: the queued move path is hidden during normal movement and only drawn
+## while Shift is held, so the player can preview + chain waypoints on demand.
+var _shift_held     : bool      = false
 var _claimed_count  : int       = 0      ## cells claimed so far this session
 var _commander_rank : int       = 0      ## Phase 9 rank derived from _claimed_count
 var _rank_bar       : Node2D    = null   ## ProgressionBar instance
@@ -105,6 +108,14 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	## Toggle the move-path overlay with the Shift key (SupCom-style waypoint preview).
+	## Only redraw on a state change, and only when selected — the path is meaningless otherwise.
+	var shift_now : bool = Input.is_key_pressed(KEY_SHIFT)
+	if shift_now != _shift_held:
+		_shift_held = shift_now
+		if _selected:
+			queue_redraw()
+
 	## Primary attack timer — interval halved while Overdrive is active.
 	_primary_timer -= delta
 	if _primary_timer <= 0.0:
@@ -133,6 +144,10 @@ func _process(delta: float) -> void:
 		queue_redraw()   ## the drawn path just got shorter
 	else:
 		global_position += to_target.normalized() * step
+	## While the path overlay is showing, redraw each frame so its origin stays anchored
+	## to the moving Commander (the line is drawn relative to global_position).
+	if _shift_held and _selected:
+		queue_redraw()
 	_claim_around()
 	_reveal_around()
 
@@ -280,13 +295,14 @@ func _draw() -> void:
 	var sensor_r : float = (_sensor_radius() + 0.5) * CELL_SIZE_PX
 	draw_arc(Vector2.ZERO, sensor_r, 0.0, TAU, 64, SENSOR_RING_COLOR, 1.5, true)
 	draw_arc(Vector2.ZERO, los_r,    0.0, TAU, 32, LOS_RING_COLOR,    2.0, true)
-	## Selection ring + queued move path (shown only while selected). A faint outer halo
-	## + a thick bright ring make the selected state obvious even at the zoomed-out default.
+	## Selection ring is always shown while selected. A faint outer halo + a thick bright
+	## ring make the selected state obvious even at the zoomed-out default. The queued move
+	## path is drawn only while Shift is held (SupCom-style) — hidden during normal movement.
 	if _selected:
 		var halo : Color = Color(SELECT_RING_COLOR.r, SELECT_RING_COLOR.g, SELECT_RING_COLOR.b, 0.30)
 		draw_arc(Vector2.ZERO, SELECT_RING_RADIUS + 7.0, 0.0, TAU, 40, halo, 2.0, true)
 		draw_arc(Vector2.ZERO, SELECT_RING_RADIUS, 0.0, TAU, 40, SELECT_RING_COLOR, 4.0, true)
-		if not _move_queue.is_empty():
+		if _shift_held and not _move_queue.is_empty():
 			var pts : PackedVector2Array = PackedVector2Array()
 			pts.append(Vector2.ZERO)
 			for wp in _move_queue:
@@ -350,6 +366,13 @@ func _build_visual() -> void:
 	_rank_chevrons.position = Vector2(0.0, -30.0)
 	_rank_chevrons.z_index = 20
 	add_child(_rank_chevrons)
+
+	## CRITICAL: the gold body is a ColorRect (a Control) — by default MOUSE_FILTER_STOP, so it
+	## consumes left-clicks in _gui_input before they reach _unhandled_input, i.e. clicking
+	## directly ON the Commander failed to select it. Make all visual Controls click-through.
+	for child in get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _update_rank_bar() -> void:
 	if _rank_bar == null:

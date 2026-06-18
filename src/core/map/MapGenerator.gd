@@ -59,6 +59,7 @@ static func _try_generate(rng: RandomNumberGenerator, biome: StringName,
 		topology_template: StringName) -> MapData:
 	var data := MapData.new()
 	data.map_id            = StringName("procgen_%d" % rng.seed)
+	data.map_seed          = rng.seed   ## reproduce this exact map via generate(seed)
 	data.dimensions        = Vector2i(_COLS, _ROWS)
 	data.biome             = biome
 	data.topology_template = topology_template
@@ -70,11 +71,11 @@ static func _try_generate(rng: RandomNumberGenerator, biome: StringName,
 	var spawn_count : int = rng.randi_range(2, 4)
 	var chosen : Array = picks.slice(0, spawn_count)
 
-	## Draw a winding multi-segment path from each chosen spawn to the FOB. 1-3
-	## intermediate waypoints per path produce twists and turns instead of a
-	## single L-shape. Each segment uses a random L orientation.
+	## Carve TWO parallel corridors from each chosen spawn to the FOB so the route graph
+	## offers genuine alternates — the substrate Phase B faction pathing needs. Corridors
+	## from different spawns also cross, multiplying route options (the RTS-loose feel).
 	for entry in chosen:
-		_carve_winding_path(data, rng, entry["pos"] as Vector2i, _BASE_POS)
+		_carve_branching_path(data, rng, entry["pos"] as Vector2i, _BASE_POS)
 
 	## Stamp BASE last so it overrides any PATH that ran through (15, 8).
 	data.cell_types[_BASE_POS.x + _BASE_POS.y * _COLS] = _BASE
@@ -94,40 +95,39 @@ static func _try_generate(rng: RandomNumberGenerator, biome: StringName,
 
 	return data
 
-## Carves a winding path made of 2-4 L-shape segments. Generates 1-3 intermediate
-## waypoints between `from` and `to` (offset perpendicular to the spawn-base axis
-## so the route bends meaningfully rather than running in a straight line), then
-## connects each consecutive pair with a randomly-oriented L. End-to-end reachability
-## is guaranteed because every segment is a 4-connected L.
-static func _carve_winding_path(data: MapData, rng: RandomNumberGenerator,
+## Carves TWO parallel corridors from a spawn to the FOB so the route graph offers genuine
+## alternates — the substrate Phase B faction pathing needs (Architects take the direct one,
+## Bloom spread across both, Mesh pick the softer). The corridors bend to OPPOSITE sides of
+## the spawn→base axis and share only their endpoints, so AStar's penalty-method diverse-path
+## search reliably finds both. A random lane spread keeps maps varied; crossing corridors
+## from other spawns add further route options.
+static func _carve_branching_path(data: MapData, rng: RandomNumberGenerator,
 		from: Vector2i, to: Vector2i) -> void:
-	var waypoint_count : int = rng.randi_range(1, 3)
-	var points : Array[Vector2i] = [from]
-	for i in waypoint_count:
-		var t       : float = float(i + 1) / float(waypoint_count + 1)
-		var base_x  : float = lerpf(float(from.x), float(to.x), t)
-		var base_y  : float = lerpf(float(from.y), float(to.y), t)
-		## Perpendicular offset keeps the bend visually distinct from a straight line.
-		## Offsets scaled for 60×34 (roughly 2× the old 30×17 values).
-		var off_x   : int = rng.randi_range(-10, 10)
-		var off_y   : int = rng.randi_range(-6, 6)
-		var wp_x    : int = clampi(int(base_x) + off_x, 1, _COLS - 2)
-		var wp_y    : int = clampi(int(base_y) + off_y, 1, _ROWS - 2)
-		points.append(Vector2i(wp_x, wp_y))
-	points.append(to)
-	for i in points.size() - 1:
-		_carve_l_segment(data, rng, points[i], points[i + 1])
-
-## Single L-shape between two points. Used as the segment primitive of winding paths.
-static func _carve_l_segment(data: MapData, rng: RandomNumberGenerator,
-		from: Vector2i, to: Vector2i) -> void:
-	var horizontal_first : bool = rng.randf() < 0.5
-	if horizontal_first:
-		_fill_h(data, from.y, from.x, to.x)
-		_fill_v(data, to.x,   from.y, to.y)
+	var spread : int = rng.randi_range(5, 9)
+	if absi(to.x - from.x) >= absi(to.y - from.y):
+		## Horizontal-dominant axis (W/E spawns): two corridors on rows to.y ± spread.
+		_carve_h_corridor(data, from, to,  spread)
+		_carve_h_corridor(data, from, to, -spread)
 	else:
-		_fill_v(data, from.x, from.y, to.y)
-		_fill_h(data, to.y,   from.x, to.x)
+		## Vertical-dominant axis (N/S spawns): two corridors on cols to.x ± spread.
+		_carve_v_corridor(data, from, to,  spread)
+		_carve_v_corridor(data, from, to, -spread)
+
+## One horizontal-axis corridor: from the spawn, run vertically to an offset lane row, cross
+## the width at that row, then drop into the base column. The offset sign picks the side.
+static func _carve_h_corridor(data: MapData, from: Vector2i, to: Vector2i, row_offset: int) -> void:
+	var lane_y : int = clampi(to.y + row_offset, 1, _ROWS - 2)
+	_fill_v(data, from.x, from.y, lane_y)
+	_fill_h(data, lane_y, from.x, to.x)
+	_fill_v(data, to.x,   lane_y, to.y)
+
+## One vertical-axis corridor: from the spawn, run horizontally to an offset lane column,
+## descend that column, then cross into the base row. The offset sign picks the side.
+static func _carve_v_corridor(data: MapData, from: Vector2i, to: Vector2i, col_offset: int) -> void:
+	var lane_x : int = clampi(to.x + col_offset, 1, _COLS - 2)
+	_fill_h(data, from.y, from.x, lane_x)
+	_fill_v(data, lane_x, from.y, to.y)
+	_fill_h(data, to.y,   lane_x, to.x)
 
 static func _build_spawn_points(data: MapData, chosen: Array) -> void:
 	for i in chosen.size():

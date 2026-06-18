@@ -250,6 +250,15 @@ func _build_visual() -> void:
 	_hp_bar.color    = Color(0.20, 0.90, 0.20)
 	add_child(_hp_bar)
 
+	## CRITICAL: these decorative Controls sit on the FOB at screen centre — exactly where the
+	## Commander is. A Control defaults to MOUSE_FILTER_STOP and consumes left-clicks in
+	## _gui_input BEFORE they ever reach _unhandled_input, so a dead-centre click on the
+	## Commander was being swallowed (selection only worked when clicking slightly off-centre,
+	## within the generous hit radius but outside these rects). Make them all click-through.
+	for child in get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	## Phase 9: fortification rank progression bar above the FOB.
 	_rank_bar = ProgressionBarScript.new()
 	_rank_bar.position = Vector2(0.0, -62.0)

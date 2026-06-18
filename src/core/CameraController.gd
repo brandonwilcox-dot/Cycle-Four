@@ -14,6 +14,10 @@ extends Camera2D
 
 const ZOOM_MAX  : float = 3.0   ## Maximum zoom-in factor (3x)
 const ZOOM_STEP : float = 0.1   ## Proportional step per scroll click (10% of current zoom)
+## Phase D: zoom-out floor. Below board-min (`_zoom_min`) the camera leaves the tactical board
+## and zooms out into the galaxy graph (drawn in the same world space, far larger), so the
+## board shrinks to the home node and the rings of territories come into view.
+const GALAXY_ZOOM_MIN : float = 0.02
 
 ## HUD bars overlay the top header strip and the bottom command/minimap area. The map
 ## is framed within the band BETWEEN them so spawns/units near the edges are never hidden
@@ -75,7 +79,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## direction: +1.0 = zoom in, -1.0 = zoom out.
 func _apply_zoom(direction: float, screen_pos: Vector2) -> void:
 	var old_zoom : float  = zoom.x
-	var new_zoom : float  = clampf(old_zoom * (1.0 + direction * ZOOM_STEP), _zoom_min, ZOOM_MAX)
+	var new_zoom : float  = clampf(old_zoom * (1.0 + direction * ZOOM_STEP), GALAXY_ZOOM_MIN, ZOOM_MAX)
 	if is_equal_approx(new_zoom, old_zoom):
 		return
 	## Zoom to cursor: keep the world point under screen_pos stationary.
@@ -92,7 +96,17 @@ func _apply_zoom(direction: float, screen_pos: Vector2) -> void:
 ## so its edges stay clear of the top header and bottom HUD. `position` is the world
 ## point shown at the viewport centre (no Camera2D.offset), so screen↔world math used
 ## elsewhere (clicks, zoom-to-cursor) is unaffected.
+## Board-fills-screen zoom (the tactical floor). Below this the camera is in galaxy range.
+func board_min_zoom() -> float:
+	return _zoom_min
+
+func is_galaxy_zoom() -> bool:
+	return zoom.x < _zoom_min * 0.92
+
 func _clamp_position() -> void:
+	## In galaxy range, pan freely so the player can roam the whole graph.
+	if zoom.x < _zoom_min:
+		return
 	var vp     : Vector2 = get_viewport().get_visible_rect().size
 	var half_w : float   = vp.x / (2.0 * zoom.x)
 	if half_w >= _map_width * 0.5:

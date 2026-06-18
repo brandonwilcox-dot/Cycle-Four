@@ -6,7 +6,11 @@ extends Node
 const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.tscn")
 const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
+const GALAXY_VIEW_SCRIPT    = preload("res://src/ui/GalaxyView.gd")
+const MAP_GENERATOR_SCRIPT  = preload("res://src/core/map/MapGenerator.gd")
 const GRID_SIZE             : int = 64
+## World centre of the tactical board (COLS/2 × ROWS/2 cells) — the galaxy view recentres here.
+const BOARD_CENTER          : Vector2 = Vector2(1920.0, 1088.0)
 ## Hit radii in SCREEN pixels (converted to world via camera zoom) so selection stays
 ## forgiving at any zoom — generous when zoomed out, precise when zoomed in.
 const STRUCTURE_HIT_SCREEN_PX    : float = 30.0
@@ -64,6 +68,9 @@ var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
 var _placement_preview : ColorRect = null
 var _preview_cell      : Vector2i  = Vector2i(-9999, -9999)
 
+## Phase D: the galaxy graph overlay (zoom out to see it).
+var _galaxy_view : Node2D = null
+
 func _ready() -> void:
 	add_to_group("main_controller")
 	hud.hide()
@@ -75,6 +82,7 @@ func _ready() -> void:
 	EventBus.panel_sell_requested.connect(_on_panel_sell_requested)
 	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine_requested)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
+	EventBus.offline_catch_up.connect(_on_offline_catch_up)
 	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
@@ -109,6 +117,98 @@ func _start_game_world() -> void:
 	EventBus.notification_pushed.emit(
 		"Commander selected — right-click to move it. Place towers, then Begin Waves.", "info"
 	)
+	## Phase D: ensure the galaxy graph exists and mount the zoom-out galaxy view. Capturing a
+	## territory triggers on map_completed (all its objectives done).
+	GalaxyManager.ensure_galaxy(FactionManager.active_faction)
+	_build_galaxy_view()
+	if not EventBus.map_completed.is_connected(_on_map_completed):
+		EventBus.map_completed.connect(_on_map_completed)
+
+## -- Phase D: galaxy view + campaign loop --
+
+func _build_galaxy_view() -> void:
+	if _galaxy_view != null and is_instance_valid(_galaxy_view):
+		_galaxy_view.call("setup", BOARD_CENTER)
+		return
+	_galaxy_view = GALAXY_VIEW_SCRIPT.new()
+	$WorldMap.add_child(_galaxy_view)
+	_galaxy_view.call("setup", BOARD_CENTER)
+
+## True while the camera is zoomed out into the galaxy (left-clicks pick territories, not units).
+func _in_galaxy_zoom() -> bool:
+	var cam : Node = get_node_or_null("WorldMap/Camera")
+	return cam != null and cam.has_method("is_galaxy_zoom") and bool(cam.call("is_galaxy_zoom"))
+
+## A left-click while zoomed out: deploy to a frontier territory under the cursor.
+func _handle_galaxy_click(screen_pos: Vector2) -> void:
+	if _galaxy_view == null:
+		return
+	var world : Vector2 = _screen_to_world(screen_pos)
+	var id : String = str(_galaxy_view.call("node_at", world))
+	if id.is_empty():
+		return
+	if GalaxyManager.is_frontier(id, FactionManager.active_faction):
+		_deploy_to_node(id)
+	else:
+		EventBus.notification_pushed.emit("That territory isn't on your frontier.", "warning")
+
+## Loads the selected territory's seeded battle map and zooms back in. Capturing it happens on
+## map_completed (see _on_map_completed). Clears the previous battle's transient entities.
+func _deploy_to_node(node_id: String) -> void:
+	GalaxyManager.invading_node = node_id
+	GalaxyManager.active_node   = node_id
+	for layer in [tower_layer, building_layer, get_node_or_null("WorldMap/UnitLayer")]:
+		if layer != null:
+			for c in layer.get_children():
+				c.queue_free()
+	_occupied_cells.clear()
+	_building_cells.clear()
+	_inspected_cell = Vector2i(-1, -1)
+	_map_grid.load_map_data(MAP_GENERATOR_SCRIPT.generate(GalaxyManager.node_seed(node_id)))
+	_activate_all_spawns()
+	var cam : Node = get_node_or_null("WorldMap/Camera")
+	if cam != null and cam.has_method("board_min_zoom"):
+		var z : float = float(cam.call("board_min_zoom"))
+		cam.set("zoom", Vector2(z, z))
+		cam.set("position", BOARD_CENTER)
+	if _galaxy_view != null:
+		_galaxy_view.call("setup", BOARD_CENTER)   ## recenter on the new active node + redraw
+	EventBus.notification_pushed.emit("Deploying to contested territory — complete its objective to claim it.", "info")
+
+## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
+func _on_map_completed() -> void:
+	if GalaxyManager.invading_node.is_empty():
+		return
+	var node_id : String = GalaxyManager.invading_node
+	GalaxyManager.capture_system(node_id, FactionManager.active_faction)
+	GalaxyManager.invading_node = ""
+	EventBus.notification_pushed.emit("Territory captured: %s. New frontier opened." % node_id, "info")
+	if _galaxy_view != null and is_instance_valid(_galaxy_view):
+		_galaxy_view.call("queue_redraw")
+
+## -- C4: offline army resolution --
+
+## Fires when a save is loaded after time away (EconomyManager.apply_offline_time). Garrisons
+## that existed offline expand the player's territory. (Buildings/claims aren't persisted yet —
+## see the galactic-map persistence note — so on a real Continue there are no garrisons to run;
+## this is correctly wired for when that lands, and exercisable now via the F4 dev key.)
+func _on_offline_catch_up(seconds_elapsed: float) -> void:
+	_resolve_offline_army(seconds_elapsed)
+
+## Fast-forwards every garrison's standing-order raids over the elapsed time and reports a single
+## summary. Each garrison runs its real raid rules against the live map (see
+## Building.simulate_offline_raids), so territory grows exactly as it would have online.
+func _resolve_offline_army(seconds_elapsed: float) -> void:
+	var total : int = 0
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if is_instance_valid(b) and b.has_method("simulate_offline_raids"):
+			total += int(b.call("simulate_offline_raids", seconds_elapsed))
+	if total > 0:
+		var mins : int = int(seconds_elapsed / 60.0)
+		EventBus.notification_pushed.emit(
+			"While you were away (%d min), your garrisons claimed %d cells of territory." % [mins, total],
+			"info"
+		)
 
 ## Transitions all DORMANT spawn points to ACTIVE. Safe to call on already-active
 ## or sealed spawns — activate_spawn_by_id only transitions DORMANT → ACTIVE.
@@ -129,18 +229,32 @@ func _unhandled_input(event: InputEvent) -> void:
 	## Using _unhandled_input so GUI controls (InspectionPanel Upgrade button,
 	## action bar buttons) consume their clicks before this handler sees them.
 	if event is InputEventKey and event.pressed:
-		## DEV: F1 skips Academy → architects. Gated on OS.is_debug_build() so it is
-		## compiled out of release exports and can never ship, while staying available
-		## in editor/debug runs.
-		if event.keycode == KEY_F1 and OS.is_debug_build() and not GameState.academy_completed:
-			FactionManager.select_faction("architects", "standard")
-			GameState.academy_completed = true
-			faction_select.hide()
-			## The Academy may have already emitted academy_phase_started (which hides the
-			## Begin Waves button). Skipping bypasses academy_phase_ended, so restore the
-			## HUD explicitly or the wave button stays hidden after the F1 skip.
-			EventBus.academy_phase_ended.emit()
-			_start_game_world()
+		## DEV: F1/F2/F3 skip the Academy and start as Architects / Mesh / Bloom. Gated on
+		## OS.is_debug_build() so they are compiled out of release exports and can never
+		## ship, while staying available in editor/debug runs. F2/F3 added to playtest
+		## faction-flavored enemy pathing (each player faction faces a different enemy).
+		if OS.is_debug_build() and not GameState.academy_completed:
+			var dev_faction  : String = ""
+			var dev_sub_path : String = ""
+			match event.keycode:
+				KEY_F1: dev_faction = "architects"; dev_sub_path = "standard"
+				KEY_F2: dev_faction = "mesh";       dev_sub_path = "networked"
+				KEY_F3: dev_faction = "bloom";      dev_sub_path = "purist"
+			if not dev_faction.is_empty():
+				FactionManager.select_faction(dev_faction, dev_sub_path)
+				GameState.academy_completed = true
+				faction_select.hide()
+				## The Academy may have already emitted academy_phase_started (which hides the
+				## Begin Waves button). Skipping bypasses academy_phase_ended, so restore the
+				## HUD explicitly or the wave button stays hidden after the skip.
+				EventBus.academy_phase_ended.emit()
+				_start_game_world()
+				get_viewport().set_input_as_handled()
+				return
+		## DEV: F4 simulates 1 hour of offline army resolution on the live session (so C4
+		## can be exercised before building/territory persistence lands). Gated on debug build.
+		if OS.is_debug_build() and GameState.academy_completed and event.keycode == KEY_F4:
+			_resolve_offline_army(3600.0)
 			get_viewport().set_input_as_handled()
 			return
 		if event.keycode == KEY_ESCAPE:
@@ -175,6 +289,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			elif _build_mode:
 				_try_place_building(event.position)
+				get_viewport().set_input_as_handled()
+			elif _in_galaxy_zoom():
+				_handle_galaxy_click(event.position)
 				get_viewport().set_input_as_handled()
 			else:
 				_handle_select_click(event.position)

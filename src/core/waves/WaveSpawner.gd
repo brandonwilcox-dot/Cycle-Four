@@ -27,6 +27,16 @@ var _spawning          : bool     = false
 ## Emitted to EventBus as wave_axis_committed so the WavePanel can display axis pressure.
 var _spawn_queue : Dictionary = {}
 
+## Phase B — faction-flavored pathing. Each active spawn caches a small set of distinct
+## routes to base (from MapGrid.get_diverse_paths_to_base); per-faction policy then picks
+## one per unit: Architects = most direct, Bloom = even sprawl, Mesh = least-defended.
+## Caches are keyed by spawn cell and invalidated on wave start/end and path_changed.
+const DIVERSE_ROUTE_K    : int   = 3
+const MESH_PROBE_CHANCE  : float = 0.25   ## Mesh occasionally probes a non-optimal route
+const ROUTE_THREAT_RADIUS : float = 160.0 ## px; a tower within this of a route adds threat
+var _route_cache : Dictionary = {}   ## Vector2i spawn cell → Array of routes (Array[Vector2])
+var _route_uses  : Dictionary = {}   ## Vector2i spawn cell → Array[int] per-route use counts
+
 ## Scripted overrides: wave_number (int) → {secondary_count: int}.
 ## When the keyed wave starts a secondary (non-primary) active spawn is chosen and
 ## secondary_count extra units are injected into the spawn queue from that axis.
@@ -93,6 +103,7 @@ func _emit_preview(wave_number: int) -> void:
 	EventBus.wave_previewed.emit(wave_number, str(comp.unit_name), int(comp.count))
 
 func _on_wave_started(wave_number: int, _commander_data: Dictionary) -> void:
+	_clear_route_cache()   ## Phase B: rebuild faction routes against the current map/towers.
 	if _wave_table == null:
 		_start_procedural_wave(wave_number)
 	else:
@@ -123,6 +134,7 @@ func _on_wave_ended(_wave_number: int, _result: String) -> void:
 	_spawning       = false
 	_units_to_spawn = 0
 	_spawn_queue.clear()
+	_clear_route_cache()
 	## Free any units still alive (e.g. defeat before all spawned)
 	if _unit_layer != null:
 		for child in _unit_layer.get_children():
@@ -161,8 +173,8 @@ func _spawn_unit() -> void:
 			return
 		## No accessible claimed cells -- fall through and spawn a normal base-rusher.
 
-	## Normal base-rusher
-	var wp_array : Array = _map_grid.get_path_to_base(chosen_spawn)
+	## Normal base-rusher — Phase B picks a route per the enemy faction's movement norm.
+	var wp_array : Array = _faction_path(chosen_spawn)
 	if wp_array.is_empty():
 		push_error("WaveSpawner: no path from spawn %s -- check MapGrid path connectivity." % chosen_spawn)
 		return
@@ -170,6 +182,87 @@ func _spawn_unit() -> void:
 	unit.call("setup", _current_unit_data, wp_array)
 	_unit_layer.add_child(unit)
 	_emit_unit_spawned()
+
+## -- Phase B: faction-flavored pathing --
+
+## Returns the waypoint route this unit should take, chosen by the enemy faction's
+## movement norm (codex §05). Falls back to the plain shortest path for unknown factions
+## or when the map offers no route set.
+func _faction_path(spawn_cell: Vector2i) -> Array:
+	var routes : Array = _routes_for(spawn_cell)
+	if routes.is_empty():
+		return _map_grid.get_path_to_base(spawn_cell)
+	var faction : String = ""
+	if _current_unit_data != null and _current_unit_data.get("faction_id") != null:
+		faction = str(_current_unit_data.faction_id)
+	var idx : int = 0
+	match faction:
+		"architects":
+			idx = 0                                          ## direct: efficiency, shortest route
+		"bloom":
+			idx = _least_used_route_idx(spawn_cell)          ## sprawl: even spread across all routes
+		"mesh":
+			idx = _weakpoint_route_idx(spawn_cell, routes)   ## raider: seek the soft route, then commit
+		_:
+			idx = 0
+	idx = clampi(idx, 0, routes.size() - 1)
+	(_route_uses[spawn_cell] as Array)[idx] += 1
+	return routes[idx]
+
+## Lazily builds and caches the diverse route set (and a use-count tally) for a spawn cell.
+func _routes_for(spawn_cell: Vector2i) -> Array:
+	if not _route_cache.has(spawn_cell):
+		var routes : Array = _map_grid.call("get_diverse_paths_to_base", spawn_cell, DIVERSE_ROUTE_K)
+		_route_cache[spawn_cell] = routes
+		var uses : Array[int] = []
+		uses.resize(routes.size())
+		uses.fill(0)
+		_route_uses[spawn_cell] = uses
+	return _route_cache[spawn_cell]
+
+## Bloom sprawl: pick the route used least so far, so units fan out evenly across every
+## available corridor instead of forming a single conga line.
+func _least_used_route_idx(spawn_cell: Vector2i) -> int:
+	var uses : Array = _route_uses[spawn_cell]
+	var best : int = 0
+	for i in range(uses.size()):
+		if uses[i] < uses[best]:
+			best = i
+	return best
+
+## Mesh weak-point seek: mostly commit down the least-defended route, occasionally probe
+## another to find new gaps. "Defended" = towers within ROUTE_THREAT_RADIUS of the route.
+func _weakpoint_route_idx(_spawn_cell: Vector2i, routes: Array) -> int:
+	if routes.size() > 1 and randf() < MESH_PROBE_CHANCE:
+		return randi() % routes.size()
+	var best        : int   = 0
+	var best_threat : float = INF
+	for i in range(routes.size()):
+		var t : float = _route_threat(routes[i])
+		if t < best_threat:
+			best_threat = t
+			best        = i
+	return best
+
+## Counts defensive presence along a route: each tower within ROUTE_THREAT_RADIUS of any
+## waypoint adds 1. Higher = better defended (Mesh avoids); used only for route selection.
+func _route_threat(path: Array) -> float:
+	var threat : float = 0.0
+	for d in get_tree().get_nodes_in_group("towers"):
+		if not (d is Node2D) or not is_instance_valid(d):
+			continue
+		var dp : Vector2 = (d as Node2D).global_position
+		for wp in path:
+			if dp.distance_to(wp) <= ROUTE_THREAT_RADIUS:
+				threat += 1.0
+				break
+	return threat
+
+## Invalidates the cached route sets (call when wave boundaries change or a tower
+## reshapes the path graph, so routes are recomputed against the current map).
+func _clear_route_cache() -> void:
+	_route_cache.clear()
+	_route_uses.clear()
 
 ## Fraction of units that are flankers for a given wave.
 ## 0 for waves 1-5; ramps 10% per wave from wave 6, capped at 50%.
@@ -294,6 +387,7 @@ func _on_path_changed() -> void:
 	## to recalculate its route via the updated AStar graph.
 	if _unit_layer == null or _map_grid == null:
 		return
+	_clear_route_cache()   ## Phase B: the graph changed — recompute faction routes for new spawns.
 	for child in _unit_layer.get_children():
 		if is_instance_valid(child) and child.has_method("reroute"):
 			child.call("reroute", _map_grid)

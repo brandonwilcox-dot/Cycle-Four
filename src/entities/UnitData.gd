@@ -23,6 +23,14 @@ class_name UnitData
 ## Stealth units render and can be targeted only inside a sensor sphere (sensed cells).
 @export var stealth: bool = false
 
+## Active-RTS combat (Phase C friendly army). Enemies don't use these (they only march
+## and deal damage_on_arrival), so they default to 0 / inert. A friendly garrison unit with
+## attack_damage > 0 fires on enemies in range via the damage/armor triangle, using its
+## OWN faction's signature damage type (Combat.faction_damage_type), exactly like towers.
+@export var attack_damage: float = 0.0      ## per-shot damage; 0 = non-combatant
+@export var attack_range: float = 0.0       ## px; how far it can engage
+@export var attack_interval: float = 1.0    ## seconds between shots
+
 ## Economy
 @export var resource_reward: float = 5.0   ## primary resource dropped on death
 @export var spawn_cost: Dictionary = {}     ## cost to produce (unit production layer)

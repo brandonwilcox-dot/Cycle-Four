@@ -16,6 +16,15 @@ var _waypoints     : Array[Vector2] = []
 var _wp_index      : int            = 1
 const ARRIVE_DIST  : float          = 3.0   ## px -- close enough to snap to waypoint
 
+## C2 — two-way combat. When a friendly army unit blocks our path (within
+## MELEE_ENGAGE_RANGE) we stop advancing and grind it down on MELEE_INTERVAL. Damage uses
+## our faction's signature type vs the friendly's armor (the one triangle). ENEMY_MELEE_DAMAGE
+## is a fallback for roster units whose .tres hasn't authored attack_damage yet.
+const MELEE_ENGAGE_RANGE : float = 40.0
+const MELEE_INTERVAL     : float = 1.0
+const ENEMY_MELEE_DAMAGE : float = 8.0
+var _melee_timer : float = 0.0
+
 var _current_health   : float    = 0.0
 var _is_dead          : bool     = false
 var _visual           : ColorRect = null   ## placeholder until sprites exist
@@ -68,6 +77,16 @@ func _process(delta: float) -> void:
 	_update_fog_visibility()
 	## Stun check: freeze movement for the duration. Status-immune units skip this.
 	if _stun_until > 0.0 and Time.get_ticks_msec() / 1000.0 < _stun_until:
+		return
+	## C2: if a friendly army unit is blocking us, stop advancing and fight it. This is what
+	## lets the player's garrisons hold a line instead of being walked past.
+	var foe : Node2D = _engaged_friendly()
+	if foe != null:
+		_melee_timer += delta
+		if _melee_timer >= MELEE_INTERVAL:
+			_melee_timer = 0.0
+			if foe.has_method("take_damage"):
+				foe.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))
 		return
 	## Flankers: if our target was already raided by another unit, grab the next one.
 	## get_cell() is an O(1) array lookup -- safe to call every frame.
@@ -178,6 +197,24 @@ func is_detectable() -> bool:
 	if data == null or not data.stealth:
 		return true
 	return _is_detected
+
+## C2: nearest friendly army unit within melee range, or null. Drives blocking + retaliation.
+func _engaged_friendly() -> Node2D:
+	var best   : Node2D = null
+	var best_d : float  = MELEE_ENGAGE_RANGE
+	for f in get_tree().get_nodes_in_group("friendly_units"):
+		if not is_instance_valid(f) or not (f is Node2D):
+			continue
+		var d : float = global_position.distance_to((f as Node2D).global_position)
+		if d <= best_d:
+			best   = f
+			best_d = d
+	return best
+
+## Melee damage we deal to a blocking friendly. Falls back to a constant when the roster
+## resource hasn't authored attack_damage (it's tuned as a marching wave unit).
+func _melee_damage() -> float:
+	return maxf(data.attack_damage, ENEMY_MELEE_DAMAGE)
 
 ## True if any active detector (FOB, Commander, detector tower) currently covers us.
 func _within_active_detector() -> bool:
@@ -299,6 +336,12 @@ func _build_placeholder_visual() -> void:
 	bar_fg.position     = Vector2(-12.0, -18.0)
 	bar_fg.color        = Color(0.2, 0.9, 0.2)
 	add_child(bar_fg)
+
+	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
+	## would consume LMB before it reaches selection/placement handlers).
+	for child in get_children():
+		if child is Control:
+			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _update_health_visual() -> void:
 	var bar : ColorRect = get_node_or_null("HealthBar")
