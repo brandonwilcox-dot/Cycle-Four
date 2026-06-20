@@ -11,7 +11,7 @@
 ## SaveManager no longer auto-loads at startup; this screen owns the load decision.
 extends Control
 
-const MAIN_SCENE   : String = "res://scenes/main/Main.tscn"
+const BATTLE_SCENE   : String = "res://scenes/main/Battle.tscn"
 const SETTINGS_PATH : String = "user://settings.cfg"
 
 const COL_BG       : Color = Color(0.05, 0.05, 0.08, 1.0)
@@ -161,13 +161,13 @@ func _on_new_game_pressed() -> void:
 	## Fresh slate. We do NOT delete the existing save here — it is overwritten
 	## naturally once the new run auto-saves, so quitting mid-Academy is non-destructive.
 	GameState.reset_for_new_game()
-	SceneManager.change_to(MAIN_SCENE)
+	SceneManager.change_to(BATTLE_SCENE)
 
 func _on_continue_pressed() -> void:
 	if not SaveManager.has_save():
 		return
 	SaveManager.load_game()
-	SceneManager.change_to(MAIN_SCENE)
+	SceneManager.change_to(BATTLE_SCENE)
 
 func _on_options_pressed() -> void:
 	_menu_root.hide()

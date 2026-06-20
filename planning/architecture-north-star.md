@@ -130,7 +130,7 @@ decoupled communication via a signal bus (`EventBus`).
 Root.tscn   (run/main_scene) — thin bootstrapper, ~no game logic
 └── SceneManager     loads ONE screen, frees the previous, runs the fade
         ├─ TitleScreen.tscn
-        ├─ Battle.tscn           ← the gameplay screen (today's Main): WorldMap (+ Galaxy
+        ├─ Battle.tscn           ← the gameplay screen (renamed from Main): WorldMap (+ Galaxy
         │                          continuous-zoom), HUD, GameOver overlay, AND the first-run
         │                          ACADEMY director (tutorial = observed play; faction-select is
         │                          its finale). Unified, like Galaxy — not a separate screen.
@@ -193,7 +193,7 @@ stageable. Bar at each stage: `run_project` → zero new errors → `stop_projec
 | **0 ✅** | This doc. | The contract exists. |
 | **1 ✅** | Add a thin `Root` scene + `SceneManager` (load / swap / free + fade). Boot still lands on Title. | Foundation; zero behavior change. **Done 2026-06-20 — boots clean (MCP), zero new errors.** |
 | **2 ✅** | **Revised — the Academy is a *guided first Battle* (it observes real play; faction-select is its finale), not a separable screen.** Kept it as a **director on the Battle screen** (unified, like Galaxy⇄Battle). Killed the bug sources instead: `CadetAvatar` → non-interactive prop (**bug #1 fixed**); deleted the orphaned `FactionSelectScreen`; renamed `faction_select`→`academy`. | **Done 2026-06-20 — `Main.tscn` runs clean (MCP), zero errors.** |
-| **3** | Rename `Main` → `Battle`; it becomes pure gameplay (no menu children). Continue loads straight into Battle. | Single-responsibility gameplay scene. |
+| **3 ✅** | Rename `Main` → `Battle` (files + root node + `TitleScreen` path const). Pure gameplay scene (Academy is its director; menus are out). Continue already loads straight in. | **Done 2026-06-20 — `Battle.tscn` + normal boot both run clean (MCP), zero errors.** |
 | **4+** | Each future system (Pilgrimage/prestige, Arrival, multi-front) arrives as its **own** screen the manager swaps to. | The bug class never returns. |
 
 Stages 1–3 are the refactor that pays off the "stop breaking things" concern. Stage 4+ is just

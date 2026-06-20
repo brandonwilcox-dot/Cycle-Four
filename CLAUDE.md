@@ -39,7 +39,12 @@ Galaxy⇄Battle). Killed the bug sources: `CadetAvatar` is now a non-interactive
 the 2026-06-20 "cadet drifts on click" = bug #1; it never was the Commander); deleted the orphaned
 `FactionSelectScreen` (.gd/.uid/.tscn — the Academy superseded it); renamed `Main.gd`'s misleading
 `faction_select` → `academy`. `Main.tscn` runs clean via MCP (zero errors; only standing benign
-warnings). **Next: Stage 3** — rename `Main`→`Battle` (pure gameplay scene); Continue loads into it.
+warnings). **Stage 3 DONE 2026-06-20** — renamed the gameplay scene/script `Main`→`Battle` (`scenes/main/
+Battle.tscn` + `.gd` + `.gd.uid`; root node `Main`→`Battle`); `TitleScreen`'s `MAIN_SCENE`→
+`BATTLE_SCENE` path constant. Only 5 functional refs existed (nothing referenced the node by name;
+the `main_controller` group string is unchanged). Verified via MCP: `Battle.tscn` runs clean AND
+normal boot (Root→Title) clean — zero errors both. **Stages 1–3 (the SceneManager + scene-separation
+refactor) COMPLETE.** Stage 4+ = ongoing discipline (new systems arrive as their own screen).
 
 ## Fix — Commander select regression: world-space Controls ate the click — 2026-06-17 (verified live)
 

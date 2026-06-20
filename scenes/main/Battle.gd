@@ -1,6 +1,7 @@
-## Main.gd
-## Root scene controller. Owns scene transitions, tower placement/upgrades,
-## and production building placement/destruction.
+## Battle.gd
+## The gameplay screen controller (the unified Battle⇄Galaxy space). Owns the live
+## board: tower/building placement + upgrades, the galaxy deploy/capture loop, and
+## the first-run Academy director. Top-level screen swaps are owned by SceneManager.
 extends Node
 
 const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tscn")
