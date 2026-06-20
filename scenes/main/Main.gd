@@ -38,7 +38,7 @@ const WASH_ALPHA    : float = 0.6
 const PREVIEW_VALID   : Color = Color(0.30, 0.95, 0.40, 0.28)
 const PREVIEW_INVALID : Color = Color(0.95, 0.25, 0.20, 0.28)
 
-@onready var faction_select   : Node2D    = $UILayer/Academy
+@onready var academy   : Node2D    = $UILayer/Academy
 @onready var hud              : Control   = $UILayer/HUD
 @onready var tower_layer      : Node2D    = $WorldMap/TowerLayer
 @onready var building_layer   : Node2D    = $WorldMap/BuildingLayer
@@ -74,7 +74,7 @@ var _galaxy_view : Node2D = null
 func _ready() -> void:
 	add_to_group("main_controller")
 	hud.hide()
-	faction_select.selection_confirmed.connect(_on_faction_confirmed)
+	academy.selection_confirmed.connect(_on_faction_confirmed)
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
@@ -99,10 +99,10 @@ func _start_game_world() -> void:
 	## right-clicks fall through, which is exactly why move worked but select didn't).
 	## The CadetAvatar's _unhandled_input goes away with it too. Freeing covers the
 	## normal-completion, F1-skip, and save-restore entry paths.
-	if is_instance_valid(faction_select):
-		faction_select.hide()
-		faction_select.process_mode = Node.PROCESS_MODE_DISABLED
-		faction_select.queue_free()
+	if is_instance_valid(academy):
+		academy.hide()
+		academy.process_mode = Node.PROCESS_MODE_DISABLED
+		academy.queue_free()
 	EventBus.academy_clear_units.emit()
 	hud.show()
 	## Pre-activate every spawn point so waves work immediately on first launch.
@@ -243,7 +243,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not dev_faction.is_empty():
 				FactionManager.select_faction(dev_faction, dev_sub_path)
 				GameState.academy_completed = true
-				faction_select.hide()
+				academy.hide()
 				## The Academy may have already emitted academy_phase_started (which hides the
 				## Begin Waves button). Skipping bypasses academy_phase_ended, so restore the
 				## HUD explicitly or the wave button stays hidden after the skip.

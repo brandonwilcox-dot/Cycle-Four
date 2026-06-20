@@ -31,8 +31,15 @@ new systems arrive as their own screen.
 `src/core/Root.gd`) + `SceneManager` autoload (`src/autoloads/SceneManager.gd`, fade swap that keeps
 the active screen as `current_scene` so `reload_current_scene()` still works); `run/main_scene` →
 `Root.tscn`; `TitleScreen` New Game/Continue route through `SceneManager.change_to`. Boots clean via
-MCP, zero new errors. **Next: Stage 2** — lift Academy + FactionSelect into their own screens (kills
-the input-contention bug class, incl. the 2026-06-20 CadetAvatar drift).
+MCP, zero new errors.
+
+**Stage 2 DONE 2026-06-20** (revised with the user — the Academy is a *guided first Battle* that
+observes real play, NOT a separable screen, so it stays a **director on the Battle screen**, like
+Galaxy⇄Battle). Killed the bug sources: `CadetAvatar` is now a non-interactive cutscene prop (fixes
+the 2026-06-20 "cadet drifts on click" = bug #1; it never was the Commander); deleted the orphaned
+`FactionSelectScreen` (.gd/.uid/.tscn — the Academy superseded it); renamed `Main.gd`'s misleading
+`faction_select` → `academy`. `Main.tscn` runs clean via MCP (zero errors; only standing benign
+warnings). **Next: Stage 3** — rename `Main`→`Battle` (pure gameplay scene); Continue loads into it.
 
 ## Fix — Commander select regression: world-space Controls ate the click — 2026-06-17 (verified live)
 

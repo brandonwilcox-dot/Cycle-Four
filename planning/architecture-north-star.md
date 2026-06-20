@@ -49,8 +49,8 @@ top-level states, one at a time**:
 | State | What it is | Today |
 |---|---|---|
 | **Title** | New Game / Continue / Options / Quit | ✅ separate scene (`TitleScreen.tscn`) |
-| **Academy** | the tutorial tableau | ⚠️ welded into the gameplay scene as an overlay |
-| **Faction Select** | choose faction + sub-path (sigil) | ⚠️ a `FactionSelectScreen.tscn` exists, but the Academy currently doubles as it |
+| **Academy** | the tutorial — a *guided first Battle* (observed play) | ✅ a first-run **director on the Battle screen** (unified, like Galaxy); `CadetAvatar` is now a non-interactive prop |
+| **Faction Select** | choose faction + sub-path (sigil) | ✅ the **Academy's finale** (sorting reveal), not a separate screen; orphaned `FactionSelectScreen` deleted |
 | **Galaxy ⇄ Battle** | the **primary/home space**: the galaxy map. Zoom IN through region → system → planet/moon — battles resolve at the body you capture; you conquer the galaxy for your faction. One continuous space. | ✅ one-scene continuous zoom exists (Phase D, flat: node ↔ one battle map); nested region/system/body zoom is the end-state target |
 | **Pilgrimage / Collapse** | prestige, the Mark, Memory Tiers (Option B) | ⬜ future |
 | **The Arrival** | endgame threat | ⬜ future |
@@ -130,11 +130,12 @@ decoupled communication via a signal bus (`EventBus`).
 Root.tscn   (run/main_scene) — thin bootstrapper, ~no game logic
 └── SceneManager     loads ONE screen, frees the previous, runs the fade
         ├─ TitleScreen.tscn
-        ├─ Academy.tscn          ← its OWN camera + coordinate space (bug #1 gone)
-        ├─ FactionSelect.tscn    ← lifted out of the Academy
-        ├─ Battle.tscn           ← today's Main minus the menus (Battle⇄Galaxy stays unified)
-        ├─ Pilgrimage.tscn       ← future systems arrive as their OWN scene
-        └─ GameOver / Arrival
+        ├─ Battle.tscn           ← the gameplay screen (today's Main): WorldMap (+ Galaxy
+        │                          continuous-zoom), HUD, GameOver overlay, AND the first-run
+        │                          ACADEMY director (tutorial = observed play; faction-select is
+        │                          its finale). Unified, like Galaxy — not a separate screen.
+        ├─ Pilgrimage.tscn       ← future systems arrive as their OWN screen
+        └─ Arrival / endgame
   Persistent under every swap:  EventBus · GameState · EconomyManager · WaveManager ·
                                 FactionManager · GalaxyManager · SaveManager · … (autoloads)
 ```
@@ -191,7 +192,7 @@ stageable. Bar at each stage: `run_project` → zero new errors → `stop_projec
 |---|---|---|
 | **0 ✅** | This doc. | The contract exists. |
 | **1 ✅** | Add a thin `Root` scene + `SceneManager` (load / swap / free + fade). Boot still lands on Title. | Foundation; zero behavior change. **Done 2026-06-20 — boots clean (MCP), zero new errors.** |
-| **2** | **Lift `Academy` + `FactionSelect` out of `Main` into their own screens.** New Game → manager swaps Title → Academy → FactionSelect → Battle. Delete: the `$UILayer/Academy` overlay, the `_start_game_world()` `queue_free` dance, the `academy_completed` input guards in `Main`, the `CadetAvatar`/`Commander` duality. | **Bug #1 and the entire input-contention class die here.** |
+| **2 ✅** | **Revised — the Academy is a *guided first Battle* (it observes real play; faction-select is its finale), not a separable screen.** Kept it as a **director on the Battle screen** (unified, like Galaxy⇄Battle). Killed the bug sources instead: `CadetAvatar` → non-interactive prop (**bug #1 fixed**); deleted the orphaned `FactionSelectScreen`; renamed `faction_select`→`academy`. | **Done 2026-06-20 — `Main.tscn` runs clean (MCP), zero errors.** |
 | **3** | Rename `Main` → `Battle`; it becomes pure gameplay (no menu children). Continue loads straight into Battle. | Single-responsibility gameplay scene. |
 | **4+** | Each future system (Pilgrimage/prestige, Arrival, multi-front) arrives as its **own** screen the manager swaps to. | The bug class never returns. |
 
