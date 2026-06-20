@@ -80,7 +80,7 @@ func clear_save() -> void:
 
 func _collect_all_state() -> Dictionary:
 	return {
-		"version":  1,
+		"version":  2,
 		"timestamp": Time.get_unix_time_from_system(),
 		"game_state":       GameState.to_save_data(),
 		"resources":        EconomyManager.resources,
@@ -115,11 +115,15 @@ func _galaxy_to_dict() -> Dictionary:
 		"star_systems":  GalaxyManager.star_systems,
 		"treaties":      GalaxyManager.treaties,
 		"run_number":    GameState.galaxy_run_number,
+		"active_node":   GalaxyManager.active_node,
+		"invading_node": GalaxyManager.invading_node,
 	}
 
 func _galaxy_from_dict(data: Dictionary) -> void:
 	GalaxyManager.star_systems = data.get("star_systems", {})
 	GalaxyManager.treaties     = data.get("treaties", {})
+	GalaxyManager.active_node   = data.get("active_node", "")
+	GalaxyManager.invading_node = data.get("invading_node", "")
 
 func _wipe_saves() -> void:
 	for path in [SAVE_PATH, BACKUP_PATH]:

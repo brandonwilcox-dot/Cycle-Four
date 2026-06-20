@@ -87,12 +87,12 @@ func _ready() -> void:
 	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
-		_start_game_world()
+		_start_game_world(true)
 
 func _on_faction_confirmed() -> void:
 	_start_game_world()
 
-func _start_game_world() -> void:
+func _start_game_world(is_restore: bool = false) -> void:
 	## Fully retire the Academy: free the whole subtree so nothing leaks into the live
 	## game. hide() on the Academy *Node2D* does NOT hide its CanvasLayer children
 	## (TextLayer / SortingLayer with their Buttons) — those stay visible and keep
@@ -124,6 +124,15 @@ func _start_game_world() -> void:
 	_build_galaxy_view()
 	if not EventBus.map_completed.is_connected(_on_map_completed):
 		EventBus.map_completed.connect(_on_map_completed)
+	## Per-territory persistence (Step 1): on a FRESH start, pin the active (home) node's seed to the
+	## map the player is actually on, so a later Continue regenerates THIS map. The initial map used a
+	## random (time-based) seed at MapGrid._ready; capture it onto the node. On a restore we keep the
+	## saved seed (the restore path reloads from it). See planning/persistence-design.md.
+	if not is_restore and not GalaxyManager.active_node.is_empty():
+		var md = _map_grid.get("map_data")
+		if md != null and GalaxyManager.star_systems.has(GalaxyManager.active_node):
+			GalaxyManager.star_systems[GalaxyManager.active_node]["seed"] = int(md.map_seed)
+			SaveManager.mark_dirty()
 
 ## -- Phase D: galaxy view + campaign loop --
 

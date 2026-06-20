@@ -159,6 +159,35 @@ The post-MVP direction. Dependency-ordered A→D.
 Open design Qs for B/C captured in `vision-roadmap.md` (enemy selection per map, 3-way
 convergence, pathing-bias vs distinct algorithms, unit-role RPS, offline sim tick model).
 
+## Playtest findings — 2026-06-20 (release `.exe`, reached ~wave 30)
+
+First hand-playtest of the standalone release build. Core loop held up well; five issues to
+schedule (none block the per-territory persistence work in progress). Tagged BUG (defect) or
+FEATURE (new design).
+
+1. **BUG — towers next to a spawn instakill enemies at the spawn point.** Powered-up towers placed
+   near a spawn destroyed enemies so fast they appeared to "stop spawning"; enemies never reached
+   the field, so garrisons had nothing to intercept (kills/XP still accrued at the spawn). **Fix
+   direction:** a **DMZ / spawn buffer** — forbid tower placement (and/or targeting) within N cells
+   of each spawn so enemies enter the field before being engaged. Improves readability + counterplay.
+2. **BUG — enemies only entered from ONE spawn.** Despite Phase-B multi-spawn pathing, a single
+   spawn was used in real play. Investigate `_activate_all_spawns()` post-Academy and the
+   `WaveSpawner` per-wave spawn/route distribution (are all active spawns getting units, or is the
+   single-enemy wave funnelling to one route?).
+3. **BUG — garrison leveling has no felt effect.** Design says levels raise squad cap + production
+   speed, but no difference was perceived. Verify the level-up effects actually apply, and surface
+   garrison **level + current effect** in the inspection panel.
+4. **FEATURE — garrison unit-type selection & composition.** Garrisons should let the player
+   **choose which unit types to spawn**; **XP improves those types** and unlocks **combinations**
+   (mixed squads). (Today a garrison spawns a fixed Tier-1 defender.) Needs: garrison loadout UI,
+   per-type XP, multi-type squad logic.
+5. **BUG — convoy not operational.** The depot↔FOB convoy ferry never ran. Investigate
+   `ConvoyManager` spawn conditions (connectivity BFS on `path_discovered`, depot detection) —
+   likely no depot/path discovered on the played map, or the convoy never spawned.
+
+Played well: combat triangle, tower upgrades, garrison kills/XP accrual, FOB, economy, the Academy →
+real-game handoff (no first-click issue reported), and the new release boot path.
+
 ## Backlog (not scheduled — pull into a later pass on request)
 
 - Rally points / RTS unit-production polish.
