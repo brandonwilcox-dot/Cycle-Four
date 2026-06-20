@@ -43,10 +43,11 @@ territories, rim-start node). Additive, backward-compatible.
 
 ## Incremental plan (each MCP-verified; bar = zero new errors)
 
-1. **Persist `active_node`/`invading_node` + reconcile the home node's seed** (fresh start only — on
-   restore we keep the saved seed). *Foundation; additive; no flow change.*  ← **Step 1 (landing)**
-2. **Continue-path map reload + restore claimed cells.** On restore, load `active_node`'s seeded map
-   and re-apply saved CLAIMED cells. (First step that brings a territory back.)
+1. ✅ **Persist `active_node`/`invading_node` + reconcile the home node's seed** (fresh start only — on
+   restore we keep the saved seed). *Foundation; additive.* **DONE 2026-06-20.**
+2. ✅ **Continue-path map reload + restore claimed cells.** On restore, load `active_node`'s seeded map
+   (reusing `Battle._load_territory_map`) and re-apply saved CLAIMED cells — capture via `game_saving`
+   → `_capture_territory_development`; restore via MapGrid `apply_claimed_indices`. **DONE 2026-06-20.**
 3. **Persist/restore buildings (garrisons).** Unlocks offline resolution on a real Continue.
 4. **Persist/restore towers (level/branch) + FOB rank.** Full investment fidelity.
 5. **Capture-on-deploy.** Snapshot a territory when you leave it, so multi-territory state holds.

@@ -84,6 +84,7 @@ func _ready() -> void:
 	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine_requested)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
 	EventBus.offline_catch_up.connect(_on_offline_catch_up)
+	EventBus.game_saving.connect(_capture_territory_development)
 	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
@@ -93,6 +94,15 @@ func _on_faction_confirmed() -> void:
 	_start_game_world()
 
 func _start_game_world(is_restore: bool = false) -> void:
+	## [Persistence Step 2] On a Continue/restore, the live map is MapGrid._ready's fresh RANDOM map.
+	## Swap it for the saved active territory (regenerated from its persisted seed) and re-apply the
+	## saved CLAIMED cells, so the player returns to the ground they held. Reuses the deploy load path.
+	if is_restore and not GalaxyManager.active_node.is_empty() and GalaxyManager.star_systems.has(GalaxyManager.active_node):
+		_load_territory_map(GalaxyManager.active_node)
+		var saved_dev : Dictionary = GalaxyManager.star_systems[GalaxyManager.active_node].get("development", {})
+		var saved_claims : Array = saved_dev.get("claimed", [])
+		if not saved_claims.is_empty():
+			_map_grid.call("apply_claimed_indices", saved_claims)
 	## Fully retire the Academy: free the whole subtree so nothing leaks into the live
 	## game. hide() on the Academy *Node2D* does NOT hide its CanvasLayer children
 	## (TextLayer / SortingLayer with their Buttons) — those stay visible and keep
@@ -167,6 +177,19 @@ func _handle_galaxy_click(screen_pos: Vector2) -> void:
 func _deploy_to_node(node_id: String) -> void:
 	GalaxyManager.invading_node = node_id
 	GalaxyManager.active_node   = node_id
+	_load_territory_map(node_id)
+	var cam : Node = get_node_or_null("WorldMap/Camera")
+	if cam != null and cam.has_method("board_min_zoom"):
+		var z : float = float(cam.call("board_min_zoom"))
+		cam.set("zoom", Vector2(z, z))
+		cam.set("position", BOARD_CENTER)
+	if _galaxy_view != null:
+		_galaxy_view.call("setup", BOARD_CENTER)   ## recenter on the new active node + redraw
+	EventBus.notification_pushed.emit("Deploying to contested territory — complete its objective to claim it.", "info")
+
+## Clears the current battle's transient entities (towers/buildings/units) and loads node_id's
+## seeded battle map. Shared by _deploy_to_node (galaxy deploy) and the Continue restore path.
+func _load_territory_map(node_id: String) -> void:
 	for layer in [tower_layer, building_layer, get_node_or_null("WorldMap/UnitLayer")]:
 		if layer != null:
 			for c in layer.get_children():
@@ -176,14 +199,17 @@ func _deploy_to_node(node_id: String) -> void:
 	_inspected_cell = Vector2i(-1, -1)
 	_map_grid.load_map_data(MAP_GENERATOR_SCRIPT.generate(GalaxyManager.node_seed(node_id)))
 	_activate_all_spawns()
-	var cam : Node = get_node_or_null("WorldMap/Camera")
-	if cam != null and cam.has_method("board_min_zoom"):
-		var z : float = float(cam.call("board_min_zoom"))
-		cam.set("zoom", Vector2(z, z))
-		cam.set("position", BOARD_CENTER)
-	if _galaxy_view != null:
-		_galaxy_view.call("setup", BOARD_CENTER)   ## recenter on the new active node + redraw
-	EventBus.notification_pushed.emit("Deploying to contested territory — complete its objective to claim it.", "info")
+
+## [Persistence] Snapshots the current battle's per-territory development (Step 2: claimed cells)
+## into the active node's saved state. Connected to EventBus.game_saving so it runs just before each
+## save. No-ops until a real territory is active (post-Academy).
+func _capture_territory_development() -> void:
+	var node_id : String = GalaxyManager.active_node
+	if node_id.is_empty() or not GalaxyManager.star_systems.has(node_id):
+		return
+	var dev : Dictionary = GalaxyManager.star_systems[node_id].get("development", {})
+	dev["claimed"] = _map_grid.call("get_claimed_indices")
+	GalaxyManager.star_systems[node_id]["development"] = dev
 
 ## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:

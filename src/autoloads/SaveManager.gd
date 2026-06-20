@@ -37,6 +37,8 @@ func _process(delta: float) -> void:
 # -- Public API --
 
 func save_game() -> void:
+	## Let the live battle snapshot its per-territory development into GalaxyManager first.
+	EventBus.game_saving.emit()
 	var data: Dictionary = _collect_all_state()
 	# Rotate backup before overwrite
 	if FileAccess.file_exists(SAVE_PATH):

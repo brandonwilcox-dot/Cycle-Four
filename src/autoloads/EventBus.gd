@@ -8,6 +8,9 @@ extends Node
 signal resource_changed(faction: String, resource: String, amount: float)
 signal idle_tick(delta: float)
 signal offline_catch_up(seconds_elapsed: float)
+## Emitted by SaveManager at the start of save_game() so the live battle can snapshot its
+## per-territory development (claims, buildings, towers, FOB) into GalaxyManager before the write.
+signal game_saving()
 
 # -- Waves --
 signal wave_started(wave_number: int, commander_data: Dictionary)

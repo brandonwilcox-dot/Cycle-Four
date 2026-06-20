@@ -9,6 +9,27 @@ making any design decisions in code.
 
 ---
 
+## Per-territory persistence — Steps 1–2 — 2026-06-20 (compiles clean; runtime needs a Continue playtest)
+
+Goal: a galaxy territory's development (buildings/towers/claims/FOB) survives leaving it + a Continue —
+unblocks offline resolution on a real Continue + the Total-War campaign loop. Design + 5-step plan:
+`planning/persistence-design.md`.
+
+- **Step 1 (committed):** `SaveManager` persists `active_node`/`invading_node` (save v2, additive).
+  `Battle._start_game_world(is_restore)` — on a FRESH start, pins the home node's seed to the actual
+  played map's `map_data.map_seed`, so a Continue regenerates THAT map (initial map uses a random
+  time-seed at `MapGrid._ready`).
+- **Step 2 (this change):** Continue restore reloads the active node's seeded map (new
+  `Battle._load_territory_map`, shared with `_deploy_to_node`) + re-applies saved CLAIMED cells.
+  Capture: new `EventBus.game_saving` → `Battle._capture_territory_development` writes claims into the
+  node's `development`. MapGrid `get_claimed_indices` / `apply_claimed_indices` (JSON-safe flat
+  indices, GROUND→CLAIMED only; economy is restored separately so no double-count).
+- **Verification caveat:** the restore/capture run only on a real Continue / during play — NOT
+  MCP-injectable. MCP confirms compile/load clean (zero errors; only the new benign `game_saving`
+  warning). Real proof = a hand-playtest Continue (New Game → play → quit → Continue → map + claimed
+  ground return).
+- **Next:** Step 3 — persist/restore buildings (garrisons) → unlocks offline resolution on a real Continue.
+
 ## Architecture North Star (PROPOSED) — scene-separation refactor — 2026-06-20
 
 Strategic review prompted by the recurring Commander-select / "click eaten" bugs. **Root cause is

@@ -275,6 +275,30 @@ func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
 		queue_redraw()
 	return newly
 
+## -- Per-territory persistence (claims) --
+
+## Flat indices (col + row*COLS) of all CLAIMED cells — captured into a territory's saved
+## development so a Continue can restore the player's claimed ground. JSON-safe (plain ints).
+func get_claimed_indices() -> Array:
+	var out : Array = []
+	for i in COLS * ROWS:
+		if _cells[i] == Cell.CLAIMED:
+			out.append(i)
+	return out
+
+## Re-applies saved CLAIMED indices onto the current (freshly-loaded, identical-seed) map.
+## Only GROUND → CLAIMED, mirroring claim_cell; economy/territory rates are restored separately
+## from the save, so this touches map state only (no re-registration, no AStar rebuild).
+func apply_claimed_indices(indices: Array) -> void:
+	var changed : bool = false
+	for v in indices:
+		var i : int = int(v)
+		if i >= 0 and i < COLS * ROWS and _cells[i] == Cell.GROUND:
+			_cells[i] = Cell.CLAIMED
+			changed = true
+	if changed:
+		queue_redraw()
+
 ## C3 (raids): the nearest GROUND cell on the CLAIMED frontier — a GROUND cell orthogonally
 ## adjacent to a CLAIMED or BASE cell — within `max_radius` (Chebyshev) of `from_cell`. A
 ## garrison raids this so the player's territory grows outward contiguously. (-1,-1) if none.
