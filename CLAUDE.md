@@ -9,6 +9,31 @@ making any design decisions in code.
 
 ---
 
+## Architecture North Star (PROPOSED) — scene-separation refactor — 2026-06-20
+
+Strategic review prompted by the recurring Commander-select / "click eaten" bugs. **Root cause is
+architectural, not a code defect:** the Academy + FactionSelect + GameOver are layered into the
+single `Main.tscn` as CanvasLayer overlays on top of the already-live `WorldMap`, so multiple input
+handlers and two "player units" (`CadetAvatar` vs `Commander`) coexist. Every "something ate the
+click" bug — including the 2026-06-20 "Commander shifts slightly then returns" (you're nudging the
+Academy's `CadetAvatar`, not the `Commander`; `Main` ignores world clicks until `academy_completed`)
+— is the same class.
+
+**Target (user-approved direction, NOT yet built):** a thin `Root` + `SceneManager` swapping ONE
+screen at a time (Title / Academy / FactionSelect / Battle⇄Galaxy / Pilgrimage / Arrival); state
+stays in autoloads; comms stay on EventBus; **Battle⇄Galaxy stays unified** (Phase-D continuous
+zoom). Migration is incremental + MCP-verified: **Stage 1** Root+SceneManager, **Stage 2** lift
+Academy+FactionSelect out (kills the bug class), **Stage 3** rename `Main`→`Battle`, **Stage 4+**
+new systems arrive as their own screen.
+
+**Full reference: `planning/architecture-north-star.md`** — READ before adding any screen/system.
+**Status:** doc approved; **Stage 1 DONE 2026-06-20** — `Root` boot scene (`scenes/Root.tscn` +
+`src/core/Root.gd`) + `SceneManager` autoload (`src/autoloads/SceneManager.gd`, fade swap that keeps
+the active screen as `current_scene` so `reload_current_scene()` still works); `run/main_scene` →
+`Root.tscn`; `TitleScreen` New Game/Continue route through `SceneManager.change_to`. Boots clean via
+MCP, zero new errors. **Next: Stage 2** — lift Academy + FactionSelect into their own screens (kills
+the input-contention bug class, incl. the 2026-06-20 CadetAvatar drift).
+
 ## Fix — Commander select regression: world-space Controls ate the click — 2026-06-17 (verified live)
 
 The 2026-06-16 Academy-`queue_free()` fix only *masked* this. Root cause: entity visuals are

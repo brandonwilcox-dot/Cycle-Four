@@ -161,13 +161,13 @@ func _on_new_game_pressed() -> void:
 	## Fresh slate. We do NOT delete the existing save here — it is overwritten
 	## naturally once the new run auto-saves, so quitting mid-Academy is non-destructive.
 	GameState.reset_for_new_game()
-	get_tree().change_scene_to_file(MAIN_SCENE)
+	SceneManager.change_to(MAIN_SCENE)
 
 func _on_continue_pressed() -> void:
 	if not SaveManager.has_save():
 		return
 	SaveManager.load_game()
-	get_tree().change_scene_to_file(MAIN_SCENE)
+	SceneManager.change_to(MAIN_SCENE)
 
 func _on_options_pressed() -> void:
 	_menu_root.hide()
