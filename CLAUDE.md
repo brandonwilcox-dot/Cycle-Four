@@ -23,8 +23,11 @@ click-to-move working — it is NOT a bug; do not remove the handler.
 
 **Pre-existing, NOT regressions (open enhancements, were like this in 6a395b2 too):** (a) the Academy
 *scenarios* are passive — the cadet is hidden during them (`Academy._run_all_scenarios`) and `Battle` is
-guarded, so the 75/90/90s scenarios have no player control. Making them playable = show HUD + allow
-Commander control during the scenario phase (deliberate enhancement). (b) the input-spam "crash" is the
+guarded, so the 75/90/90s scenarios had no player control. **FIXED 2026-06-21:** `Battle` now accepts
+world input during the scenario phase (`_academy_scenarios_active`, gated on `academy_phase_started`/`_ended`)
++ pre-selects the Commander → the player commands the real Commander during scenarios (move/select/attack,
+feeding the behavior tracker). Tower placement during scenarios still needs the HUD shown (smaller follow-up).
+(b) the input-spam "crash" is the
 known queued **rapid-click hang**.
 
 ## Per-territory persistence — Steps 1–5 COMPLETE — 2026-06-20 (compiles clean; runtime needs a Continue/deploy playtest)

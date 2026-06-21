@@ -72,6 +72,10 @@ var _preview_cell      : Vector2i  = Vector2i(-9999, -9999)
 ## Phase D: the galaxy graph overlay (zoom out to see it).
 var _galaxy_view : Node2D = null
 
+## True only during the Academy's live scenarios (chapter 1), where the player commands the real
+## Commander (the chamber cadet is hidden). Lets _unhandled_input accept world clicks during scenarios.
+var _academy_scenarios_active : bool = false
+
 func _ready() -> void:
 	add_to_group("main_controller")
 	hud.hide()
@@ -85,6 +89,8 @@ func _ready() -> void:
 	EventBus.milestone_reached.connect(_on_milestone_reached)
 	EventBus.offline_catch_up.connect(_on_offline_catch_up)
 	EventBus.game_saving.connect(_capture_territory_development)
+	EventBus.academy_phase_started.connect(_on_academy_phase_started)
+	EventBus.academy_phase_ended.connect(_on_academy_phase_ended)
 	_build_placement_preview()
 	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
@@ -92,6 +98,18 @@ func _ready() -> void:
 
 func _on_faction_confirmed() -> void:
 	_start_game_world()
+
+## The Academy's live scenarios begin (chapter 1): hand world control to the real Commander — pre-select
+## it so right-click moves immediately — and let _unhandled_input accept world clicks for this phase.
+func _on_academy_phase_started() -> void:
+	_academy_scenarios_active = true
+	var cmd : Node = _commander()
+	if cmd != null:
+		cmd.call("set_selected", true)
+
+## Scenarios end (sorting begins): world clicks are gated again (chamber UI / sigil buttons).
+func _on_academy_phase_ended() -> void:
+	_academy_scenarios_active = false
 
 func _start_game_world(is_restore: bool = false) -> void:
 	## [Persistence Step 2] On a Continue/restore, the live map is MapGrid._ready's fresh RANDOM map.
@@ -422,8 +440,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	var height : float = get_viewport().get_visible_rect().size.y
 	if y < 48.0 or y > height - 48.0:
 		return
-	## During the Academy, leave world clicks to the CadetAvatar.
-	if not GameState.academy_completed:
+	## Academy CHAMBER (chapters 0/2): world clicks belong to the CadetAvatar. Live SCENARIOS (chapter 1):
+	## the player commands the real Commander, so accept world input during the scenario phase only.
+	if not GameState.academy_completed and not _academy_scenarios_active:
 		return
 
 	## Controls: LEFT = select (Commander / tower / building / FOB), RIGHT = move the
