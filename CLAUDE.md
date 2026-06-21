@@ -9,6 +9,24 @@ making any design decisions in code.
 
 ---
 
+## REGRESSION FIX — Academy cadet control restored — 2026-06-21
+
+The Stage-2 change "make `CadetAvatar` a non-interactive prop (fixes bug #1)" was a **REGRESSION** that
+made the Academy unplayable (couldn't move/click during it). **Root cause (git-confirmed: `CadetAvatar.gd`
+was the ONLY changed file in the Academy/input path vs the working build 6a395b2):** the cadet's
+`_unhandled_input` (click-to-move) IS the player's control during the Academy — `Battle._unhandled_input`
+deliberately yields world clicks then (`if not academy_completed: return` → "leave world clicks to the
+CadetAvatar"). Removing the handler left NOTHING handling input.
+**Fix:** `git checkout 6a395b2 -- src/academy/CadetAvatar.gd` (click-to-move restored). Rebuilt, boots clean.
+**DO NOT REPEAT:** the cadet's click-to-move is by-design. "Bug #1" (cadet nudges/drifts on click) IS
+click-to-move working — it is NOT a bug; do not remove the handler.
+
+**Pre-existing, NOT regressions (open enhancements, were like this in 6a395b2 too):** (a) the Academy
+*scenarios* are passive — the cadet is hidden during them (`Academy._run_all_scenarios`) and `Battle` is
+guarded, so the 75/90/90s scenarios have no player control. Making them playable = show HUD + allow
+Commander control during the scenario phase (deliberate enhancement). (b) the input-spam "crash" is the
+known queued **rapid-click hang**.
+
 ## Per-territory persistence — Steps 1–5 COMPLETE — 2026-06-20 (compiles clean; runtime needs a Continue/deploy playtest)
 
 Goal: a galaxy territory's development (buildings/towers/claims/FOB) survives leaving it + a Continue —

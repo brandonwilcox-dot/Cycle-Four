@@ -1,19 +1,41 @@
-## CadetAvatar.gd — the player's cadet inside the Academy chamber tableau.
-## A NON-INTERACTIVE cutscene prop: a gold 32x32 visual, nothing more. The chamber
-## (Academy chapters 0 and 2) is a cutscene; the player commands the real Commander
-## once the live scenarios begin. The cadet deliberately has no input handler.
-##
-## (History: it used to have click-to-move, but the screen->local click transform
-## through this CanvasLayer-parented Node2D was unstable and produced the "clicking
-## the cadet nudges it / it drifts back to centre" bug. Removing the handler is the
-## fix. See planning/architecture-north-star.md §4.)
+## CadetAvatar.gd — the player's cadet inside the Academy tableau.
+## Trimmed Commander: gold 32x32 visual + click-to-move only.
+## No combat, no fog, no rank, no territory claiming.
 extends Node2D
 
-const AVATAR_SIZE : int = 32
-const PIP_SIZE    : int = 8
+const SPEED       : float = 160.0
+const AVATAR_SIZE : int   = 32
+const PIP_SIZE    : int   = 8
+
+## Set by Academy.gd to the chamber's world-space origin so clicks are correct.
+var chamber_origin : Vector2 = Vector2.ZERO
+
+var _target : Vector2 = Vector2.ZERO
+var _moving : bool    = false
 
 func _ready() -> void:
+	_target = position
 	queue_redraw()
+
+func _process(delta: float) -> void:
+	if not _moving:
+		return
+	var dir  : Vector2 = _target - position
+	var dist : float   = dir.length()
+	if dist < 2.0:
+		position = _target
+		_moving  = false
+		return
+	position += dir.normalized() * SPEED * delta
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		## Convert screen-space click to Academy (parent) local space.
+		## event.position is in viewport/screen coords; the parent Academy Node2D
+		## is positioned at screen centre in a CanvasLayer, so its inverse transform
+		## maps screen position → local chamber space correctly.
+		_target = get_parent().get_global_transform().affine_inverse() * event.position
+		_moving = true
 
 func _draw() -> void:
 	var half : int = AVATAR_SIZE / 2
