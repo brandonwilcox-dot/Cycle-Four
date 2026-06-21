@@ -48,7 +48,10 @@ territories, rim-start node). Additive, backward-compatible.
 2. ✅ **Continue-path map reload + restore claimed cells.** On restore, load `active_node`'s seeded map
    (reusing `Battle._load_territory_map`) and re-apply saved CLAIMED cells — capture via `game_saving`
    → `_capture_territory_development`; restore via MapGrid `apply_claimed_indices`. **DONE 2026-06-20.**
-3. **Persist/restore buildings (garrisons).** Unlocks offline resolution on a real Continue.
+3. ✅ **Persist/restore buildings (garrisons).** Capture `[{id, cell, level}]` (`_capture_buildings`);
+   restore via `_restore_building`, which skips the income re-add (`Building.setup(data, restored=true)`
+   → `_ready` guard) since territory_rates already includes it. **DONE 2026-06-20 — unblocks offline
+   resolution on a real Continue.**
 4. **Persist/restore towers (level/branch) + FOB rank.** Full investment fidelity.
 5. **Capture-on-deploy.** Snapshot a territory when you leave it, so multi-territory state holds.
 

@@ -31,6 +31,9 @@ const RAID_REACH_DIST    : float = 44.0   ## a raider within this of the target 
 
 var data : Resource = null   ## BuildingData instance
 var _income_active : bool = false
+## True when this building was reconstructed by save-restore. Its income is already part of the
+## restored territory_rates, so _ready must NOT re-add it (double-count). See persistence-design.md.
+var _restored      : bool = false
 
 ## Garrison state.
 var _garrison_unit  : UnitData = null     ## the defender type this garrison produces
@@ -47,8 +50,9 @@ var _raid_target_cell  : Vector2i = Vector2i(-1, -1)
 var _raid_target_world : Vector2  = Vector2.ZERO
 
 ## Called by Main before adding to the scene tree.
-func setup(building_data: Resource) -> void:
+func setup(building_data: Resource, restored: bool = false) -> void:
 	data = building_data
+	_restored = restored
 
 func _ready() -> void:
 	add_to_group("buildings")
@@ -57,10 +61,13 @@ func _ready() -> void:
 		return
 	## Start contributing income as soon as the building enters the tree.
 	_income_active = true
-	EconomyManager.add_territory_rate(
-		FactionManager.get_primary_resource(),
-		float(data.get("income_rate"))
-	)
+	## A restored building's income is already in the restored territory_rates — re-adding would
+	## double-count. Fresh placements add normally.
+	if not _restored:
+		EconomyManager.add_territory_rate(
+			FactionManager.get_primary_resource(),
+			float(data.get("income_rate"))
+		)
 	_build_visual()
 	## Garrison: resolve the shared unit layer (WorldMap/UnitLayer) and the defender type
 	## for the player's faction. Null faction (e.g. Academy) → no production, harmlessly.

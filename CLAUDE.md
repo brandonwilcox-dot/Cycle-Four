@@ -28,7 +28,12 @@ unblocks offline resolution on a real Continue + the Total-War campaign loop. De
   MCP-injectable. MCP confirms compile/load clean (zero errors; only the new benign `game_saving`
   warning). Real proof = a hand-playtest Continue (New Game → play → quit → Continue → map + claimed
   ground return).
-- **Next:** Step 3 — persist/restore buildings (garrisons) → unlocks offline resolution on a real Continue.
+- **Step 3 (this change):** persist/restore buildings (garrisons). Capture `[{id, cell, level}]` into the
+  node's `development` (`Battle._capture_buildings`); restore via `Battle._restore_building` after the
+  map + claims load. `Building.setup(data, restored)` + a `_restored` guard skip the `_ready`
+  `add_territory_rate` on restore (territory_rates already includes it → no income double-count on
+  Continue). **Unblocks offline army resolution on a real Continue** — garrisons now exist to fast-forward.
+- **Next:** Step 4 — persist/restore towers (level/branch) + FOB rank.
 
 ## Architecture North Star (PROPOSED) — scene-separation refactor — 2026-06-20
 

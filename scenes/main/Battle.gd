@@ -103,6 +103,7 @@ func _start_game_world(is_restore: bool = false) -> void:
 		var saved_claims : Array = saved_dev.get("claimed", [])
 		if not saved_claims.is_empty():
 			_map_grid.call("apply_claimed_indices", saved_claims)
+		_restore_buildings(saved_dev)
 	## Fully retire the Academy: free the whole subtree so nothing leaks into the live
 	## game. hide() on the Academy *Node2D* does NOT hide its CanvasLayer children
 	## (TextLayer / SortingLayer with their Buttons) — those stay visible and keep
@@ -209,7 +210,46 @@ func _capture_territory_development() -> void:
 		return
 	var dev : Dictionary = GalaxyManager.star_systems[node_id].get("development", {})
 	dev["claimed"] = _map_grid.call("get_claimed_indices")
+	dev["buildings"] = _capture_buildings()
 	GalaxyManager.star_systems[node_id]["development"] = dev
+
+## [Persistence Step 3] Snapshots placed garrisons as [{id, cell, level}] for save/restore.
+func _capture_buildings() -> Array:
+	var out : Array = []
+	for cell in _building_cells:
+		var b = _building_cells[cell]
+		if not is_instance_valid(b):
+			continue
+		var bd = b.get("data")
+		if bd == null or String(bd.resource_path).is_empty():
+			continue
+		out.append({"id": String(bd.resource_path), "cell": [int(cell.x), int(cell.y)], "level": int(b.get("_level"))})
+	return out
+
+## [Persistence Step 3] Re-instantiates a territory's saved garrisons after its map + claims load.
+func _restore_buildings(dev: Dictionary) -> void:
+	for brec in dev.get("buildings", []):
+		if typeof(brec) != TYPE_DICTIONARY:
+			continue
+		var bid : String = String(brec.get("id", ""))
+		var bcell : Array = brec.get("cell", [])
+		if bid.is_empty() or bcell.size() != 2:
+			continue
+		var bdata : Resource = load(bid)
+		if bdata != null:
+			_restore_building(bdata, Vector2i(int(bcell[0]), int(bcell[1])), int(brec.get("level", 1)))
+
+## Places a building from explicit data/cell/level (no cost, no income re-add, no build-mode) —
+## the restore counterpart to _place_building. Income is already in the restored territory_rates.
+func _restore_building(bdata: Resource, cell: Vector2i, level: int) -> void:
+	var building : Node2D = BUILDING_SCENE.instantiate()
+	building.call("setup", bdata, true)
+	building_layer.add_child(building)
+	building.position = _cell_to_world(cell)
+	if level > 1:
+		building.set("_level", level)
+	_building_cells[cell] = building
+	_apply_structure_influence(cell)
 
 ## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:
