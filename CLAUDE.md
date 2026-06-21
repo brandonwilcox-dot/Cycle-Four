@@ -9,7 +9,7 @@ making any design decisions in code.
 
 ---
 
-## Per-territory persistence — Steps 1–2 — 2026-06-20 (compiles clean; runtime needs a Continue playtest)
+## Per-territory persistence — Steps 1–5 COMPLETE — 2026-06-20 (compiles clean; runtime needs a Continue/deploy playtest)
 
 Goal: a galaxy territory's development (buildings/towers/claims/FOB) survives leaving it + a Continue —
 unblocks offline resolution on a real Continue + the Total-War campaign loop. Design + 5-step plan:
@@ -38,8 +38,17 @@ unblocks offline resolution on a real Continue + the Total-War campaign loop. De
   at that tier, calls `mark_tower_placed` (pathing), and `Tower.restore_level` re-derives damage
   multiplier/XP/sight/chevrons. FOB rank via `Base.restore_rank` (re-applies the rank-scaled sphere;
   idempotent vs the already-restored claims → no economy double-count). Towers add no income → no guard.
-- **Next:** Step 5 (final) — capture-on-deploy: snapshot a territory when you leave it (`_deploy_to_node`)
-  so multi-territory development holds across the galaxy, not just on save/Continue.
+- **Step 5 (this change):** capture-on-deploy + restore-on-return. `_deploy_to_node` snapshots the
+  leaving territory (`_capture_territory_development`, before switching `active_node`) and restores the
+  destination's saved development (shared `_restore_territory_development`, also used by Continue) — so
+  development holds across multi-territory play, not just save/Continue. **Per-territory persistence
+  COMPLETE (Steps 1–5).**
+- **Known follow-ups (flagged, out of scope):** cross-territory income is approximate (`territory_rates`
+  is a single global accumulator that leaks across deploys → belongs with the galaxy-campaign economy
+  model); FOB rank is modeled per-territory (one FOB node fortifies independently per territory).
+- **Runtime verification still pending:** every persistence step is compile-/load-clean via MCP, but the
+  restore/capture paths only run on a real Continue or deploy (not MCP-injectable). Needs a hand-playtest:
+  New Game → build/claim → quit → Continue (everything returns), and deploy A→B→A (each territory holds).
 
 ## Architecture North Star (PROPOSED) — scene-separation refactor — 2026-06-20
 

@@ -99,13 +99,7 @@ func _start_game_world(is_restore: bool = false) -> void:
 	## saved CLAIMED cells, so the player returns to the ground they held. Reuses the deploy load path.
 	if is_restore and not GalaxyManager.active_node.is_empty() and GalaxyManager.star_systems.has(GalaxyManager.active_node):
 		_load_territory_map(GalaxyManager.active_node)
-		var saved_dev : Dictionary = GalaxyManager.star_systems[GalaxyManager.active_node].get("development", {})
-		var saved_claims : Array = saved_dev.get("claimed", [])
-		if not saved_claims.is_empty():
-			_map_grid.call("apply_claimed_indices", saved_claims)
-		_restore_buildings(saved_dev)
-		_restore_towers(saved_dev)
-		_restore_fob(saved_dev)
+		_restore_territory_development(GalaxyManager.star_systems[GalaxyManager.active_node].get("development", {}))
 	## Fully retire the Academy: free the whole subtree so nothing leaks into the live
 	## game. hide() on the Academy *Node2D* does NOT hide its CanvasLayer children
 	## (TextLayer / SortingLayer with their Buttons) — those stay visible and keep
@@ -178,9 +172,15 @@ func _handle_galaxy_click(screen_pos: Vector2) -> void:
 ## Loads the selected territory's seeded battle map and zooms back in. Capturing it happens on
 ## map_completed (see _on_map_completed). Clears the previous battle's transient entities.
 func _deploy_to_node(node_id: String) -> void:
+	## [Persistence Step 5] Snapshot the territory we're leaving (active_node still points to it) so its
+	## development persists independently, then switch and restore any development the destination already
+	## had (returning to a held node). Cross-territory income stays approximate — a per-territory economy
+	## recompute is a separate galaxy-campaign follow-up.
+	_capture_territory_development()
 	GalaxyManager.invading_node = node_id
 	GalaxyManager.active_node   = node_id
 	_load_territory_map(node_id)
+	_restore_territory_development(GalaxyManager.star_systems.get(node_id, {}).get("development", {}))
 	var cam : Node = get_node_or_null("WorldMap/Camera")
 	if cam != null and cam.has_method("board_min_zoom"):
 		var z : float = float(cam.call("board_min_zoom"))
@@ -311,6 +311,16 @@ func _restore_fob(dev: Dictionary) -> void:
 	var base : Node = get_node_or_null("WorldMap/Base")
 	if base != null and base.has_method("restore_rank"):
 		base.call("restore_rank", rank)
+
+## [Persistence] Re-applies a territory's saved development (claims, garrisons, towers, FOB rank) onto
+## the freshly-loaded map. Shared by the Continue restore and deploy-return (Step 5).
+func _restore_territory_development(dev: Dictionary) -> void:
+	var saved_claims : Array = dev.get("claimed", [])
+	if not saved_claims.is_empty():
+		_map_grid.call("apply_claimed_indices", saved_claims)
+	_restore_buildings(dev)
+	_restore_towers(dev)
+	_restore_fob(dev)
 
 ## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:

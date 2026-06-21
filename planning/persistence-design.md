@@ -2,7 +2,7 @@
 
 > **Goal:** a galaxy territory's *development* (placed buildings, towers, claimed cells, FOB rank)
 > survives leaving it AND survives a Continue — so offline army resolution has garrisons to run and
-> the Total-War campaign state holds. **Status: IN PROGRESS (2026-06-20). Step 1 landing.**
+> the Total-War campaign state holds. **Status: COMPLETE (2026-06-20) — Steps 1–5 landed, compile-clean. Runtime proof via a hand-playtest Continue + multi-territory deploy.**
 >
 > **Backbone (already true):** saves are JSON (`user://cycle_four_save.json`, `SaveManager`). The
 > galaxy graph (`GalaxyManager.star_systems`: node → `{owner, ring, px/py, adj, seed}`) and treaties
@@ -56,7 +56,14 @@ territories, rim-start node). Additive, backward-compatible.
    (current-tier `.tres` encodes the branch → restore re-instantiates at that tier; `Tower.restore_level`
    re-derives the veterancy multiplier/sight; `mark_tower_placed` re-applies pathing). FOB rank via
    `Base.restore_rank` (re-applies the rank-scaled sphere; idempotent vs restored claims). **DONE 2026-06-20.**
-5. **Capture-on-deploy.** Snapshot a territory when you leave it, so multi-territory state holds.
+5. ✅ **Capture-on-deploy (+ restore-on-return).** `_deploy_to_node` snapshots the leaving territory
+   (`_capture_territory_development`, before switching `active_node`), then restores the destination's
+   saved development (shared `_restore_territory_development`, also used by Continue). **DONE 2026-06-20.**
+
+**Known follow-ups (out of scope, flagged):** cross-territory *income* is approximate — `territory_rates`
+is a single global accumulator that leaks across deploys; a per-territory recompute belongs with the
+galaxy-campaign economy model. FOB rank is modeled per-territory (one FOB node fortifies independently
+per territory map).
 
 ## Verification note
 
