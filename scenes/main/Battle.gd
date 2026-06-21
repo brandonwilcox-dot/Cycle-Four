@@ -104,6 +104,8 @@ func _start_game_world(is_restore: bool = false) -> void:
 		if not saved_claims.is_empty():
 			_map_grid.call("apply_claimed_indices", saved_claims)
 		_restore_buildings(saved_dev)
+		_restore_towers(saved_dev)
+		_restore_fob(saved_dev)
 	## Fully retire the Academy: free the whole subtree so nothing leaks into the live
 	## game. hide() on the Academy *Node2D* does NOT hide its CanvasLayer children
 	## (TextLayer / SortingLayer with their Buttons) — those stay visible and keep
@@ -211,6 +213,8 @@ func _capture_territory_development() -> void:
 	var dev : Dictionary = GalaxyManager.star_systems[node_id].get("development", {})
 	dev["claimed"] = _map_grid.call("get_claimed_indices")
 	dev["buildings"] = _capture_buildings()
+	dev["towers"] = _capture_towers()
+	dev["fob"] = _capture_fob()
 	GalaxyManager.star_systems[node_id]["development"] = dev
 
 ## [Persistence Step 3] Snapshots placed garrisons as [{id, cell, level}] for save/restore.
@@ -250,6 +254,63 @@ func _restore_building(bdata: Resource, cell: Vector2i, level: int) -> void:
 		building.set("_level", level)
 	_building_cells[cell] = building
 	_apply_structure_influence(cell)
+
+## [Persistence Step 4] Snapshots placed towers as [{id, cell, level}]. The current-tier .tres (id)
+## already encodes the upgrade branch, so restore re-instantiates at that tier directly.
+func _capture_towers() -> Array:
+	var out : Array = []
+	for cell in _occupied_cells:
+		var t = _occupied_cells[cell]
+		if not is_instance_valid(t):
+			continue
+		var td = t.get("data")
+		if td == null or String(td.resource_path).is_empty():
+			continue
+		out.append({"id": String(td.resource_path), "cell": [int(cell.x), int(cell.y)], "level": int(t.get("level"))})
+	return out
+
+## [Persistence Step 4] Snapshots the FOB's fortification rank.
+func _capture_fob() -> Dictionary:
+	var base : Node = get_node_or_null("WorldMap/Base")
+	if base == null:
+		return {}
+	return {"rank": int(base.get("_fortification_rank"))}
+
+## [Persistence Step 4] Re-instantiates saved towers (at their current tier) after the map loads.
+func _restore_towers(dev: Dictionary) -> void:
+	for trec in dev.get("towers", []):
+		if typeof(trec) != TYPE_DICTIONARY:
+			continue
+		var tid : String = String(trec.get("id", ""))
+		var tcell : Array = trec.get("cell", [])
+		if tid.is_empty() or tcell.size() != 2:
+			continue
+		var tdata : Resource = load(tid)
+		if tdata != null:
+			_restore_tower(tdata, Vector2i(int(tcell[0]), int(tcell[1])), int(trec.get("level", 1)))
+
+## Places a tower from explicit data/cell/level (the restore counterpart to _place_tower): marks the
+## cell for enemy pathing and restores veterancy level. No cost, no build-mode.
+func _restore_tower(tdata: Resource, cell: Vector2i, level: int) -> void:
+	var tower : Node2D = TOWER_SCENE.instantiate()
+	tower.call("setup", tdata)
+	tower_layer.add_child(tower)
+	tower.position = _cell_to_world(cell)
+	_occupied_cells[cell] = tower
+	_map_grid.mark_tower_placed(cell.x, cell.y)
+	_apply_structure_influence(cell)
+	if level > 1:
+		tower.call("restore_level", level)
+
+## [Persistence Step 4] Restores the FOB's fortification rank (+ its rank-scaled sphere).
+func _restore_fob(dev: Dictionary) -> void:
+	var fob : Dictionary = dev.get("fob", {})
+	var rank : int = int(fob.get("rank", 0))
+	if rank <= 0:
+		return
+	var base : Node = get_node_or_null("WorldMap/Base")
+	if base != null and base.has_method("restore_rank"):
+		base.call("restore_rank", rank)
 
 ## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:

@@ -113,6 +113,15 @@ func _on_convoy_arrived(_convoy_id: StringName, _to_node: StringName, cargo: flo
 			_rank_chevrons.call("set_rank", _fortification_rank)
 		_apply_influence()
 
+## [Persistence Step 4] Restores fortification rank from a save and re-applies the rank-scaled
+## sphere (sight/claim) + visuals. Idempotent vs already-restored claims (claim_area skips them).
+func restore_rank(restored_rank: int) -> void:
+	_fortification_rank = clampi(restored_rank, 0, FOB_MAX_RANK)
+	_update_rank_bar()
+	if _rank_chevrons != null:
+		_rank_chevrons.call("set_rank", _fortification_rank)
+	_apply_influence()
+
 func _update_rank_bar() -> void:
 	if _rank_bar == null:
 		return

@@ -33,7 +33,13 @@ unblocks offline resolution on a real Continue + the Total-War campaign loop. De
   map + claims load. `Building.setup(data, restored)` + a `_restored` guard skip the `_ready`
   `add_territory_rate` on restore (territory_rates already includes it → no income double-count on
   Continue). **Unblocks offline army resolution on a real Continue** — garrisons now exist to fast-forward.
-- **Next:** Step 4 — persist/restore towers (level/branch) + FOB rank.
+- **Step 4 (this change):** persist/restore towers + FOB rank. Towers captured as `[{id, cell, level}]`
+  — the current-tier `.tres` (id) encodes the upgrade branch, so `Battle._restore_tower` re-instantiates
+  at that tier, calls `mark_tower_placed` (pathing), and `Tower.restore_level` re-derives damage
+  multiplier/XP/sight/chevrons. FOB rank via `Base.restore_rank` (re-applies the rank-scaled sphere;
+  idempotent vs the already-restored claims → no economy double-count). Towers add no income → no guard.
+- **Next:** Step 5 (final) — capture-on-deploy: snapshot a territory when you leave it (`_deploy_to_node`)
+  so multi-territory development holds across the galaxy, not just on save/Continue.
 
 ## Architecture North Star (PROPOSED) — scene-separation refactor — 2026-06-20
 

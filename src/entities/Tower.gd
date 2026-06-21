@@ -170,6 +170,19 @@ func _level_up() -> void:
 	_apply_sight()       ## leveling widens the tower's sight/sensor sphere
 	_recompute_buffs()   ## hitting max level grants the veteran aura immediately
 
+## [Persistence Step 4] Restores veterancy level from a save — applies the cumulative effect of
+## _level_up (damage multiplier, XP threshold, sight, chevrons) without replaying kills.
+func restore_level(restored_level: int) -> void:
+	level = clampi(restored_level, 1, TOWER_MAX_LEVEL)
+	_damage_multiplier = pow(1.0 + DAMAGE_PER_LEVEL, float(level - 1))
+	xp = 0.0
+	xp_to_next = XP_BASE_THRESHOLD * pow(float(level), XP_LEVEL_EXPONENT)
+	if _chevrons != null:
+		_chevrons.call("set_rank", level - 1)
+	_apply_sight()
+	_recompute_buffs()
+	_update_xp_bar()
+
 ## Resolves and caches the MapGrid from its group.
 func _get_map_grid() -> Node:
 	if _map_grid == null or not is_instance_valid(_map_grid):

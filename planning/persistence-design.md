@@ -52,7 +52,10 @@ territories, rim-start node). Additive, backward-compatible.
    restore via `_restore_building`, which skips the income re-add (`Building.setup(data, restored=true)`
    → `_ready` guard) since territory_rates already includes it. **DONE 2026-06-20 — unblocks offline
    resolution on a real Continue.**
-4. **Persist/restore towers (level/branch) + FOB rank.** Full investment fidelity.
+4. ✅ **Persist/restore towers (level/branch) + FOB rank.** Towers captured as `[{id, cell, level}]`
+   (current-tier `.tres` encodes the branch → restore re-instantiates at that tier; `Tower.restore_level`
+   re-derives the veterancy multiplier/sight; `mark_tower_placed` re-applies pathing). FOB rank via
+   `Base.restore_rank` (re-applies the rank-scaled sphere; idempotent vs restored claims). **DONE 2026-06-20.**
 5. **Capture-on-deploy.** Snapshot a territory when you leave it, so multi-territory state holds.
 
 ## Verification note
