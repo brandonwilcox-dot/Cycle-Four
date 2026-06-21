@@ -37,6 +37,16 @@ const DETECT_RECOMPUTE_PERIOD : float = 0.15
 var _detect_timer     : float    = 0.0
 var _is_detected      : bool     = false
 
+## Item 4 — tiered reveal for stealth units. Inside a detector's SIGHT radius (get_detector_radius)
+## = FULL (drawn fully, targetable). Inside its larger SENSOR radius (get_sensor_radius, or a default
+## multiple) = BLIP (a dim position marker, health bar hidden, NOT targetable). Outside both = HIDDEN.
+## Non-stealth units ignore this entirely and use plain fog (revealed cell).
+enum RevealTier { HIDDEN, BLIP, FULL }
+var _reveal_tier      : RevealTier = RevealTier.HIDDEN
+## Default sensor (blip) ring = this × a detector's sight radius, for detectors that don't expose their
+## own get_sensor_radius() (towers, garrisons, FOB). The Commander overrides with its drawn sensor ring.
+const SENSOR_RADIUS_MULT : float = 1.6
+
 ## Phase F -- flanker state.
 ## Flankers target a CLAIMED cell instead of the base.
 ## _target_cell = Vector2i(-1,-1) means "not a flanker / target already gone".
@@ -66,12 +76,13 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead or _waypoints.is_empty():
 		return
-	## Stealth: refresh live detection on a throttle (scans the detectors group).
+	## Stealth: refresh the live reveal tier on a throttle (scans the detectors group).
 	if data != null and data.stealth:
 		_detect_timer -= delta
 		if _detect_timer <= 0.0:
 			_detect_timer = DETECT_RECOMPUTE_PERIOD
-			_is_detected = _within_active_detector()
+			_reveal_tier = _compute_reveal_tier()
+			_is_detected = _reveal_tier == RevealTier.FULL
 	## Phase 6/8: hide while inside unrevealed cells. Enemies emerging from the fog
 	## should only appear once their cell enters the Commander's vision.
 	_update_fog_visibility()
@@ -124,10 +135,11 @@ func _update_fog_visibility() -> void:
 	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
 		return
 	var idx : int = cell.x + cell.y * map_data.dimensions.x
-	## Stealth units are visible only while inside an active detector (live); normal
-	## units use sight/fog (revealed cell).
+	## Stealth units use the tiered reveal: FULL = drawn fully, BLIP = dim position marker
+	## (health bar hidden), HIDDEN = invisible. Normal units use sight/fog (revealed cell).
 	if data != null and data.stealth:
-		visible = _is_detected
+		visible = _reveal_tier != RevealTier.HIDDEN
+		_apply_reveal_visual(_reveal_tier == RevealTier.FULL)
 	else:
 		visible = map_data.get_meta_revealed(idx)
 
@@ -216,19 +228,26 @@ func _engaged_friendly() -> Node2D:
 func _melee_damage() -> float:
 	return maxf(data.attack_damage, ENEMY_MELEE_DAMAGE)
 
-## True if any active detector (FOB, Commander, detector tower) currently covers us.
-func _within_active_detector() -> bool:
+## Strongest reveal tier any active detector (FOB, Commander, tower, garrison) grants us this scan.
+## Inside a detector's sight radius → FULL; inside its larger sensor radius → BLIP; else HIDDEN.
+## Returns early on the first FULL (the best possible); otherwise tracks the best tier seen.
+func _compute_reveal_tier() -> RevealTier:
+	var best : RevealTier = RevealTier.HIDDEN
 	for d in get_tree().get_nodes_in_group("detectors"):
 		if not (d is Node2D) or not is_instance_valid(d):
 			continue
 		if not d.has_method("get_detector_radius"):
 			continue
-		var radius : float = float(d.call("get_detector_radius"))
-		if radius <= 0.0:
+		var sight : float = float(d.call("get_detector_radius"))
+		if sight <= 0.0:
 			continue
-		if global_position.distance_to((d as Node2D).global_position) <= radius:
-			return true
-	return false
+		var dist : float = global_position.distance_to((d as Node2D).global_position)
+		if dist <= sight:
+			return RevealTier.FULL
+		var sensor : float = float(d.call("get_sensor_radius")) if d.has_method("get_sensor_radius") else sight * SENSOR_RADIUS_MULT
+		if dist <= sensor:
+			best = RevealTier.BLIP
+	return best
 
 ## Apply incoming damage. damage_type (Combat.DamageType, -1 = untyped contact damage)
 ## scales the hit against this unit's armor_type before flat armor is subtracted.
@@ -323,8 +342,9 @@ func _build_placeholder_visual() -> void:
 	if data != null and data.stealth:
 		_visual.modulate = Color(0.6, 0.85, 1.0, 0.85)
 	add_child(_visual)
-	## Dark health-bar background
+	## Dark health-bar background (named so the BLIP tier can hide it — item 4)
 	var bar_bg          := ColorRect.new()
+	bar_bg.name         = "HealthBarBG"
 	bar_bg.size         = Vector2(24.0, 3.0)
 	bar_bg.position     = Vector2(-12.0, -18.0)
 	bar_bg.color        = Color(0.2, 0.2, 0.2)
@@ -347,3 +367,38 @@ func _update_health_visual() -> void:
 	var bar : ColorRect = get_node_or_null("HealthBar")
 	if bar and data:
 		bar.size.x = 24.0 * (_current_health / data.max_health)
+
+## Item 4: applies the reveal visual for a stealth unit. full=true → normal render + health bar;
+## full=false (BLIP) → the node is dimmed and the health bar hidden, so it reads as a position-only
+## marker with no full info. Called every fog update while the unit is a detected stealth unit.
+func _apply_reveal_visual(full: bool) -> void:
+	modulate = Color(1.0, 1.0, 1.0, 1.0) if full else Color(1.0, 1.0, 1.0, 0.4)
+	var hb  : CanvasItem = get_node_or_null("HealthBar")   as CanvasItem
+	var hbg : CanvasItem = get_node_or_null("HealthBarBG") as CanvasItem
+	if hb != null:
+		hb.visible = full
+	if hbg != null:
+		hbg.visible = full
+
+## Item 5: how this enemy should appear on the minimap — 0 = off the minimap, 1 = dim blip,
+## 2 = full marker. Stealth units mirror their world reveal tier (so an undetected stealth unit
+## never shows, even in a revealed cell); normal units show only inside a revealed cell.
+func minimap_reveal() -> int:
+	if data != null and data.stealth:
+		match _reveal_tier:
+			RevealTier.FULL:
+				return 2
+			RevealTier.BLIP:
+				return 1
+			_:
+				return 0
+	if _map_grid_ref == null:
+		return 2
+	var md : MapData = _map_grid_ref.get("map_data") as MapData
+	if md == null:
+		return 2
+	var cell : Vector2i = _map_grid_ref.world_to_cell(global_position)
+	if cell.x < 0 or cell.x >= md.dimensions.x or cell.y < 0 or cell.y >= md.dimensions.y:
+		return 0
+	var idx : int = cell.x + cell.y * md.dimensions.x
+	return 2 if md.get_meta_revealed(idx) else 0

@@ -138,10 +138,13 @@ static func _build_spawn_points(data: MapData, chosen: Array) -> void:
 		sp.axis      = SpawnPoint.SpawnAxis.PRIMARY
 		if i == 0:
 			sp.activation_trigger = SpawnPoint.ActivationTrigger.ALWAYS_ON
-			sp.state              = SpawnPoint.SpawnState.ACTIVE
 		else:
 			sp.activation_trigger = SpawnPoint.ActivationTrigger.ON_REVEAL
-			sp.state              = SpawnPoint.SpawnState.DORMANT
+		## All spawns ACTIVE from the start so enemies attack from every direction (the multi-spawn route
+		## divergence is pointless if only one emits). _activate_all_spawns already activates them all
+		## post-Academy; defaulting to ACTIVE makes it robust and independent of that call's timing.
+		## ON_REVEAL gradual activation is future work — the trigger is kept as metadata.
+		sp.state = SpawnPoint.SpawnState.ACTIVE
 		data.spawn_points.append(sp)
 
 static func _build_support_graph(data: MapData, rng: RandomNumberGenerator) -> void:
@@ -223,10 +226,10 @@ static func _build_ancient_crossings(data: MapData, edge: PathEdge) -> void:
 		data.zones.append(zone)
 		idx += 1
 
-static func _build_objectives(data: MapData, chosen: Array) -> void:
-	## Pick a non-primary spawn as the seal target. If only one spawn exists, the
-	## stub objective seals the primary itself (gameplay-edge but architecturally fine).
-	var seal_target : StringName = chosen[0]["id"] if chosen.size() == 1 else chosen[1]["id"]
+static func _build_objectives(data: MapData, _chosen: Array) -> void:
+	## NOTE: the stub objective no longer seals a spawn. "Claim 10 cells" completes near-instantly (the
+	## FOB's own opening claim is ~25 cells), which used to seal a spawn within the first second → enemies
+	## from a single direction. Leave all spawns open until a non-trivial objective + real seal mechanic land.
 	var combos : Array = [
 		"architects:standard", "architects:spiritual_tech",
 		"bloom:purist",        "bloom:assimilator",
@@ -239,7 +242,7 @@ static func _build_objectives(data: MapData, chosen: Array) -> void:
 		obj.kind         = ObjectiveData.ObjectiveKind.HOLD_CONTROL_POINT
 		obj.target       = 10
 		obj.progress     = 0
-		obj.seals        = [seal_target] as Array[StringName]
+		obj.seals        = [] as Array[StringName]
 		var list : Array[ObjectiveData] = [obj]
 		data.objectives_by_faction_subpath[combo] = list
 
