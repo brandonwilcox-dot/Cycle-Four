@@ -19,6 +19,17 @@
   pathing. Investigate `_activate_all_spawns()` post-Academy and WaveSpawner per-wave
   spawn distribution. (Found: playtest 2026-06-20)
 
+- [BUG][P1] SYSTEM HANG — entire OS became unresponsive; Godot process wouldn't close.
+  Scenario: garrisons near spawn points claiming territory + new wave of Mesh units
+  (orange) un-claiming territory. Collision/race on same cells. Theory: rapid
+  claim/unclaim event ping-pong, rendering bottleneck, or pathfinding deadlock.
+  Repro strategy: (1) place garrisons in a 3×3 cluster near a spawn; (2) watch them
+  claim outward; (3) call a new wave; (4) monitor frame rate—if <1fps and process
+  won't exit, log the frame count at hang. No crash dump found; logs show clean exit.
+  Fix direction: instrument claim_area/unclaim_cell with frame counts; add render
+  coalescing; check for mutual waiting in FriendlyUnit pathfinding vs MapGrid updates.
+  (Found: playtest 2026-06-21)
+
 - [BUG][P2] Garrison leveling has no felt effect. Design says levels raise squad cap +
   production speed, but no difference perceived in playtest. Verify level-up effects apply;
   surface garrison level + current effect in InspectionPanel. (Found: playtest 2026-06-20)

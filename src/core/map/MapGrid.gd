@@ -259,6 +259,7 @@ func claim_cell(col: int, row: int) -> void:
 ## Claims every GROUND cell within `radius` of `center`. Returns the list of cells
 ## newly converted to CLAIMED so the caller can apply economy + emit territory_claimed.
 ## Already-claimed / non-GROUND cells are skipped, so repeated calls are cheap and idempotent.
+## Batches queue_redraw() — single redraw call regardless of cell count to avoid event thrashing.
 func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
 	var newly : Array[Vector2i] = []
 	for dy in range(-radius, radius + 1):
@@ -272,7 +273,7 @@ func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
 			_cells[c + r * COLS] = Cell.CLAIMED
 			newly.append(Vector2i(c, r))
 	if not newly.is_empty():
-		queue_redraw()
+		queue_redraw()   ## Single call; don't emit one per cell
 	return newly
 
 ## -- Per-territory persistence (claims) --

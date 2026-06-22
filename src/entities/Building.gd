@@ -161,8 +161,11 @@ func _update_raid() -> void:
 func _complete_raid() -> void:
 	var newly : Array = _map_grid.call("claim_area", _raid_target_cell, RAID_CLAIM_RADIUS)
 	if newly != null and not newly.is_empty():
+		## Batch event emissions: register all cells, then emit once per cell.
+		## (Emit per-cell for ObjectiveManager to track; batching the redraw above prevents thrashing.)
 		for nc in newly:
 			EconomyManager.register_claimed_cell()
+		for nc in newly:
 			EventBus.territory_claimed.emit(nc)
 		EventBus.notification_pushed.emit("Raiding party claimed %d cells of territory." % newly.size(), "normal")
 	_abort_raid()
