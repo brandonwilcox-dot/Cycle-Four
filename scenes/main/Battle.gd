@@ -184,6 +184,9 @@ func _handle_galaxy_click(screen_pos: Vector2) -> void:
 		return
 	if GalaxyManager.is_frontier(id, FactionManager.active_faction):
 		_deploy_to_node(id)
+	elif GalaxyManager.star_systems.get(id, {}).get("owner") == FactionManager.active_faction \
+			and id != GalaxyManager.active_node:
+		_deploy_to_node(id)   ## return to a held territory
 	else:
 		EventBus.notification_pushed.emit("That territory isn't on your frontier.", "warning")
 
@@ -195,10 +198,14 @@ func _deploy_to_node(node_id: String) -> void:
 	## had (returning to a held node). Cross-territory income stays approximate — a per-territory economy
 	## recompute is a separate galaxy-campaign follow-up.
 	_capture_territory_development()
-	GalaxyManager.invading_node = node_id
+	## Invading = frontier (neutral/enemy) node; returning = owned node. The distinction controls
+	## whether a map_completed triggers capture_system — owned nodes don't need to be recaptured.
+	var is_owned : bool = GalaxyManager.star_systems.get(node_id, {}).get("owner", "") == FactionManager.active_faction
+	GalaxyManager.invading_node = "" if is_owned else node_id
 	GalaxyManager.active_node   = node_id
 	_load_territory_map(node_id)
 	_restore_territory_development(GalaxyManager.star_systems.get(node_id, {}).get("development", {}))
+	hud.call("refresh_objectives")   ## repopulate panel with this territory's objectives
 	var cam : Node = get_node_or_null("WorldMap/Camera")
 	if cam != null and cam.has_method("board_min_zoom"):
 		var z : float = float(cam.call("board_min_zoom"))
@@ -206,7 +213,9 @@ func _deploy_to_node(node_id: String) -> void:
 		cam.set("position", BOARD_CENTER)
 	if _galaxy_view != null:
 		_galaxy_view.call("setup", BOARD_CENTER)   ## recenter on the new active node + redraw
-	EventBus.notification_pushed.emit("Deploying to contested territory — complete its objective to claim it.", "info")
+	var msg : String = "Returning to held territory." if is_owned else \
+		"Deploying to contested territory — claim %d sectors to capture it." % ObjectiveManager.TERRITORY_CLAIM_TARGET
+	EventBus.notification_pushed.emit(msg, "info")
 
 ## Clears the current battle's transient entities (towers/buildings/units) and loads node_id's
 ## seeded battle map. Shared by _deploy_to_node (galaxy deploy) and the Continue restore path.

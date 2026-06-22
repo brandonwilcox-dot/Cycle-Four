@@ -24,6 +24,7 @@ const COL_CLAIMED  : Color = Color(0.18, 0.55, 0.28, 1.0)
 const COL_BASE     : Color = Color(0.95, 0.80, 0.20, 1.0)
 const COL_COMMANDER: Color = Color(1.00, 0.82, 0.18, 1.0)
 const COL_ENEMY    : Color = Color(0.95, 0.25, 0.20, 1.0)
+const COL_ENEMY_DIM: Color = Color(0.95, 0.25, 0.20, 0.45)   ## sensor-range blip (item 5)
 const COL_CONVOY   : Color = Color(0.35, 0.65, 0.95, 1.0)
 
 var _grid     : Node     = null
@@ -78,9 +79,13 @@ func _draw() -> void:
 				continue
 			draw_rect(rect, _cell_color(int(_grid.call("get_cell", c, r))))
 
-	## Enemy blips (revealed cells only).
+	## Enemy blips — gated by each unit's own reveal state (item 5): 0 = hidden (skip), 1 = dim
+	## blip (sensor range), 2 = full marker. The unit already decided, so no extra fog gate here.
 	for unit in get_tree().get_nodes_in_group("units"):
-		_draw_blip(unit, COL_ENEMY, 2.0, true)
+		var tier : int = int(unit.call("minimap_reveal")) if unit.has_method("minimap_reveal") else 2
+		if tier <= 0:
+			continue
+		_draw_blip(unit, COL_ENEMY if tier >= 2 else COL_ENEMY_DIM, 2.0, false)
 	## Convoy blips.
 	for convoy in get_tree().get_nodes_in_group("convoys"):
 		_draw_blip(convoy, COL_CONVOY, 2.0, true)

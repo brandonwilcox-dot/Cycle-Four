@@ -1,5 +1,14 @@
 # Detection / fog-of-war rework + spawn fix — plan
 
+> **STATUS — IMPLEMENTED 2026-06-21 (~4:51 PM).** All 5 requirements coded + export-verified (release
+> build EXIT 0, zero script/parse errors → all six files compile clean). Desktop `.exe` rebuilt at
+> `C:\Users\Brand\OneDrive\Desktop\Cycle Four.exe`; runtime behavior pending hand-playtest.
+> Files: #1 → `Tower.gd` (reveal = max(detector,range)) + `Building.gd` (joins "detectors", 160px);
+> #2 → `Commander.get_detector_radius()` = `_los_radius()` (sight ring); #3 → `Unit.gd` RevealTier
+> HIDDEN/BLIP/FULL + `Commander.get_sensor_radius()` = `_sensor_radius()` (drawn sensor ring);
+> #4 → `Unit.minimap_reveal()` + `Minimap.gd` gating; #5 → `MapGenerator.gd` (all spawns default
+> ACTIVE + stub objective no longer instant-seals a spawn).
+
 > **Scheduled execution: 2026-06-21 ~2:40 PM** (after the user's usage-credit reset). Source: user
 > playtest feedback 2026-06-21. Do NOT start before then. Bar: zero new errors via the Godot MCP
 > (`run_project` → `get_debug_output` → `stop_project`); verify behavior in-game where feasible; the

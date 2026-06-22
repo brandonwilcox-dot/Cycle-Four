@@ -419,9 +419,16 @@ func _find_nearest_unit_in_range() -> Node2D:
 			best      = unit
 	return best
 
-## Stealth detection (px): the Commander reveals stealth within its line of sight.
+## Stealth detection (px): the Commander FULLY reveals stealth within its drawn LoS ring (item 2 —
+## tracks the live sight ring, which grows with rank). Matches the on-screen ring so "inside the ring
+## = revealed" holds. The larger sensor ring gives a position-only blip (item 4, get_sensor_radius).
 func get_detector_radius() -> float:
-	return float(VISION_RADIUS) * CELL_SIZE_PX
+	return (float(_los_radius()) + 0.5) * CELL_SIZE_PX
+
+## Sensor (blip) radius (px): matches the drawn sensor ring. A stealth unit between the LoS ring and
+## this shows as a dim position-only blip (no full info / not targetable) rather than a full reveal.
+func get_sensor_radius() -> float:
+	return (float(_sensor_radius()) + 0.5) * CELL_SIZE_PX
 
 ## Brief yellow Line2D from Commander to target, auto-frees after SHOT_FLASH_DURATION.
 func _spawn_shot_line(target_world: Vector2, col: Color, width: float) -> void:

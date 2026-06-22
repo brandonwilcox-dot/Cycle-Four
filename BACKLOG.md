@@ -27,14 +27,22 @@
   ConvoyManager spawn conditions (connectivity BFS on `path_discovered`, depot detection).
   Likely no depot/path discovered on played map, or convoy never spawned. (Found: playtest 2026-06-20)
 
-- [BUG][P2] Per-territory persistence runtime verification still pending. All 5 persistence
-  steps compile clean via MCP, but restore/capture only run on real Continue or deploy.
-  Needs hand-playtest: New Game → build/claim → quit → Continue (everything returns);
-  deploy A→B→A (each territory holds). (Flagged: 2026-06-20)
+- [BUG][P2] Per-territory persistence — Continue restore VERIFIED 2026-06-21. Garrison,
+  tower, FOB HP, energy rate, map seed, offline catch-up all restored correctly. Deploy
+  A→B capture also verified (code review + clean deploy run, zero errors). Remaining gap:
+  no UI to deploy back to a held territory (is_frontier blocks owned nodes), so restore-
+  on-return cannot be hand-tested. See [ENHANCEMENT][P2] galaxy return nav below.
 
 - [BUG][P3] Academy scenarios (75/90/90s phases) had no player control pre-fix. Partially
   addressed 2026-06-21: Battle now accepts world input during scenario phase. Tower placement
   during scenarios still needs HUD shown — smaller follow-up. (Flagged: 2026-06-21)
+
+- [BUG][P2] ObjectiveManager completion state not persisted on Continue. On restore,
+  objectives reset to 0/N even if they were completed before quit. An active garrison
+  re-triggering territory_claimed immediately masks this, but objectives that require
+  a one-time-only event (path_discovered, convoy_spawned) will stay stuck at 0 until
+  that event fires again. Fix direction: persist completed-objective IDs in save and
+  replay them into ObjectiveManager on restore. (Found: playtest 2026-06-21)
 
 ---
 
@@ -44,9 +52,14 @@
   types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.
   Needs: garrison loadout UI, per-type XP, multi-type squad logic. (Found: playtest 2026-06-20)
 
-- [ENHANCEMENT][P2] Per-territory win conditions. Each galaxy node needs a win condition
-  (currently only global `map_completed` on claim objective). Ties into diplomacy layer.
-  (Flagged: D1 design, 2026-06-17)
+- [DONE — 2026-06-21] Galaxy nav only supports outward deploys. Fixed: `_handle_galaxy_click`
+  now allows clicking any owned non-active node; `_deploy_to_node` sets `invading_node = ""`
+  for returns so `map_completed` doesn't re-capture an already-owned territory.
+
+- [DONE — 2026-06-21] Per-territory win conditions. `ObjectiveManager` now generates a
+  default `CLAIM_TERRITORY` objective (200 cells, faction-voiced) when the resolved list is
+  empty. 200 claimed → `map_completed` → `capture_system` → frontier opens. HUD repopulates
+  on deploy via `HUD.refresh_objectives()`. Compile-verified; runtime needs hand-playtest.
 
 - [ENHANCEMENT][P2] HUD shown during Academy scenario phase. Tower placement during
   scenarios is currently unavailable (HUD hidden). Show a reduced HUD during scenarios

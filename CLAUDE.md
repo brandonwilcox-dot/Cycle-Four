@@ -9,6 +9,69 @@ making any design decisions in code.
 
 ---
 
+## Session 2026-06-21 (2) — Per-territory win conditions + galaxy return nav — COMPILE VERIFIED
+
+Closes the two P2 BACKLOG items from the persistence session.
+
+**Per-territory win conditions (`ObjectiveManager`, `ObjectiveData`):**
+- Added `CLAIM_TERRITORY` kind to `ObjectiveData.ObjectiveKind`.
+- `ObjectiveManager._resolve_for_current_faction()` now falls back to `_make_territory_objective()`
+  when the resolved list is empty (all procgen maps). The default objective: claim 200 cells,
+  faction-voiced description (Architects/Bloom/Mesh variants). `TERRITORY_CLAIM_TARGET = 200`.
+- Each `territory_claimed` event increments the objective by 1 (existing Phase-5 stub behavior).
+  At 200 claimed cells: `map_completed` fires → `Battle._on_map_completed` → `capture_system`.
+
+**Galaxy return nav (`Battle._handle_galaxy_click`, `_deploy_to_node`):**
+- `_handle_galaxy_click` now accepts owned (non-active) nodes in addition to frontier nodes,
+  unlocking the `_deploy_to_node` restore-on-return path that was unreachable via UI.
+- `_deploy_to_node` distinguishes invading (`invading_node = node_id`) from returning
+  (`invading_node = ""`) so `map_completed` on an already-owned territory is a no-op for capture.
+- Notification text is context-aware ("Deploying to contested territory — claim 200 sectors…"
+  vs "Returning to held territory.").
+
+**HUD repopulate on deploy (`HUD.refresh_objectives`):**
+- Added `HUD.refresh_objectives()` — reads `ObjectiveManager.get_active_objectives()` and
+  repopulates the panel + summary button. Called from `_deploy_to_node` after `_load_territory_map`.
+  Without this, the panel would keep showing the previous territory's objectives after deploy.
+
+**Compile status:** zero new errors (only standing benign EventBus warnings).
+**Runtime:** needs hand-playtest. Path: zoom out → click frontier → claim 200 cells → verify
+"Map Complete!" in panel, "Territory captured" notification, galaxy graph redraws with new owner.
+Return path: zoom out → click a held (non-home) node → verify map swaps, old objectives restored.
+
+**Known follow-up (out of scope):** ObjectiveManager completion not persisted on Continue
+([BUG][P2] in BACKLOG) — on restore, the 200-cell objective resets to 0. Active garrisons
+re-fill it quickly via raids, but one-time objectives (path_discovered) stay stuck.
+
+---
+
+## Session 2026-06-21 — Persistence verification COMPLETE + two new BACKLOG items
+
+Hand-playtest of all persistence paths. Zero new errors across three game runs.
+
+**Step 2 (Continue restore) — VERIFIED:**
+- Garrison, tower, FOB 300 HP, energy rate all restored exactly
+- Map seed regenerated identical layout; offline catch-up (schematics) working
+- ⚠️ ObjectiveManager completion resets on Continue — re-completes via garrison raids for
+  territory objectives; one-time events (path_discovered, convoy_spawned) stay at 0 on restore
+  → added to BACKLOG as [BUG][P2]
+
+**Step 3 (Deploy A→B, capture) — VERIFIED (code review + runtime):**
+- `_capture_territory_development` confirmed running before node switch; seeded map loads clean
+- ⚠️ Deploy B→A blocked: `_handle_galaxy_click` only accepts `is_frontier` nodes; clicking
+  the owned home node emits "That territory isn't on your frontier." Galaxy nav is outward-only.
+  The `restore-on-return` path in `_deploy_to_node` (lines 197–201) exists but is unreachable
+  without the galaxy-nav enhancement → added to BACKLOG as [ENHANCEMENT][P2]
+
+**New BACKLOG entries (2026-06-21):** [BUG][P2] ObjectiveManager completion not persisted on
+Continue; [ENHANCEMENT][P2] Galaxy nav outward-only — no UI to return to held territory.
+
+**Next session:** Per-territory win conditions for galaxy nodes ([ENHANCEMENT][P2] in BACKLOG).
+Each node currently has only the global map_completed objective. Design a per-node win condition
+system; this also gives the galaxy-nav return feature a meaningful unlock gate.
+
+---
+
 ## REGRESSION FIX — Academy cadet control restored — 2026-06-21
 
 The Stage-2 change "make `CadetAvatar` a non-interactive prop (fixes bug #1)" was a **REGRESSION** that
@@ -30,7 +93,7 @@ feeding the behavior tracker). Tower placement during scenarios still needs the 
 (b) the input-spam "crash" is the
 known queued **rapid-click hang**.
 
-## Per-territory persistence — Steps 1–5 COMPLETE — 2026-06-20 (compiles clean; runtime needs a Continue/deploy playtest)
+## Per-territory persistence — Steps 1–5 COMPLETE — 2026-06-20 — RUNTIME VERIFIED 2026-06-21
 
 Goal: a galaxy territory's development (buildings/towers/claims/FOB) survives leaving it + a Continue —
 unblocks offline resolution on a real Continue + the Total-War campaign loop. Design + 5-step plan:
@@ -67,9 +130,9 @@ unblocks offline resolution on a real Continue + the Total-War campaign loop. De
 - **Known follow-ups (flagged, out of scope):** cross-territory income is approximate (`territory_rates`
   is a single global accumulator that leaks across deploys → belongs with the galaxy-campaign economy
   model); FOB rank is modeled per-territory (one FOB node fortifies independently per territory).
-- **Runtime verification still pending:** every persistence step is compile-/load-clean via MCP, but the
-  restore/capture paths only run on a real Continue or deploy (not MCP-injectable). Needs a hand-playtest:
-  New Game → build/claim → quit → Continue (everything returns), and deploy A→B→A (each territory holds).
+- **Runtime verified 2026-06-21:** Continue restore confirmed (garrison/tower/FOB HP/energy rate/map
+  seed/offline catch-up all correct). Deploy A→B capture confirmed. Deploy B→A (restore-on-return)
+  unreachable via current UI — galaxy nav only accepts frontier nodes; see galaxy-nav BACKLOG item.
 
 ## Architecture North Star (PROPOSED) — scene-separation refactor — 2026-06-20
 

@@ -237,9 +237,14 @@ func _recompute_buffs() -> void:
 	_aura_recv_mult = 1.0 + best_bonus
 	_territory_mult = 1.0 + (TERRITORY_DAMAGE_BONUS if _on_claimed_ground() else 0.0)
 
-## Stealth detection: radius (px) within which this tower reveals stealth units.
+## Item 3: every tower reveals hidden units. Base reveal = its attack range (it sees what it can
+## engage); dedicated detector towers (detector_radius set) reveal farther. Returns the larger.
 func get_detector_radius() -> float:
-	return float(data.detector_radius) if data != null and data.get("detector_radius") != null else 0.0
+	if data == null:
+		return 0.0
+	var dr  : float = float(data.detector_radius) if data.get("detector_radius") != null else 0.0
+	var rng : float = float(data.range) if data.get("range") != null else 0.0
+	return maxf(dr, rng)
 
 func provides_detection() -> bool:
 	return get_detector_radius() > 0.0

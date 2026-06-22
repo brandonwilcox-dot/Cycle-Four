@@ -10,6 +10,9 @@ extends Node2D
 const FriendlyUnitScript = preload("res://src/entities/FriendlyUnit.gd")
 const FriendlyRosterScript = preload("res://src/core/army/FriendlyRoster.gd")
 
+## Item 3: every garrison reveals hidden (stealth) units within this modest bubble (~2.5 cells).
+const DETECT_RADIUS : float = 160.0
+
 ## Phase C (C1): every production building doubles as a GARRISON — it produces a friendly
 ## defender on a cooldown, up to a cap, that guards the building's territory (core/17 §0:
 ## "Defensive structures double as production facilities"). Later sub-paths gate roles/tiers
@@ -54,8 +57,13 @@ func setup(building_data: Resource, restored: bool = false) -> void:
 	data = building_data
 	_restored = restored
 
+## Item 3: stealth-reveal radius (px). Joins the "detectors" group contract (Unit scans it).
+func get_detector_radius() -> float:
+	return DETECT_RADIUS
+
 func _ready() -> void:
 	add_to_group("buildings")
+	add_to_group("detectors")   ## item 3: garrisons reveal hidden units
 	if data == null:
 		push_error("Building: no BuildingData -- call setup() before adding to tree.")
 		return

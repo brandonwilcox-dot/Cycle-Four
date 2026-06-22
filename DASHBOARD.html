@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cycle Four — Project Dashboard</title>
+<style>
+:root {
+  --bg:#070d18;--s1:#0d1424;--s2:#141e30;--s3:#1c2840;
+  --b1:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.13);
+  --t1:#dde8f4;--t2:#8da8c8;--t3:#4a6078;
+  --blue:#3b82f6;--blue-d:rgba(59,130,246,0.12);
+  --green:#10b981;--green-d:rgba(16,185,129,0.1);
+  --amber:#f59e0b;--amber-d:rgba(245,158,11,0.1);
+  --red:#ef4444;--red-d:rgba(239,68,68,0.1);
+  --cyan:#06b6d4;--cyan-d:rgba(6,182,212,0.1);
+  --purple:#a78bfa;--purple-d:rgba(167,139,250,0.1);
+  --r:5px;--rl:9px;
+  --font:'Segoe UI',system-ui,sans-serif;
+  --mono:'Consolas','JetBrains Mono','Fira Code',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--t1);font-family:var(--font);font-size:13px;line-height:1.5;}
+
+/* ── HEADER ── */
+#hdr{height:46px;display:flex;align-items:center;gap:12px;padding:0 18px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;}
+#hdr .logo{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t1);}
+#hdr .sep{color:var(--t3);}
+.badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:3px;}
+.b-green{background:var(--green-d);color:var(--green);border:1px solid rgba(16,185,129,.22);}
+.b-amber{background:var(--amber-d);color:var(--amber);border:1px solid rgba(245,158,11,.22);}
+.b-blue{background:var(--blue-d);color:var(--blue);border:1px solid rgba(59,130,246,.22);}
+.b-red{background:var(--red-d);color:var(--red);border:1px solid rgba(239,68,68,.22);}
+.b-dim{background:var(--s3);color:var(--t3);border:1px solid var(--b1);}
+#hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:11px;color:var(--t3);}
+#hdr-right a{color:var(--blue);text-decoration:none;font-size:11px;}
+#hdr-right a:hover{text-decoration:underline;}
+#btn-refresh{background:var(--s3);border:1px solid var(--b2);color:var(--t2);border-radius:4px;padding:4px 11px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.02em;}
+#btn-refresh:hover{background:var(--blue-d);border-color:rgba(59,130,246,.4);color:var(--blue);}
+#btn-refresh.spin{color:var(--amber);border-color:rgba(245,158,11,.4);background:var(--amber-d);animation:pulse 1s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--s3);border:1px solid var(--b2);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--t1);box-shadow:0 4px 20px rgba(0,0,0,.5);display:none;z-index:999;max-width:300px;line-height:1.6;}
+
+/* ── DOCS DROPDOWN ── */
+.docs-wrap{position:relative;}
+#btn-docs{background:var(--s3);border:1px solid var(--b2);color:var(--t2);border-radius:4px;padding:4px 11px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.02em;}
+#btn-docs:hover,#btn-docs.open{background:var(--purple-d);border-color:rgba(167,139,250,.4);color:var(--purple);}
+#docs-dd{position:absolute;top:calc(100% + 9px);right:0;width:780px;background:var(--s1);border:1px solid var(--b2);border-radius:var(--rl);z-index:300;padding:18px;box-shadow:0 10px 48px rgba(0,0,0,.7);display:none;}
+#docs-dd.open{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;}
+.ds-head{font-size:9px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--b1);}
+.ds-head.codex{color:var(--amber);}
+.ds-head.wiki{color:var(--purple);}
+.ds-head.infra{color:var(--cyan);}
+.ds-links{margin-bottom:10px;}
+.ds-link{display:block;font-size:11px;color:var(--t2);text-decoration:none;padding:3px 0;transition:color .1s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ds-link:hover{color:var(--t1);}
+.ds-link::before{content:'↗ ';font-size:9px;color:var(--t3);}
+.ds-card{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:10px;}
+.ds-card-title{font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:7px;}
+.ds-fact{font-size:11px;color:var(--t2);padding:2px 0;line-height:1.55;}
+.ds-fact strong{color:var(--t1);font-weight:600;}
+.ds-sep{height:1px;background:var(--b1);margin:8px 0;}
+
+/* ── LAYOUT ── */
+#shell{display:flex;height:calc(100vh - 46px);overflow:hidden;}
+.col{overflow-y:auto;padding:14px;flex-shrink:0;}
+#col-l{width:256px;border-right:1px solid var(--b1);}
+#col-c{flex:1;min-width:0;}
+#col-r{width:268px;border-left:1px solid var(--b1);}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.09);border-radius:2px;}
+
+/* ── SECTIONS ── */
+.sh{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;gap:7px;margin-bottom:9px;margin-top:2px;}
+.sh::after{content:'';flex:1;height:1px;background:var(--b1);}
+.section{margin-bottom:18px;}
+
+/* ── PHASE ROWS ── */
+.pr{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:var(--r);border:1px solid var(--b1);background:var(--s1);margin-bottom:3px;}
+.pd{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.pd.done{background:var(--green);}
+.pd.active{background:var(--amber);box-shadow:0 0 5px rgba(245,158,11,.5);}
+.pd.pending{background:var(--t3);}
+.pl{font-size:10px;font-weight:700;color:var(--t3);width:16px;flex-shrink:0;}
+.pn{flex:1;font-size:11px;color:var(--t1);}
+.psub{font-size:9px;color:var(--t3);margin-top:1px;}
+
+/* ── MILESTONE BOX ── */
+.mbox{background:var(--amber-d);border:1px solid rgba(245,158,11,.2);border-radius:var(--rl);padding:11px 12px;margin-bottom:16px;}
+.mbox .ml{font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:5px;}
+.mbox .mt{font-size:12px;color:var(--t1);line-height:1.5;}
+.mbox .mf{font-family:var(--mono);font-size:10px;color:rgba(245,158,11,.6);margin-top:5px;}
+
+/* ── BACKLOG ITEMS ── */
+.bi{display:flex;gap:7px;align-items:flex-start;padding:7px 9px;border-radius:var(--r);border:1px solid var(--b1);background:var(--s1);margin-bottom:3px;cursor:pointer;transition:border-color .12s,background .12s;}
+.bi:hover{border-color:var(--b2);background:var(--s2);}
+.bi.sel{border-color:var(--blue);background:var(--blue-d);}
+.btag{font-size:9px;font-weight:800;letter-spacing:.06em;padding:1px 5px;border-radius:2px;flex-shrink:0;margin-top:1px;}
+.btag.bug{background:var(--red-d);color:var(--red);}
+.btag.enh{background:var(--blue-d);color:var(--blue);}
+.btag.ver{background:var(--s3);color:var(--t3);}
+.bpri{font-size:9px;font-weight:600;color:var(--t3);flex-shrink:0;margin-top:2px;}
+.btxt{font-size:11px;color:var(--t2);line-height:1.4;}
+
+/* ── CARD ── */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--rl);padding:14px;margin-bottom:12px;}
+.card-title{font-size:12px;font-weight:600;color:var(--t1);margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.card-title .ic{color:var(--blue);}
+
+/* ── FORM ELEMENTS ── */
+.fl{font-size:9px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--t3);margin-bottom:5px;}
+.field{margin-bottom:11px;}
+select,input[type=text],textarea{width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--t1);border-radius:var(--r);padding:7px 10px;font-size:12px;font-family:var(--font);outline:none;transition:border-color .12s;}
+select:focus,input:focus,textarea:focus{border-color:var(--blue);}
+textarea{resize:vertical;font-size:11px;line-height:1.5;}
+
+/* ── SESSION TYPE GRID ── */
+.stg{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.st{padding:8px 10px;border-radius:var(--r);border:1px solid var(--b1);background:var(--s2);color:var(--t2);cursor:pointer;text-align:center;font-size:11px;font-weight:500;transition:all .12s;user-select:none;}
+.st:hover{border-color:var(--b2);color:var(--t1);}
+.st.on{border-color:var(--blue);background:var(--blue-d);color:var(--blue);}
+
+/* ── TOOL RECS ── */
+.trec{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:11px;}
+.tbox{padding:9px 10px;border-radius:var(--r);background:var(--s2);border:1px solid var(--b1);}
+.tbox .tl{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin-bottom:3px;}
+.tbox .tv{font-size:14px;font-weight:700;}
+.tv.code{color:var(--cyan);}
+.tv.cowork{color:var(--purple);}
+.tv.sonnet{color:var(--green);}
+.tv.opus{color:var(--amber);}
+
+/* ── PROMPT OUTPUT ── */
+.pout{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r);padding:12px;font-family:var(--mono);font-size:11px;color:var(--t2);line-height:1.65;white-space:pre-wrap;word-break:break-word;min-height:100px;max-height:320px;overflow-y:auto;}
+.pout.empty{font-family:var(--font);font-size:12px;font-style:italic;color:var(--t3);}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r);border:1px solid var(--b2);background:var(--s2);color:var(--t1);cursor:pointer;font-size:12px;font-weight:500;transition:all .12s;}
+.btn:hover{background:var(--s3);border-color:rgba(255,255,255,.18);}
+.btn.pri{background:var(--blue);border-color:var(--blue);color:#fff;}
+.btn.pri:hover{background:#2563eb;}
+.btn.grn{background:var(--green-d);border-color:rgba(16,185,129,.3);color:var(--green);}
+.btn-row{display:flex;gap:7px;align-items:center;margin-top:9px;flex-wrap:wrap;}
+
+/* ── PHASE TASK ROWS ── */
+.tr{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border-radius:var(--r);border:1px solid var(--b1);background:var(--s2);margin-bottom:3px;}
+.tr.done{opacity:.5;}
+.tr.active{border-color:rgba(245,158,11,.25);background:var(--amber-d);}
+.tr.queued{cursor:pointer;transition:border-color .12s,background .12s;}
+.tr.queued:hover{border-color:var(--b2);background:var(--s3);}
+.tr.queued.sel{border-color:var(--blue);background:var(--blue-d);}
+.tr-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.tr-dot.done{background:var(--green);}
+.tr-dot.active{background:var(--amber);box-shadow:0 0 5px rgba(245,158,11,.5);}
+.tr-dot.queued{background:var(--t3);}
+.tr-body{flex:1;min-width:0;}
+.tr-name{font-size:11px;color:var(--t1);font-weight:500;line-height:1.4;}
+.tr-note{font-size:10px;color:var(--t3);margin-top:2px;line-height:1.4;}
+.tr-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;}
+.tr-btn{background:var(--s3);border:1px solid var(--b2);color:var(--t3);border-radius:3px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.03em;transition:all .12s;white-space:nowrap;}
+.tr-btn:hover{background:var(--blue-d);border-color:rgba(59,130,246,.4);color:var(--blue);}
+.tr.blocked{border-color:rgba(239,68,68,.25);background:var(--red-d);}
+.tr-dot.blocked{background:var(--red);box-shadow:0 0 5px rgba(239,68,68,.5);}
+.tr-status-badge{cursor:pointer;user-select:none;transition:opacity .12s;}
+.tr-status-badge:hover{opacity:.75;}
+.tr-status-badge::after{content:' ↕';font-size:8px;opacity:.5;}
+
+/* ── SWITCH GUIDE ── */
+.sw-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.sw-col .sw-head{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--b1);}
+.sw-col.cowork .sw-head{color:var(--purple);}
+.sw-col.code .sw-head{color:var(--cyan);}
+.sw-li{font-size:11px;color:var(--t2);padding:4px 0 4px 14px;position:relative;line-height:1.4;}
+.sw-li::before{content:'▸';position:absolute;left:0;font-size:10px;}
+.sw-col.cowork .sw-li::before{color:var(--purple);}
+.sw-col.code .sw-li::before{color:var(--cyan);}
+
+/* ── CHEAT ITEMS ── */
+.ci{padding:9px 10px;border-radius:var(--r);background:var(--s1);border:1px solid var(--b1);margin-bottom:4px;}
+.ci .ct{font-size:11px;font-weight:600;color:var(--t1);margin-bottom:4px;}
+.ci .cb{font-size:11px;color:var(--t2);line-height:1.7;}
+.ci code{font-family:var(--mono);font-size:10px;background:var(--s3);padding:1px 5px;border-radius:3px;color:var(--cyan);}
+
+/* ── ROUTING TABLE ── */
+.rt-wrap{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);overflow:hidden;}
+.rt-row{display:grid;grid-template-columns:1fr 78px 60px;gap:6px;padding:6px 9px;border-bottom:1px solid var(--b1);font-size:11px;align-items:center;}
+.rt-row:last-child{border-bottom:none;}
+.rt-h{font-size:9px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--t3);}
+.rt-task{color:var(--t2);}
+.rt-tool{font-weight:700;}
+.rt-tool.code{color:var(--cyan);}
+.rt-tool.cowork{color:var(--purple);}
+.rt-model{font-size:10px;font-weight:700;}
+.rt-model.sonnet{color:var(--green);}
+.rt-model.opus{color:var(--amber);}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div id="hdr">
+  <span class="logo">Cycle Four</span>
+  <span class="sep">·</span>
+  <span style="color:var(--t2);font-size:12px;">Project Dashboard</span>
+  <span class="sep">·</span>
+  <span class="badge b-amber" id="phase-badge">Phase D — Active</span>
+  <div id="hdr-right">
+    <span id="last-upd">Updated 2026-06-21</span>
+    <span class="sep">·</span>
+    <a href="prototype.html" target="_blank">▶ Open Prototype</a>
+    <span class="sep">·</span>
+    <a href="BACKLOG.md" target="_blank">Backlog</a>
+    <span class="sep">·</span>
+    <a href="NORTHSTAR.md" target="_blank">Northstar</a>
+    <span class="sep">·</span>
+    <a href="NEVER_TOUCH.md" target="_blank">Never Touch</a>
+    <span class="sep">·</span>
+    <div class="docs-wrap">
+      <button id="btn-docs" onclick="toggleDocs(event)">📚 Docs ▾</button>
+      <div id="docs-dd">
+
+        <!-- ── CODEX ── -->
+        <div>
+          <div class="ds-head codex">📋 Codex — Design Decisions</div>
+          <div class="ds-links">
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/23_open-questions-resolved.md" target="_blank">core/23 — Key Design Numbers</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/16_first-session-flow.md" target="_blank">core/16 — First Session Flow</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/17_units-maps-buildings.md" target="_blank">core/17 — Units, Maps &amp; Buildings</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/12_wave-commanders.md" target="_blank">core/12 — Wave Commanders</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/" target="_blank">📂 Open core/ folder…</a>
+          </div>
+          <div class="ds-card">
+            <div class="ds-card-title">At a Glance — Numbers &amp; Rules</div>
+            <div class="ds-fact"><strong>Idle tick:</strong> 1s · <strong>Offline cap:</strong> 8h · <strong>Auto-save:</strong> 60s</div>
+            <div class="ds-fact"><strong>Session target:</strong> meaningful in 5 min</div>
+            <div class="ds-fact"><strong>Combat triangle:</strong> Kinetic→Organic · Energy→Plated · Corrosive→Synthetic</div>
+            <div class="ds-fact"><strong>Wave table:</strong> 30 waves · T1 1–12 · T2 13–19 · T3 20+</div>
+            <div class="ds-fact"><strong>Memory Tiers:</strong> 0–11 · <strong>Fragments:</strong> 7 total</div>
+            <div class="ds-sep"></div>
+            <div class="ds-fact"><strong>Decisions locked:</strong> Q = charge-gated · galaxy = graph of seeded nodes · Battle↔Galaxy unified (no separate screen)</div>
+          </div>
+        </div>
+
+        <!-- ── WIKI ── -->
+        <div>
+          <div class="ds-head wiki">📖 Wiki — Faction &amp; Lore Canon</div>
+          <div class="ds-links">
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/codex/" target="_blank">📂 Open codex/ folder…</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/11_galaxy-politics.md" target="_blank">core/11 — Galaxy Politics</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/20_diplomacy.md" target="_blank">core/20 — Diplomacy</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/21_faction-milestones.md" target="_blank">core/21 — Faction Milestones</a>
+            <a class="ds-link" href="file:///C:/ClaudeProjects/Skippy%20Gaming%20Design%20Engineer%20Agent/core/22_ui-hud-spec.md" target="_blank">core/22 — UI / HUD Spec</a>
+          </div>
+          <div class="ds-card">
+            <div class="ds-card-title">At a Glance — Factions</div>
+            <div class="ds-fact"><strong>Architects</strong> — efficiency is virtue · energy/schematics · strongest idle · best diplomats · brittle under attack</div>
+            <div class="ds-sep"></div>
+            <div class="ds-fact"><strong>Bloom</strong> — life spreads · biomass/lineages · evolves from damage · near-unkillable late · weakest early</div>
+            <div class="ds-sep"></div>
+            <div class="ds-fact"><strong>Mesh</strong> — everything is a system · signal/routes · steals resources &amp; infrastructure · weakest passive economy</div>
+            <div class="ds-sep"></div>
+            <div class="ds-fact"><strong>Ancients</strong> (NPC) — counters whoever leads · Custodian unit: unkillable, non-attacking, follows the player · pacified at Ruins</div>
+          </div>
+        </div>
+
+        <!-- ── INFRASTRUCTURE ── -->
+        <div>
+          <div class="ds-head infra">🏗 Infrastructure — Technical Docs</div>
+          <div class="ds-links">
+            <a class="ds-link" href="planning/vision-roadmap.md" target="_blank">vision-roadmap.md — Phases A–D</a>
+            <a class="ds-link" href="planning/architecture-north-star.md" target="_blank">architecture-north-star.md — Scene lifecycle</a>
+            <a class="ds-link" href="planning/improvement-plan.md" target="_blank">improvement-plan.md — Pass tracker</a>
+            <a class="ds-link" href="planning/persistence-design.md" target="_blank">persistence-design.md — Steps 1–5</a>
+            <a class="ds-link" href="planning/detection-rework-plan.md" target="_blank">detection-rework-plan.md</a>
+            <a class="ds-link" href="planning/export-handoff.md" target="_blank">export-handoff.md</a>
+          </div>
+          <div class="ds-card">
+            <div class="ds-card-title">At a Glance — Current State</div>
+            <div class="ds-fact"><strong>Scene arch:</strong> Root + SceneManager · Stages 1–3 done · one active screen at a time</div>
+            <div class="ds-fact"><strong>Screens:</strong> Title ✓ · Academy (Battle director) ✓ · Battle↔Galaxy ✓ · Pilgrimage ⬜ · Arrival ⬜</div>
+            <div class="ds-sep"></div>
+            <div class="ds-fact"><strong>Phases A/B/C:</strong> DONE · <strong>Phase D:</strong> D1 done (galaxy graph + continuous zoom)</div>
+            <div class="ds-fact"><strong>Persistence Steps 1–5:</strong> compile-clean · runtime playtest needed (Continue + A→B→A deploy)</div>
+            <div class="ds-sep"></div>
+            <div class="ds-fact"><strong>Autoload rule:</strong> cross-system comms via EventBus signals only — no direct method calls between autoloads</div>
+            <div class="ds-fact"><strong>Input rule:</strong> <code style="font-family:monospace;font-size:10px;background:var(--s3);padding:1px 4px;border-radius:2px;color:var(--cyan);">_unhandled_input</code> not <code style="font-family:monospace;font-size:10px;background:var(--s3);padding:1px 4px;border-radius:2px;color:var(--cyan);">_input</code> in Battle.gd</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <span class="sep">·</span>
+    <button id="btn-refresh" onclick="doRefresh()">↻ Refresh</button>
+  </div>
+
+</div>
+
+<div id="shell">
+
+<!-- ══════════ LEFT ══════════ -->
+<div class="col" id="col-l">
+
+  <div class="section">
+    <div class="sh">Phase Progress</div>
+    <!-- PHASES_START -->
+    <div class="pr"><div class="pd done"></div><div class="pl">A</div><div class="pn"><div>Enemy factions in waves</div></div><span class="badge b-green">Done</span></div>
+    <div class="pr"><div class="pd done"></div><div class="pl">B</div><div class="pn"><div>Faction-flavored pathing</div></div><span class="badge b-green">Done</span></div>
+    <div class="pr"><div class="pd done"></div><div class="pl">C</div><div class="pn"><div>Garrisons + army</div><div class="psub">C1–C4 complete</div></div><span class="badge b-green">Done</span></div>
+    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence</div><div class="psub">D1 done · persistence pending</div></div><span class="badge b-amber">Active</span></div>
+    <!-- PHASES_END -->
+  </div>
+
+  <div class="mbox">
+    <!-- MILESTONE_START -->
+    <div class="ml">⚡ Next Required Milestone</div>
+    <div class="mt">Per-territory state persistence — buildings, claims, and towers must survive deploy + Continue</div>
+    <div class="mf">planning/persistence-design.md</div>
+    <!-- MILESTONE_END -->
+  </div>
+
+  <div class="section">
+    <div class="sh">P1 — Blocks Fun</div>
+    <!-- BACKLOG_P1_START -->
+    <div class="bi" onclick="pick(this,'BUG','Towers next to a spawn instakill enemies at the spawn point. Enemies never reach the field. Fix: add a DMZ/spawn buffer — forbid tower placement (and targeting) within N cells of each spawn so enemies enter the field before being engaged.','src/core/waves/WaveSpawner.gd\nsrc/core/map/MapGrid.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Towers instakill at spawn — add DMZ buffer</span>
+    </div>
+    <div class="bi" onclick="pick(this,'BUG','Enemies only enter from ONE spawn despite Phase-B multi-spawn pathing. Investigate _activate_all_spawns() post-Academy and WaveSpawner per-wave spawn distribution.','scenes/main/Battle.gd\nsrc/core/waves/WaveSpawner.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Enemies enter only one spawn — investigate multi-spawn activation</span>
+    </div>
+    <div class="bi" onclick="pick(this,'BUG','Garrison leveling has no felt effect. Verify level-up raises squad cap + production speed; surface garrison level and current effects in InspectionPanel.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Garrison leveling has no felt effect</span>
+    </div>
+    <div class="bi" onclick="pick(this,'BUG','Convoy not operational — depot-to-FOB ferry never ran during playtest. Investigate ConvoyManager spawn conditions (connectivity BFS on path_discovered, depot detection).','src/autoloads/ConvoyManager.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Convoy not operational — investigate ConvoyManager</span>
+    </div>
+    <div class="bi" onclick="pick(this,'VERIFY','Per-territory persistence runtime verification. Hand-playtest: New Game → build/claim/towers → quit → Continue. Verify map + claimed cells + buildings + towers all return. Then deploy A→B→A and verify each territory holds state.','N/A — playtest task, not a code change. Use review session type.')">
+      <span class="btag ver">VERIFY</span><span class="bpri">P1</span><span class="btxt">Per-territory persistence — hand-playtest required</span>
+    </div>
+    <!-- BACKLOG_P1_END -->
+  </div>
+
+  <div class="section">
+    <div class="sh">P2 — Hurts Feel</div>
+    <!-- BACKLOG_P2_START -->
+    <div class="bi" onclick="pick(this,'BUG','BUG [P2] — ObjectiveManager completion not persisted on Continue. On restore, all objectives reset to 0/N. Territory objectives re-complete via garrison raids, masking the bug. But one-time events (path_discovered, convoy_spawned) stay stuck at 0 permanently.\n\nFix: persist completed-objective IDs in SaveManager and restore them into ObjectiveManager on load.','src/autoloads/ObjectiveManager.gd\nsrc/autoloads/SaveManager.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P2</span><span class="btxt">ObjectiveManager completion not persisted on Continue</span>
+    </div>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','ENHANCEMENT [P2] — Galaxy nav outward-only; no return to held territory. _handle_galaxy_click rejects owned nodes via is_frontier check. The restore-on-return code in _deploy_to_node (lines 197–201) exists but is unreachable.\n\nFix: allow clicking owned adjacent nodes in galaxy view to trigger _deploy_to_node.','scenes/main/Battle.gd\nsrc/autoloads/GalaxyManager.gd\nsrc/ui/GalaxyView.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Galaxy nav outward-only — no return to held territory</span>
+    </div>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','Garrison unit-type selection and composition. Player chooses which unit types a garrison spawns. XP improves those types. Higher levels unlock mixed-squad combinations. Needs: loadout UI in InspectionPanel, per-type XP tracking, multi-type squad spawn logic.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd\nsrc/entities/FriendlyUnit.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Garrison unit-type selection + squad composition</span>
+    </div>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','HUD should be visible during Academy scenario phase (75/90/90s). Player should be able to place towers and observe the behavior tracker. Currently HUD is hidden during scenarios.','scenes/main/Battle.gd\nsrc/ui/HUD.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">HUD visible during Academy scenario phase</span>
+    </div>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','Per-territory win conditions. Each galaxy node needs a specific win objective that flips ownership when met. Currently only global map_completed is used. Design and implement node-specific win condition system tied to GalaxyManager.','src/autoloads/GalaxyManager.gd\nsrc/autoloads/ObjectiveManager.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Per-territory win conditions for galaxy nodes</span>
+    </div>
+    <!-- BACKLOG_P2_END -->
+  </div>
+
+</div>
+
+<!-- ══════════ CENTER ══════════ -->
+<div class="col" id="col-c">
+
+  <div class="card">
+    <div class="card-title" style="margin-bottom:10px;">
+      <span class="ic">📍</span> Current Phase Tasks
+      <span class="badge b-amber" style="margin-left:auto;">Phase D — Galaxy + Persistence</span>
+    </div>
+    <!-- PHASE_TASKS_START -->
+    <div class="tr done" data-tid="d1-galaxy">
+      <div class="tr-dot done"></div>
+      <div class="tr-body">
+        <div class="tr-name">D1 — Galaxy graph + continuous zoom + seeded deploy</div>
+        <div class="tr-note">Done 2026-06-17 · GalaxyManager · GalaxyView · CameraController · frontier click-to-deploy</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-green tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'d1-galaxy')">Done</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('REVIEW','Regression check — verify D1 galaxy features are intact after recent changes.\n\n1. mcp__godot__run_project → get_debug_output → zero new errors\n2. New Game → Academy → zoom out → galaxy graph draws (home + frontier + edges)\n3. Click a frontier node → seeded map loads → camera zooms back in\n4. Confirm map_completed → GalaxyManager.capture_system still wired\n5. mcp__godot__stop_project\n\nIf broken, compare against git tag session-0617.','src/ui/GalaxyView.gd\nsrc/autoloads/GalaxyManager.gd\nscenes/main/Battle.gd')">Fill ↗</button>
+      </div>
+    </div>
+    <div class="tr done" data-tid="persist-steps">
+      <div class="tr-dot done"></div>
+      <div class="tr-body">
+        <div class="tr-name">Per-territory persistence — Steps 1–5 (compile-clean)</div>
+        <div class="tr-note">Done 2026-06-20 · Continue restore verified · Deploy A→B capture verified · Deploy B→A blocked by galaxy-nav (see below)</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-green tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'persist-steps')">Done</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('REVIEW','Regression check — per-territory persistence (Steps 1–5).\n\nVerified 2026-06-21: garrison/tower/FOB HP/energy rate/map seed/offline catch-up all correct on Continue. Deploy A→B capture confirmed. Deploy B→A blocked by galaxy-nav UI (owned nodes rejected by is_frontier check — see blocker row).\n\nThis is a READ-ONLY session. Confirm no regressions were introduced since 2026-06-21:\n1. mcp__godot__run_project → zero new errors\n2. New Game → build garrison + tower + claim → quit → Continue\n3. Verify: same map, claimed cells, building, tower, FOB rank all present\n4. Deploy to frontier node → place something → verify previous territory\'s state is captured\n\nDo not attempt the B→A deploy — it is blocked by the galaxy-nav enhancement (separate row).','src/autoloads/SaveManager.gd\nscenes/main/Battle.gd')">Fill ↗</button>
+      </div>
+    </div>
+    <div class="tr done" data-tid="academy-scenarios">
+      <div class="tr-dot done"></div>
+      <div class="tr-body">
+        <div class="tr-name">Academy scenario player control restored</div>
+        <div class="tr-note">Done 2026-06-21 · Battle accepts world input during scenarios · Commander pre-selected · behavior tracker feeds</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-green tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'academy-scenarios')">Done</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('REVIEW','Regression check — Academy scenario player control.\n\n1. mcp__godot__run_project → zero new errors\n2. New Game → Academy → first scenario phase (75s timer)\n3. Commander pre-selected (ring visible) · click ground → Commander moves\n4. CadetAvatar NOT visible or interactive during scenarios\n5. Behavior tracker increments on move/select/attack\n6. Complete Academy → normal Battle controls work\n\nDO NOT touch CadetAvatar._unhandled_input (see NEVER_TOUCH.md).','scenes/main/Battle.gd\nsrc/academy/CadetAvatar.gd')">Fill ↗</button>
+      </div>
+    </div>
+
+    <div class="tr blocked" data-tid="runtime-verify">
+      <div class="tr-dot blocked"></div>
+      <div class="tr-body">
+        <div class="tr-name">Runtime verification — persistence playtest</div>
+        <div class="tr-note">⛔ Blocked by 2 items below · Continue restore ✓ · Deploy A→B ✓ · Deploy B→A unreachable (galaxy nav only accepts frontier nodes)</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-red tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'runtime-verify')">Blocked</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('VERIFY','Per-territory persistence runtime verification — PARTIALLY COMPLETE.\n\nVerified 2026-06-21:\n✓ Continue restore: garrison/tower/FOB HP/energy rate/map seed/offline catch-up all correct\n✓ Deploy A→B capture: _capture_territory_development runs before node switch; seeded map loads clean\n\nBlocked:\n✗ Deploy B→A: _handle_galaxy_click only accepts is_frontier nodes. Clicking the owned home node emits "That territory isn\'t on your frontier." The restore-on-return path in _deploy_to_node (lines 197–201) exists but is unreachable without the galaxy-nav enhancement.\n✗ ObjectiveManager completion not persisted: resets on Continue; one-time events (path_discovered, convoy_spawned) stay at 0 on restore.\n\nDo not attempt to fix these here — they are separate tracked tasks.','N/A — blocked. Resolve blocker tasks first.')">Fill ↗</button>
+      </div>
+    </div>
+
+    <div class="tr queued" data-tid="obj-manager-persist">
+      <div class="tr-dot queued"></div>
+      <div class="tr-body">
+        <div class="tr-name">⛔ Blocker — ObjectiveManager completion not persisted on Continue</div>
+        <div class="tr-note">On restore, objectives reset to 0/N; territory objectives re-complete via garrison raids, but path_discovered / convoy_spawned stay stuck at 0 permanently · Fix: persist completed-objective IDs in SaveManager</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-dim tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'obj-manager-persist')">Queued</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('BUG','BUG [P2] — ObjectiveManager completion not persisted on Continue.\n\nSymptom: on Continue, all objectives reset to 0/N progress. Territory objectives (claim_pct) re-complete quickly via garrison raids, masking the bug. But one-time events — path_discovered, convoy_spawned — stay stuck at 0 permanently after a Continue because the event that triggered them never re-fires.\n\nRoot cause: SaveManager._collect_all_state does not capture ObjectiveManager state. On restore, ObjectiveManager starts blank.\n\nFix direction:\n1. In ObjectiveManager: add get_completed_ids() → [StringName] (list of sealed/permanently-sealed objective IDs)\n2. In SaveManager._collect_all_state: include completed_objectives: ObjectiveManager.get_completed_ids()\n3. In SaveManager._apply_all_state: call ObjectiveManager.restore_completed(ids) which marks those objectives as sealed without re-emitting their events\n4. Verify: New Game → trigger path_discovered → quit → Continue → confirm objective still shows completed\n\nMCP verify after each file. Zero new errors.','src/autoloads/ObjectiveManager.gd\nsrc/autoloads/SaveManager.gd')">Fill ↗</button>
+      </div>
+    </div>
+    <div class="tr queued" data-tid="galaxy-nav-return">
+      <div class="tr-dot queued"></div>
+      <div class="tr-body">
+        <div class="tr-name">⛔ Blocker — Galaxy nav outward-only, no return to held territory</div>
+        <div class="tr-note">_handle_galaxy_click only accepts is_frontier nodes · owned nodes emit "That territory isn't on your frontier" · _deploy_to_node restore-on-return (lines 197–201) exists but unreachable</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-dim tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'galaxy-nav-return')">Queued</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('ENHANCEMENT','ENHANCEMENT [P2] — Galaxy nav outward-only; no UI to return to a held territory.\n\nSymptom: clicking an owned (non-frontier) node in galaxy view emits "That territory isn\'t on your frontier." The player can never voluntarily return to a territory they already captured.\n\nRoot: _handle_galaxy_click (Battle.gd) calls GalaxyManager.is_frontier(node_id) and rejects anything that returns false — including owned nodes the player has already developed.\n\nThe restore-on-return code already exists in _deploy_to_node (lines 197–201): it calls _restore_territory_development if the destination has saved development. It just can never be reached.\n\nFix:\n1. In Battle._handle_galaxy_click: change the guard from "is_frontier only" to "is_frontier OR is owned by player" — the deploy logic already handles both cases\n2. In GalaxyManager: add is_owned_by_player(node_id) → bool helper (check node.owner == active_faction)\n3. Optionally: show a different cursor/highlight on owned nodes vs frontier nodes in GalaxyView so the player knows they can click either\n4. MCP verify. Then hand-test: deploy to frontier → build something → return to home → confirm home development restored.\n\nThis also unblocks the Step 5 A→B→A runtime verification.','scenes/main/Battle.gd\nsrc/autoloads/GalaxyManager.gd\nsrc/ui/GalaxyView.gd')">Fill ↗</button>
+      </div>
+    </div>
+
+    <div class="tr active" data-tid="territory-win-cond">
+      <div class="tr-dot active"></div>
+      <div class="tr-body">
+        <div class="tr-name">Per-territory win conditions for galaxy nodes</div>
+        <div class="tr-note">Active 2026-06-21 · Each node needs a specific objective that flips ownership · currently only global map_completed fires · design per-node win condition system · also gates the galaxy-nav return unlock</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-amber tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'territory-win-cond')">Active</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('ENHANCEMENT','ENHANCEMENT [P2] — Per-territory win conditions for galaxy nodes.\n\nCurrently: every node uses the global map_completed signal (claim objective met) to flip ownership. There is no per-node distinction — a rim node and a core-adjacent node have identical win requirements.\n\nDesign + implement:\n1. Add win_condition field to each galaxy node in GalaxyManager: {type, value} e.g. {type:\"claim_pct\", value:0.6} or {type:\"wave_count\", value:5} or {type:\"convoy_count\", value:3}\n2. GalaxyManager.generate_galaxy assigns conditions based on ring distance (outer rim = easy, core-adjacent = hard)\n3. ObjectiveManager evaluates the active node\'s condition on each relevant event (territory_claimed, wave_ended, convoy_spawned)\n4. When met: emit EventBus.territory_captured(node_id) → GalaxyManager.capture_system(node_id)\n5. HUD notification: when deploying to a node, show its win condition ("Capture: claim 60% of territory")\n\nRead planning/vision-roadmap.md and CLAUDE.md Phase D notes before designing. Read src/autoloads/GalaxyManager.gd to understand the node data model.\n\nThis system also gives the galaxy-nav return feature a meaningful unlock gate (return available once a node is captured).','src/autoloads/GalaxyManager.gd\nsrc/autoloads/ObjectiveManager.gd\nsrc/autoloads/EventBus.gd\nsrc/ui/HUD.gd')">Fill ↗</button>
+      </div>
+    </div>
+    <div class="tr queued" data-tid="hud-academy">
+      <div class="tr-dot queued"></div>
+      <div class="tr-body">
+        <div class="tr-name">HUD visible during Academy scenario phases</div>
+        <div class="tr-note">Show reduced HUD (build bar + resources) during the 75/90/90s scenarios · lets player experiment with placement while tracker watches</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-dim tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'hud-academy')">Queued</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('ENHANCEMENT','Show HUD during Academy scenario phase so player can place towers and observe the behavior tracker.\n\nCurrently: HUD is hidden during the 75s/90s/90s scenario phases. The behavior tracker watches play but the player has nothing to interact with.\n\nFix: show a reduced HUD (build bar + resource display) during scenario phases. Gate tower placement so it does not interfere with scenario objectives. The behavior tracker should register tower placement as a signal of the player\'s playstyle.\n\nDO NOT touch CadetAvatar._unhandled_input — see NEVER_TOUCH.md.','scenes/main/Battle.gd\nsrc/ui/HUD.gd')">Fill ↗</button>
+      </div>
+    </div>
+    <div class="tr queued" data-tid="galaxy-labels">
+      <div class="tr-dot queued"></div>
+      <div class="tr-body">
+        <div class="tr-name">Galaxy view HUD labels (node names, owner colors, distance-to-core)</div>
+        <div class="tr-note">GalaxyView currently draws unlabeled dots · add name, owner faction tint, ring/distance indicator per node</div>
+      </div>
+      <div class="tr-right">
+        <span class="badge b-dim tr-status-badge" title="Click to change status" onclick="cycleStatus(event,'galaxy-labels')">Queued</span>
+        <button class="tr-btn" onclick="event.stopPropagation();fillFromTask('ENHANCEMENT','Add HUD labels to the galaxy view: territory node names, owner faction color indicators, distance-to-core numbers, and frontier/capturable highlights.\n\nCurrently: GalaxyView draws nodes (colored dots) and edges but has no text labels.\n\nScope: add text rendering in GalaxyView._draw() or via Label nodes in the galaxy layer. Node name can be generated from ring + index (e.g. Rim-3, Core-Adjacent-1). Owner faction color already exists (node.owner → faction color). Distance = node.ring.','src/ui/GalaxyView.gd')">Fill ↗</button>
+      </div>
+    </div>
+    <!-- PHASE_TASKS_END -->
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ic">⚡</span> Session Prompt Generator</div>
+
+    <div class="field">
+      <div class="fl">1 · Task — click a backlog item on the left, or type here</div>
+      <textarea id="pg-task" rows="3" placeholder="Describe the task, or click any item in the left panel to auto-fill…"></textarea>
+    </div>
+
+    <div class="field">
+      <div class="fl">2 · Files to touch (one per line — be specific)</div>
+      <textarea id="pg-files" rows="2" placeholder="e.g. src/autoloads/ConvoyManager.gd"></textarea>
+    </div>
+
+    <div class="field">
+      <div class="fl">3 · Session type</div>
+      <div class="stg">
+        <div class="st" onclick="selType(this,'bugfix')">🐛 Bug Fix</div>
+        <div class="st" onclick="selType(this,'enhancement')">✨ Enhancement</div>
+        <div class="st" onclick="selType(this,'design')">🏗 Design / Architecture</div>
+        <div class="st" onclick="selType(this,'review')">🔍 Review / Verify</div>
+      </div>
+    </div>
+
+    <div class="trec">
+      <div class="tbox"><div class="tl">Recommended Tool</div><div class="tv" id="rec-tool" style="color:var(--t3);">—</div></div>
+      <div class="tbox"><div class="tl">Recommended Model</div><div class="tv" id="rec-model" style="color:var(--t3);">—</div></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn pri" onclick="gen()">Generate Prompt ↗</button>
+      <button class="btn grn" onclick="cp()" id="cp-btn" style="display:none">Copy to Clipboard</button>
+      <span id="cp-ok" style="font-size:11px;color:var(--green);display:none">✓ Copied!</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ic">📋</span> Generated Prompt — paste this into your session</div>
+    <div class="pout empty" id="pout">Select a task and session type above, then click Generate Prompt.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="ic">🔀</span> When to Switch Tools</div>
+    <div class="sw-grid">
+      <div class="sw-col cowork">
+        <div class="sw-head">Use Cowork when…</div>
+        <div class="sw-li">Creating or updating project docs (NORTHSTAR, BACKLOG, designs)</div>
+        <div class="sw-li">Planning a session or selecting next task from the backlog</div>
+        <div class="sw-li">Generating a scoped prompt (this generator) for a Code session</div>
+        <div class="sw-li">Adding playtest observations or triage after a session</div>
+        <div class="sw-li">Rebuilding this dashboard after a milestone</div>
+        <div class="sw-li">You need to talk through a design decision before committing</div>
+      </div>
+      <div class="sw-col code">
+        <div class="sw-head">Use Claude Code when…</div>
+        <div class="sw-li">You have a scoped prompt from this generator in your clipboard</div>
+        <div class="sw-li">Touching 1–2 known .gd files with a clear, tested outcome</div>
+        <div class="sw-li">Running MCP verification (compile + get_debug_output)</div>
+        <div class="sw-li">A bug has a confirmed root cause and a known file to fix</div>
+        <div class="sw-li">The session will not require mid-session design decisions</div>
+        <div class="sw-li">Implementing something already specced in planning/</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════ RIGHT ══════════ -->
+<div class="col" id="col-r">
+
+  <div class="section">
+    <div class="sh">Smoke Test — run after every file change</div>
+    <div class="ci">
+      <div class="cb">
+        1. <code>mcp__godot__run_project</code><br>
+        2. <code>mcp__godot__get_debug_output</code><br>
+        3. Zero NEW errors → proceed to next file<br>
+        4. <code>mcp__godot__stop_project</code><br>
+        5. New errors → revert before touching anything else<br><br>
+        Regression smoke (after all changes):<br>
+        Title → New Game → Academy → place tower<br>
+        → Begin Waves → cast ability → no crash
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sh">Git Workflow</div>
+    <div class="ci">
+      <div class="cb">
+        Session start: <code>git tag session-MMDD</code><br>
+        If regression: <code>git diff session-MMDD</code><br>
+        Revert file: <code>git checkout TAG -- file.gd</code><br><br>
+        Session end (clean):<br>
+        <code>git add -A</code><br>
+        <code>git commit -m "fix: description"</code><br>
+        <code>git push origin main</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sh">Key File Routing</div>
+    <div class="ci">
+      <div class="cb">
+        Signals → <code>src/autoloads/EventBus.gd</code><br>
+        State → <code>src/autoloads/GameState.gd</code><br>
+        Economy → <code>src/autoloads/EconomyManager.gd</code><br>
+        Waves → <code>src/core/waves/WaveSpawner.gd</code><br>
+        Map → <code>src/core/map/MapGrid.gd</code><br>
+        Combat → <code>src/combat/Combat.gd</code><br>
+        Galaxy → <code>src/autoloads/GalaxyManager.gd</code><br>
+        Save → <code>src/autoloads/SaveManager.gd</code><br>
+        Battle scene → <code>scenes/main/Battle.gd</code><br>
+        Academy → <code>src/academy/</code> (director on Battle)<br>
+        HUD → <code>src/ui/HUD.gd</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sh">Tool Routing</div>
+    <div class="rt-wrap">
+      <div class="rt-row"><div class="rt-task rt-h">Task</div><div class="rt-tool rt-h">Tool</div><div class="rt-model rt-h">Model</div></div>
+      <div class="rt-row"><div class="rt-task">Planning / design doc</div><div class="rt-tool cowork">Cowork</div><div class="rt-model sonnet">Sonnet</div></div>
+      <div class="rt-row"><div class="rt-task">1–2 file bug fix</div><div class="rt-tool code">Code</div><div class="rt-model sonnet">Sonnet</div></div>
+      <div class="rt-row"><div class="rt-task">Multi-file feature</div><div class="rt-tool code">Code</div><div class="rt-model sonnet">Sonnet</div></div>
+      <div class="rt-row"><div class="rt-task">Architecture / unknown bug</div><div class="rt-tool code">Code</div><div class="rt-model opus">Opus</div></div>
+      <div class="rt-row"><div class="rt-task">Playtest review / triage</div><div class="rt-tool cowork">Cowork</div><div class="rt-model sonnet">Sonnet</div></div>
+      <div class="rt-row"><div class="rt-task">Dashboard refresh</div><div class="rt-tool cowork">Cowork</div><div class="rt-model sonnet">Sonnet</div></div>
+      <div class="rt-row"><div class="rt-task">Regression investigation</div><div class="rt-tool code">Code</div><div class="rt-model opus">Opus</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sh">GDScript Rules (quick ref)</div>
+    <div class="ci">
+      <div class="cb">
+        ✓ Static types: <code>var x: float = 0.0</code><br>
+        ✓ Functions under 40 lines<br>
+        ✓ No magic numbers — use <code>const</code><br>
+        ✓ Signals in <code>EventBus.gd</code> only<br>
+        ✓ World Controls → <code>MOUSE_FILTER_IGNORE</code><br>
+        ✓ Use <code>_unhandled_input</code> not <code>_input</code><br>
+        ✗ No direct cross-system method calls<br>
+        ✗ Never <code>DEV_CLEAR_SAVE = true</code> in release<br>
+        ✗ Never remove <code>CadetAvatar._unhandled_input</code>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ══ DATA (scheduled task updates this block) ══
+// DATA_START
+const D = {
+  lastUpdated: "2026-06-21",
+  phaseBadge: "Phase D — Active"
+};
+// DATA_END
+
+document.getElementById('last-upd').textContent = 'Updated ' + D.lastUpdated;
+document.getElementById('phase-badge').textContent = D.phaseBadge;
+initTaskStatuses();
+
+function showToast(msg, duration) {
+  const t = document.getElementById('toast');
+  t.innerHTML = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, duration || 3500);
+}
+
+async function doRefresh() {
+  const btn = document.getElementById('btn-refresh');
+  btn.classList.add('spin');
+  btn.textContent = '↻ Refreshing…';
+
+  // If running inside Cowork as an artifact, fire the scheduled task directly
+  if (window.cowork?.runScheduledTask) {
+    try {
+      await window.cowork.runScheduledTask('cycle-four-dashboard-refresh');
+      showToast('✓ Dashboard refresh triggered.<br><span style="color:var(--t3);font-size:11px;">Reload this file in a moment to see updates.</span>', 4000);
+    } catch(e) {
+      showToast('⚠ Could not trigger refresh.<br><span style="color:var(--t3);font-size:11px;">' + e.message + '</span>', 4000);
+    }
+  } else {
+    // Local file fallback — copy a Cowork trigger message to clipboard
+    const msg = 'Refresh the Cycle Four project dashboard now. Run the scheduled task cycle-four-dashboard-refresh: read BACKLOG.md and CLAUDE.md from D:\\AI\\Cycle Four\\ and update DASHBOARD.html with current state.';
+    try {
+      await navigator.clipboard.writeText(msg);
+      showToast('📋 Copied to clipboard!<br><span style="color:var(--t3);font-size:11px;">Paste this in Cowork to trigger a refresh, then reload this file.</span>', 5000);
+    } catch(e) {
+      showToast('Open Cowork and say:<br><em style="color:var(--t2);font-size:11px;">Refresh the Cycle Four dashboard now.</em>', 5000);
+    }
+  }
+
+  setTimeout(() => {
+    btn.classList.remove('spin');
+    btn.textContent = '↻ Refresh';
+  }, 2000);
+}
+
+function toggleDocs(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('docs-dd');
+  const btn = document.getElementById('btn-docs');
+  const isOpen = dd.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+  btn.textContent = isOpen ? '📚 Docs ▴' : '📚 Docs ▾';
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.querySelector('.docs-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('docs-dd').classList.remove('open');
+    const btn = document.getElementById('btn-docs');
+    btn.classList.remove('open');
+    btn.textContent = '📚 Docs ▾';
+  }
+});
+
+let sType = null;
+
+function pick(el, tag, task, files) {
+  document.querySelectorAll('.bi').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById('pg-task').value = task;
+  document.getElementById('pg-files').value = files;
+  updateRec();
+}
+
+// ── TASK STATUS CYCLING ──
+const S_CYCLE = ['queued','active','blocked','done'];
+const S_CFG = {
+  done:    {dot:'done',    badge:'b-green', label:'Done',    cls:'done'},
+  active:  {dot:'active',  badge:'b-amber', label:'Active',  cls:'active'},
+  blocked: {dot:'blocked', badge:'b-red',   label:'Blocked', cls:'blocked'},
+  queued:  {dot:'queued',  badge:'b-dim',   label:'Queued',  cls:'queued'},
+};
+function applyTaskStatus(row, status) {
+  const cfg = S_CFG[status]; if (!cfg) return;
+  row.classList.remove('done','active','blocked','queued');
+  row.classList.add(cfg.cls);
+  const dot = row.querySelector('.tr-dot');
+  if (dot) dot.className = 'tr-dot ' + cfg.dot;
+  const badge = row.querySelector('.tr-status-badge');
+  if (badge) { badge.className = 'badge ' + cfg.badge + ' tr-status-badge'; badge.textContent = cfg.label; }
+}
+function cycleStatus(e, tid) {
+  e.stopPropagation();
+  const row = document.querySelector('.tr[data-tid="' + tid + '"]');
+  if (!row) return;
+  const cur = S_CYCLE.find(s => row.classList.contains(s)) || 'queued';
+  const next = S_CYCLE[(S_CYCLE.indexOf(cur) + 1) % S_CYCLE.length];
+  applyTaskStatus(row, next);
+  try { localStorage.setItem('ts_' + tid, next); } catch(e2) {}
+}
+function initTaskStatuses() {
+  document.querySelectorAll('.tr[data-tid]').forEach(row => {
+    const saved = localStorage.getItem('ts_' + row.dataset.tid);
+    if (saved) applyTaskStatus(row, saved);
+  });
+}
+
+function fillFromTask(tag, task, files) {
+  document.getElementById('pg-task').value = task;
+  document.getElementById('pg-files').value = files;
+  const typeMap = {VERIFY:'review', REVIEW:'review', ENHANCEMENT:'enhancement', BUG:'bugfix', DESIGN:'design'};
+  const mapped = typeMap[tag] || 'review';
+  document.querySelectorAll('.st').forEach(s => s.classList.remove('on'));
+  const stEls = document.querySelectorAll('.st');
+  const labels = {bugfix:0, enhancement:1, design:2, review:3};
+  if (stEls[labels[mapped]]) stEls[labels[mapped]].classList.add('on');
+  sType = mapped;
+  updateRec();
+  document.querySelector('#col-c .card:nth-child(2)').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function pickTask(el, tag, task, files) {
+  document.querySelectorAll('.bi').forEach(b => b.classList.remove('sel'));
+  document.querySelectorAll('.tr.queued').forEach(t => t.classList.remove('sel'));
+  el.classList.add('sel');
+  fillFromTask(tag, task, files);
+}
+
+function selType(el, t) {
+  document.querySelectorAll('.st').forEach(s => s.classList.remove('on'));
+  el.classList.add('on');
+  sType = t;
+  updateRec();
+}
+
+const RECS = {
+  bugfix:      {tool:'Claude Code', tc:'code',   model:'Sonnet', mc:'sonnet'},
+  enhancement: {tool:'Claude Code', tc:'code',   model:'Sonnet', mc:'sonnet'},
+  design:      {tool:'Cowork',      tc:'cowork', model:'Opus',   mc:'opus'},
+  review:      {tool:'Claude Code', tc:'code',   model:'Sonnet', mc:'sonnet'},
+};
+
+function updateRec() {
+  if (!sType) return;
+  const r = RECS[sType];
+  const te = document.getElementById('rec-tool');
+  const me = document.getElementById('rec-model');
+  te.textContent = r.tool; te.className = 'tv ' + r.tc;
+  me.textContent = r.model; me.className = 'tv ' + r.mc;
+}
+
+const today = () => new Date().toLocaleDateString('en-CA').replace(/-/g,'').slice(4);
+
+const T = {
+bugfix: (task, files) =>
+`Read NORTHSTAR.md, then NEVER_TOUCH.md, then CLAUDE.md.
+
+TASK (Bug Fix)
+${task}
+
+SCOPE — touch ONLY these files:
+${files || '[identify from symptom, list before starting]'}
+
+PROTOCOL
+1. Read every affected file before making any change
+2. Diagnose by reading, not by changing — confirm root cause first
+3. Make the minimal change that fixes the symptom
+4. After EACH file change:
+   → mcp__godot__run_project
+   → mcp__godot__get_debug_output
+   → Stop if any NEW errors appear; revert and diagnose before proceeding
+5. Do NOT touch any file in NEVER_TOUCH.md
+6. Do NOT touch files not listed in SCOPE
+7. If you discover a related issue, add it to BACKLOG.md — do not fix it now
+
+VERIFICATION
+- Zero new errors in debug output
+- The specific symptom no longer occurs
+- Regression smoke: Title → New Game → Academy completes → place tower → Begin Waves → cast ability → no crash
+
+POST-SESSION
+git tag session-${today()}
+git add -A && git commit -m "fix: [one-line description]"`,
+
+enhancement: (task, files) =>
+`Read NORTHSTAR.md, then NEVER_TOUCH.md, then CLAUDE.md.
+
+TASK (Enhancement)
+${task}
+
+NORTHSTAR CHECK — before writing any code, confirm:
+- This does not break the three-layer coexistence (idle / TD / RTS)
+- This does not break the 5-minute session viability
+- This does not change the combat triangle (Kinetic/Energy/Corrosive vs Organic/Plated/Synthetic)
+- This does not add cross-system direct method calls (use EventBus signals)
+
+SCOPE — touch ONLY these files:
+${files || '[list exact files before starting]'}
+
+PROTOCOL
+1. Read every affected file before any change
+2. Implement ONE file at a time
+3. After EACH file change:
+   → mcp__godot__run_project
+   → mcp__godot__get_debug_output
+   → Zero new errors required before next file
+4. Scope-creep rule: if you discover a related issue, add it to BACKLOG.md instead of fixing it now
+
+VERIFICATION
+- Zero new errors
+- New behavior works as described above
+- Regression smoke: Title → New Game → Academy → waves → ability → no crash
+
+POST-SESSION
+git tag session-${today()}
+git add -A && git commit -m "feat: [one-line description]"`,
+
+design: (task, files) =>
+`You are designing a system for Cycle Four (Godot 4.6.1 / GDScript).
+
+Read these before designing:
+- D:\\AI\\Cycle Four\\NORTHSTAR.md
+- D:\\AI\\Cycle Four\\NEVER_TOUCH.md
+- D:\\AI\\Cycle Four\\planning\\vision-roadmap.md
+- D:\\AI\\Cycle Four\\CLAUDE.md (current architecture state)
+
+DESIGN QUESTION
+${task}
+
+CONSTRAINTS
+- Must fit the autoload architecture (EventBus signals, no direct cross-system calls)
+- Must not violate any northstar truth (read NORTHSTAR.md first)
+- Must be verifiable via Godot MCP in isolation (one step at a time)
+- Prefer additive changes over rewrites
+- New screens/systems arrive as their own SceneManager screen (see architecture-north-star.md)
+
+OUTPUT FORMAT
+1. Decision summary (what changes, what stays the same, what is explicitly excluded)
+2. Files to touch (with exact path and rationale for each)
+3. Files NOT to touch (and why they're in scope but excluded)
+4. Implementation order (dependency-safe, one file at a time)
+5. Regression risks + guards
+6. Verification steps for each file change
+
+Do NOT write implementation code in this session.
+Save output to: D:\\AI\\Cycle Four\\planning\\[topic-name]-design.md`,
+
+review: (task, files) =>
+`Read NORTHSTAR.md, then NEVER_TOUCH.md, then CLAUDE.md.
+
+REVIEW TASK
+${task}
+
+This is a READ-ONLY verification session.
+Do NOT change any code unless a critical regression is actively breaking the core loop.
+
+STEPS
+1. Run: mcp__godot__run_project
+2. Run: mcp__godot__get_debug_output — note all errors and warnings
+3. Verify: ${task}
+4. Regression check:
+   - Core loop: Title → New Game → Academy completes → move Commander → place tower → Begin Waves → wave resolves
+   - Commander: click to select, click to move, auto-attack fires, Lance ability works
+   - Tower: placement, auto-attack, range ring, upgrade panel opens
+   - Economy: resources tick every second, territory income accumulates
+5. If issues found: add to BACKLOG.md — do NOT fix in this session
+
+OUTPUT FORMAT
+✅ Working: [list what is confirmed working]
+❌ Broken: [symptom + suspected cause for each]
+⚠️  Degraded: [works but feels wrong, with observation]
+📋 New BACKLOG entries: [any newly observed issues with tag + priority]`
+};
+
+function gen() {
+  const task = document.getElementById('pg-task').value.trim();
+  const files = document.getElementById('pg-files').value.trim();
+  if (!task) { alert('Describe the task first (field 1).'); return; }
+  if (!sType) { alert('Select a session type (field 3).'); return; }
+  const out = document.getElementById('pout');
+  out.textContent = T[sType](task, files);
+  out.classList.remove('empty');
+  const cb = document.getElementById('cp-btn');
+  cb.style.display = 'inline-flex';
+  document.getElementById('cp-ok').style.display = 'none';
+}
+
+function cp() {
+  const text = document.getElementById('pout').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('cp-btn').style.display = 'none';
+    const ok = document.getElementById('cp-ok');
+    ok.style.display = 'inline';
+    setTimeout(() => { ok.style.display='none'; document.getElementById('cp-btn').style.display='inline-flex'; }, 2500);
+  });
+}
+</script>
+<div id="toast"></div>
+</body>
+</html>

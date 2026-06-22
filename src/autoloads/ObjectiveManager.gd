@@ -12,6 +12,9 @@
 ##   lapses cannot reopen it.
 extends Node
 
+## Cells the player must claim to win a territory with no authored objectives.
+const TERRITORY_CLAIM_TARGET : int = 200
+
 var _map_data            : MapData               = null
 var _active_objectives   : Array[ObjectiveData]  = []
 var _map_already_done    : bool                  = false   ## true after map_completed fires; locks all seals
@@ -46,6 +49,8 @@ func _resolve_for_current_faction() -> void:
 		FactionManager.active_faction,
 		FactionManager.active_sub_path,
 	)
+	if _active_objectives.is_empty():
+		_active_objectives = [_make_territory_objective()]
 	_map_data.resolve_spawn_seal_refs(_active_objectives)
 
 func _on_faction_selected(_faction_id: String, _sub_path: String) -> void:
@@ -194,6 +199,24 @@ func _find_objective(id: StringName) -> ObjectiveData:
 		if obj != null and obj.objective_id == id:
 			return obj
 	return null
+
+## Builds the default territory-capture objective for procgen maps that have no authored
+## objectives. Faction-voiced description; progress is driven by territory_claimed events.
+func _make_territory_objective() -> ObjectiveData:
+	var obj := ObjectiveData.new()
+	obj.objective_id = &"territory_claim"
+	obj.kind         = ObjectiveData.ObjectiveKind.CLAIM_TERRITORY
+	obj.target       = TERRITORY_CLAIM_TARGET
+	match FactionManager.active_faction:
+		"architects":
+			obj.description = "Achieve infrastructure control — claim %d sectors of this region." % TERRITORY_CLAIM_TARGET
+		"bloom":
+			obj.description = "Establish biomass dominance — spread across %d sectors of terrain." % TERRITORY_CLAIM_TARGET
+		"mesh":
+			obj.description = "Assert network presence — route through %d sectors of the region." % TERRITORY_CLAIM_TARGET
+		_:
+			obj.description = "Establish territorial dominance — claim %d sectors." % TERRITORY_CLAIM_TARGET
+	return obj
 
 ## Fires map_completed once all active objectives are complete, then promotes every
 ## SEALED spawn to PERMANENTLY_SEALED. Idempotent — subsequent calls are no-ops once

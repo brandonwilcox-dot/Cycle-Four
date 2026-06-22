@@ -159,6 +159,12 @@ func _on_faction_selected(faction_id: String, sub_path: String) -> void:
 	obj_summary_btn.visible = true
 	wave_panel.visible      = true
 
+## Repopulates the objective panel after a territory deploy (faction unchanged, map swapped).
+func refresh_objectives() -> void:
+	var objectives := ObjectiveManager.get_active_objectives()
+	objective_panel.populate(objectives)
+	_refresh_obj_summary(objectives)
+
 func _on_resource_changed(_faction_id: String, resource_id: String, amount: float) -> void:
 	var primary   : String = FactionManager.get_primary_resource()
 	var secondary : String = FactionManager.get_secondary_resource()
