@@ -49,6 +49,12 @@ var _friendly_astar : AStar2D = AStar2D.new()
 ## Set by load_map_data(); consumers (Commander, WaveSpawner) may read it directly.
 var map_data : MapData = null
 
+## True once the current territory's battle is won (all objectives complete → map_completed).
+## Gates the spawn no-build exclusion zone: while false, building is forbidden inside a spawn's
+## DMZ; conquering the territory opens those approaches. Reset per map in load_map_data() and
+## persisted per-territory by Battle (saved in node development as "won").
+var _battle_won : bool = false
+
 ## Phase 4: register_active_spawn() / _active_spawns are retired.
 ## Connectivity validation now derives active spawn cells from map_data.spawn_points
 ## (see _all_spawns_connected()).
@@ -108,6 +114,7 @@ func load_map_data(data: MapData) -> void:
 		]
 	)
 	map_data = data
+	_battle_won = false   ## fresh territory — spawn no-build exclusion zones are in force until won
 	for i in COLS * ROWS:
 		_cells[i] = data.cell_types[i] as int
 	_rebuild_astar()
@@ -158,6 +165,9 @@ func can_place_at(col: int, row: int) -> bool:
 	## Protect spawn point positions (now PATH cells, identified via MapData).
 	if map_data != null and map_data.is_spawn_at(Vector2i(col, row)):
 		return false
+	## Exclusion zone: no tower inside an active spawn's DMZ until the territory is conquered.
+	if is_build_excluded(col, row):
+		return false
 	## Build only where the player has explored — no placing into unrevealed fog.
 	if map_data != null and not map_data.get_meta_revealed(col + row * COLS):
 		return false
@@ -168,19 +178,39 @@ func can_place_at(col: int, row: int) -> bool:
 	## PATH cell: test that blocking it keeps every active spawn connected.
 	return _test_obstacle_ok(col, row)
 
-## Tower no-fire DMZ test. True when world_pos lies within SPAWN_DMZ_CELLS (Chebyshev,
-## in cells) of any ACTIVE spawn. Towers skip targets inside the DMZ so enemies always
-## clear the spawn mouth before they can be hit — fixes spawn-adjacent instakill, and
-## gives garrison defenders something to engage. DORMANT/SEALED spawns don't emit, so
-## they project no DMZ.
-func is_in_spawn_dmz(world_pos: Vector2) -> bool:
+## Geometric spawn-buffer test: true when (col,row) is within SPAWN_DMZ_CELLS (Chebyshev)
+## of any ACTIVE spawn. Shared core for the no-fire DMZ and the no-build exclusion zone.
+## DORMANT/SEALED spawns don't emit, so they project no buffer.
+func _in_spawn_buffer_cell(col: int, row: int) -> bool:
 	if map_data == null:
 		return false
-	var cell : Vector2i = world_to_cell(world_pos)
 	for sc in map_data.get_active_spawn_cells():
-		if maxi(absi(cell.x - sc.x), absi(cell.y - sc.y)) <= SPAWN_DMZ_CELLS:
+		if maxi(absi(col - sc.x), absi(row - sc.y)) <= SPAWN_DMZ_CELLS:
 			return true
 	return false
+
+## No-FIRE DMZ (world-space): towers skip targets inside it so enemies always clear the spawn
+## mouth before they can be hit (fixes spawn-adjacent instakill; garrisons get something to
+## engage). Purely geometric — stays in force even after the battle is won, since a still-active
+## spawn could keep emitting; with no enemies left it is simply moot.
+func is_in_spawn_dmz(world_pos: Vector2) -> bool:
+	var cell : Vector2i = world_to_cell(world_pos)
+	return _in_spawn_buffer_cell(cell.x, cell.y)
+
+## No-BUILD exclusion zone: the same spawn buffer, but only while the battle is unwon. Conquering
+## the territory (all objectives met → map_completed → set_battle_won) lifts it, opening the spawn
+## approaches for towers and buildings. See can_place_at() and Battle._try_place_building().
+func is_build_excluded(col: int, row: int) -> bool:
+	return not _battle_won and _in_spawn_buffer_cell(col, row)
+
+## The current territory's battle-won state. Set true on map_completed (Battle._on_map_completed),
+## persisted per-territory, restored on Continue/return. Reset to false on every map load.
+func set_battle_won(value: bool) -> void:
+	_battle_won = value
+	queue_redraw()   ## exclusion-zone shading (when drawn) follows the won state
+
+func is_battle_won() -> bool:
+	return _battle_won
 
 ## Marks (col, row) as occupied by a tower.
 ## If the cell was traversable (a PATH cell) it becomes OBSTACLE and the AStar

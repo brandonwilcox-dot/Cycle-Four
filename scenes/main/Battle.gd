@@ -242,6 +242,7 @@ func _capture_territory_development() -> void:
 	dev["buildings"] = _capture_buildings()
 	dev["towers"] = _capture_towers()
 	dev["fob"] = _capture_fob()
+	dev["won"] = bool(_map_grid.call("is_battle_won"))   ## conquered-state → spawn approaches stay open on return
 	GalaxyManager.star_systems[node_id]["development"] = dev
 
 ## [Persistence Step 3] Snapshots placed garrisons as [{id, cell, level}] for save/restore.
@@ -348,9 +349,15 @@ func _restore_territory_development(dev: Dictionary) -> void:
 	_restore_buildings(dev)
 	_restore_towers(dev)
 	_restore_fob(dev)
+	## A conquered territory keeps its spawn approaches buildable; an unwon one re-arms the exclusion.
+	_map_grid.call("set_battle_won", bool(dev.get("won", false)))
 
 ## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:
+	## Conquering the territory lifts its spawn no-build exclusion zones — the approaches open up.
+	## Runs for the home territory too (invading_node empty), so winning at home opens its spawns.
+	if _map_grid != null and _map_grid.has_method("set_battle_won"):
+		_map_grid.call("set_battle_won", true)
 	if GalaxyManager.invading_node.is_empty():
 		return
 	var node_id : String = GalaxyManager.invading_node
@@ -525,7 +532,9 @@ func _is_cell_placeable(cell: Vector2i) -> bool:
 		if cell.x < 0 or cell.y < 0 or cell.x >= data.dimensions.x or cell.y >= data.dimensions.y:
 			return false
 	if _build_mode:
-		return not _building_cells.has(cell) and bool(_map_grid.call("is_claimed", cell.x, cell.y))
+		return not _building_cells.has(cell) \
+			and bool(_map_grid.call("is_claimed", cell.x, cell.y)) \
+			and not bool(_map_grid.call("is_build_excluded", cell.x, cell.y))
 	return not _occupied_cells.has(cell) and _map_grid.can_place_at(cell.x, cell.y)
 
 ## -- Tower placement --
@@ -542,6 +551,12 @@ func _try_place_tower(screen_pos: Vector2) -> void:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
 	if _occupied_cells.has(cell):
 		EventBus.notification_pushed.emit("Cell already occupied.", "warning")
+		return
+	## Exclusion zone: clearer message than the generic can_place_at rejection below.
+	if bool(_map_grid.call("is_build_excluded", cell.x, cell.y)):
+		EventBus.notification_pushed.emit(
+			"Too close to an enemy spawn — clear the territory's objectives to build here.", "warning"
+		)
 		return
 	if not _map_grid.can_place_at(cell.x, cell.y):
 		EventBus.notification_pushed.emit(
@@ -628,6 +643,12 @@ func _try_place_building(screen_pos: Vector2) -> void:
 	if not claimed:
 		EventBus.notification_pushed.emit(
 			"Buildings go on claimed ground — walk your Commander there first.", "warning"
+		)
+		return
+	## Exclusion zone: no building inside an active spawn's DMZ until the territory is conquered.
+	if bool(_map_grid.call("is_build_excluded", cell.x, cell.y)):
+		EventBus.notification_pushed.emit(
+			"Too close to an enemy spawn — clear the territory's objectives to build here.", "warning"
 		)
 		return
 	## One building per cell.

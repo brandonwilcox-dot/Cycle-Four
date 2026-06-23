@@ -12,11 +12,15 @@
 ## Bugs (defects — something broken)
 
 - [BUG][P1][FIX — runtime-pending] Towers placed next to a spawn instakill enemies at the
-  spawn point — enemies never reach the field; garrisons get no XP. FIXED 2026-06-22 via a
-  no-fire DMZ: `MapGrid.is_in_spawn_dmz(world_pos)` returns true within `SPAWN_DMZ_CELLS`
-  (=4, Chebyshev) of any ACTIVE spawn; `Tower._select_target` skips DMZ targets. Unit-position
-  based, so it holds regardless of tower placement or range. Compile-verified; needs a playtest
-  to confirm enemies clear the mouth and DMZ size feels right (tune SPAWN_DMZ_CELLS).
+  spawn point — enemies never reach the field; garrisons get no XP. FIXED 2026-06-22 with a
+  spawn DMZ (`SPAWN_DMZ_CELLS` = 4, Chebyshev, around each ACTIVE spawn), two layers:
+  (1) NO-FIRE — `Tower._select_target` skips targets in `MapGrid.is_in_spawn_dmz` (unit-position
+  based, holds regardless of tower placement/range; always on so enemies always clear the mouth).
+  (2) EXCLUSION (no-build) — `MapGrid.is_build_excluded` blocks tower + building placement (and
+  greys the placement preview) inside the buffer UNTIL the territory is conquered. Conquering
+  (all objectives met → `map_completed` → `MapGrid.set_battle_won(true)`) lifts the no-build and
+  opens the spawn approaches; "won" persists per-territory in node development, restored on
+  Continue/return. Compile-verified; needs a playtest to confirm feel + tune SPAWN_DMZ_CELLS.
   (Found: playtest 2026-06-20 | fixed: 2026-06-22)
 
 - [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
