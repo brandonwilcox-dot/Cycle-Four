@@ -306,35 +306,32 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
     <div class="pr"><div class="pd done"></div><div class="pl">A</div><div class="pn"><div>Enemy factions in waves</div></div><span class="badge b-green">Done</span></div>
     <div class="pr"><div class="pd done"></div><div class="pl">B</div><div class="pn"><div>Faction-flavored pathing</div></div><span class="badge b-green">Done</span></div>
     <div class="pr"><div class="pd done"></div><div class="pl">C</div><div class="pn"><div>Garrisons + army</div><div class="psub">C1–C4 complete</div></div><span class="badge b-green">Done</span></div>
-    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence</div><div class="psub">D1 done · persistence pending</div></div><span class="badge b-amber">Active</span></div>
+    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence</div><div class="psub">Persistence done · win conditions done · P1 bugs blocking</div></div><span class="badge b-amber">Active</span></div>
     <!-- PHASES_END -->
   </div>
 
   <div class="mbox">
     <!-- MILESTONE_START -->
     <div class="ml">⚡ Next Required Milestone</div>
-    <div class="mt">Per-territory state persistence — buildings, claims, and towers must survive deploy + Continue</div>
-    <div class="mf">planning/persistence-design.md</div>
+    <div class="mt">Stable playtest session — fix system hang (OS freeze) + spawn bugs so the core galaxy loop can be hand-playtested end-to-end</div>
+    <div class="mf">BACKLOG.md — [BUG][P1] system hang · spawn DMZ · multi-spawn</div>
     <!-- MILESTONE_END -->
   </div>
 
   <div class="section">
     <div class="sh">P1 — Blocks Fun</div>
     <!-- BACKLOG_P1_START -->
+    <div class="bi" onclick="pick(this,'BUG','SYSTEM HANG — entire OS became unresponsive; Godot process would not close.\n\nScenario: garrisons near spawn points claiming territory + new wave of Mesh units (orange) un-claiming territory. Collision/race on same cells causes hang.\n\nTheory: rapid claim/unclaim event ping-pong, rendering bottleneck, or pathfinding deadlock.\n\nRepro strategy:\n1. Place garrisons in a 3×3 cluster near a spawn\n2. Watch them claim outward\n3. Call a new wave\n4. Monitor frame rate — if <1fps and process won\'t exit, log the frame count at hang\n\nFix direction: instrument claim_area/unclaim_cell with frame counts; add render coalescing; check for mutual waiting in FriendlyUnit pathfinding vs MapGrid updates.','src/core/map/MapGrid.gd\nsrc/entities/FriendlyUnit.gd\nsrc/entities/Building.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">SYSTEM HANG — OS freeze on garrison + Mesh unclaim race</span>
+    </div>
     <div class="bi" onclick="pick(this,'BUG','Towers next to a spawn instakill enemies at the spawn point. Enemies never reach the field. Fix: add a DMZ/spawn buffer — forbid tower placement (and targeting) within N cells of each spawn so enemies enter the field before being engaged.','src/core/waves/WaveSpawner.gd\nsrc/core/map/MapGrid.gd')">
       <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Towers instakill at spawn — add DMZ buffer</span>
     </div>
     <div class="bi" onclick="pick(this,'BUG','Enemies only enter from ONE spawn despite Phase-B multi-spawn pathing. Investigate _activate_all_spawns() post-Academy and WaveSpawner per-wave spawn distribution.','scenes/main/Battle.gd\nsrc/core/waves/WaveSpawner.gd')">
       <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Enemies enter only one spawn — investigate multi-spawn activation</span>
     </div>
-    <div class="bi" onclick="pick(this,'BUG','Garrison leveling has no felt effect. Verify level-up raises squad cap + production speed; surface garrison level and current effects in InspectionPanel.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd')">
-      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Garrison leveling has no felt effect</span>
-    </div>
-    <div class="bi" onclick="pick(this,'BUG','Convoy not operational — depot-to-FOB ferry never ran during playtest. Investigate ConvoyManager spawn conditions (connectivity BFS on path_discovered, depot detection).','src/autoloads/ConvoyManager.gd')">
-      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Convoy not operational — investigate ConvoyManager</span>
-    </div>
-    <div class="bi" onclick="pick(this,'VERIFY','Per-territory persistence runtime verification. Hand-playtest: New Game → build/claim/towers → quit → Continue. Verify map + claimed cells + buildings + towers all return. Then deploy A→B→A and verify each territory holds state.','N/A — playtest task, not a code change. Use review session type.')">
-      <span class="btag ver">VERIFY</span><span class="bpri">P1</span><span class="btxt">Per-territory persistence — hand-playtest required</span>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','Garrison unit-type selection and composition. Player chooses which unit types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.\n\nNeeds: garrison loadout UI in InspectionPanel, per-type XP tracking, multi-type squad spawn logic in Building.gd.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd\nsrc/entities/FriendlyUnit.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P1</span><span class="btxt">Garrison unit-type selection + squad composition</span>
     </div>
     <!-- BACKLOG_P1_END -->
   </div>
@@ -345,17 +342,17 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
     <div class="bi" onclick="pick(this,'BUG','BUG [P2] — ObjectiveManager completion not persisted on Continue. On restore, all objectives reset to 0/N. Territory objectives re-complete via garrison raids, masking the bug. But one-time events (path_discovered, convoy_spawned) stay stuck at 0 permanently.\n\nFix: persist completed-objective IDs in SaveManager and restore them into ObjectiveManager on load.','src/autoloads/ObjectiveManager.gd\nsrc/autoloads/SaveManager.gd')">
       <span class="btag bug">BUG</span><span class="bpri">P2</span><span class="btxt">ObjectiveManager completion not persisted on Continue</span>
     </div>
-    <div class="bi" onclick="pick(this,'ENHANCEMENT','ENHANCEMENT [P2] — Galaxy nav outward-only; no return to held territory. _handle_galaxy_click rejects owned nodes via is_frontier check. The restore-on-return code in _deploy_to_node (lines 197–201) exists but is unreachable.\n\nFix: allow clicking owned adjacent nodes in galaxy view to trigger _deploy_to_node.','scenes/main/Battle.gd\nsrc/autoloads/GalaxyManager.gd\nsrc/ui/GalaxyView.gd')">
-      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Galaxy nav outward-only — no return to held territory</span>
+    <div class="bi" onclick="pick(this,'BUG','Garrison leveling has no felt effect. Design says levels raise squad cap + production speed, but no difference perceived in playtest. Verify level-up effects apply; surface garrison level + current effect in InspectionPanel.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P2</span><span class="btxt">Garrison leveling has no felt effect</span>
     </div>
-    <div class="bi" onclick="pick(this,'ENHANCEMENT','Garrison unit-type selection and composition. Player chooses which unit types a garrison spawns. XP improves those types. Higher levels unlock mixed-squad combinations. Needs: loadout UI in InspectionPanel, per-type XP tracking, multi-type squad spawn logic.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd\nsrc/entities/FriendlyUnit.gd')">
-      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Garrison unit-type selection + squad composition</span>
+    <div class="bi" onclick="pick(this,'BUG','Convoy not operational — depot-to-FOB ferry never ran during playtest. Investigate ConvoyManager spawn conditions (connectivity BFS on path_discovered, depot detection). Likely no depot/path discovered on played map, or convoy never spawned.','src/autoloads/ConvoyManager.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P2</span><span class="btxt">Convoy not operational — investigate ConvoyManager</span>
     </div>
     <div class="bi" onclick="pick(this,'ENHANCEMENT','HUD should be visible during Academy scenario phase (75/90/90s). Player should be able to place towers and observe the behavior tracker. Currently HUD is hidden during scenarios.','scenes/main/Battle.gd\nsrc/ui/HUD.gd')">
       <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">HUD visible during Academy scenario phase</span>
     </div>
-    <div class="bi" onclick="pick(this,'ENHANCEMENT','Per-territory win conditions. Each galaxy node needs a specific win objective that flips ownership when met. Currently only global map_completed is used. Design and implement node-specific win condition system tied to GalaxyManager.','src/autoloads/GalaxyManager.gd\nsrc/autoloads/ObjectiveManager.gd')">
-      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Per-territory win conditions for galaxy nodes</span>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','Standing-order toggle UI for garrisons. Currently garrison expansion is implicit (expand when safe, defend when threatened). Add an explicit toggle in InspectionPanel to lock a garrison into defense-only mode.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Standing-order toggle UI for garrisons</span>
     </div>
     <!-- BACKLOG_P2_END -->
   </div>
@@ -633,7 +630,7 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
 // ══ DATA (scheduled task updates this block) ══
 // DATA_START
 const D = {
-  lastUpdated: "2026-06-21",
+  lastUpdated: "2026-06-22",
   phaseBadge: "Phase D — Active"
 };
 // DATA_END
