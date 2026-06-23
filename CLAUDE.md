@@ -9,6 +9,31 @@ making any design decisions in code.
 
 ---
 
+## Build / Export — keeping the .exe current
+
+The exported `.exe` does NOT auto-update. The Godot MCP `run_project` is a
+from-source compile/boot check only; it never touches the desktop `.exe`. After a
+change is verified, re-export so the playable build reflects it.
+
+**Routine:** `tools/export.ps1` (run from a terminal, or I run it after a confirmed change).
+- `.\tools\export.ps1`            → builds BOTH release + debug
+- `.\tools\export.ps1 -OnlyDebug` → debug only (fast iteration)
+- `.\tools\export.ps1 -OnlyRelease`
+
+**Two outputs on the desktop (`C:\Users\Brand\OneDrive\Desktop\`):**
+- `Cycle Four.exe` — RELEASE. `OS.is_debug_build()=false`; dev keys F1-F4 OFF; must
+  play the full Academy. This is the "latest confirmed-working build" — rebuild it
+  after a change is verified (and ideally playtest-confirmed).
+- `Cycle Four (DEBUG).exe` — DEBUG. `OS.is_debug_build()=true`; F1/F2/F3 skip Academy →
+  architects/mesh/bloom, F4 = +1h offline sim; debug prints (e.g. the `[WaveSpawner]`
+  multi-spawn log) write to `%APPDATA%\Godot\app_userdata\Cycle Four\logs\`. Use for
+  quick playtests; rebuild freely while iterating.
+
+A clean export compiles every script into the PCK, so a successful run also serves as
+a whole-project compile check. See [[reference-cycle-four-release-export]].
+
+---
+
 ## Session 2026-06-22 — Per-territory win conditions + galaxy return nav — PLAYTEST VERIFIED
 
 Closes the two P2 BACKLOG items from the persistence session. Hand-playtested
