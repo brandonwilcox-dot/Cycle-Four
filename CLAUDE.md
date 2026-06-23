@@ -9,9 +9,10 @@ making any design decisions in code.
 
 ---
 
-## Session 2026-06-21 (2) — Per-territory win conditions + galaxy return nav — COMPILE VERIFIED
+## Session 2026-06-22 — Per-territory win conditions + galaxy return nav — PLAYTEST VERIFIED
 
-Closes the two P2 BACKLOG items from the persistence session.
+Closes the two P2 BACKLOG items from the persistence session. Hand-playtested
+2026-06-22: the full deploy → claim → capture loop and galaxy return nav both play well.
 
 **Per-territory win conditions (`ObjectiveManager`, `ObjectiveData`):**
 - Added `CLAIM_TERRITORY` kind to `ObjectiveData.ObjectiveKind`.
@@ -35,9 +36,17 @@ Closes the two P2 BACKLOG items from the persistence session.
   Without this, the panel would keep showing the previous territory's objectives after deploy.
 
 **Compile status:** zero new errors (only standing benign EventBus warnings).
-**Runtime:** needs hand-playtest. Path: zoom out → click frontier → claim 200 cells → verify
-"Map Complete!" in panel, "Territory captured" notification, galaxy graph redraws with new owner.
-Return path: zoom out → click a held (non-home) node → verify map swaps, old objectives restored.
+**Runtime:** PLAYTESTED 2026-06-22 — deploy → claim → capture loop and held-territory return
+nav both play correctly. Game is stable across an extended session.
+
+**Hang investigation (same session):** earlier playtest produced a hard hang (whole-OS
+unresponsive, Godot process wouldn't close) when garrisons near a spawn were claiming
+territory while a fresh Mesh wave was flank-raiding (un-claiming) the same cells. No crash
+dump; logs showed a clean exit. No definitive GDScript-level root cause found — a whole-OS
+freeze points more at GPU/driver/memory pressure than a script infinite-loop. Hardened the
+hot path anyway (`MapGrid.claim_area` single-redraw batching documented; `Building._complete_raid`
+event loop split) and logged a [BUG][P1] with a concrete repro strategy. **Did NOT recur in the
+2026-06-22 playtest** — left open on BACKLOG as monitor-pending-recurrence, not closed.
 
 **Known follow-up (out of scope):** ObjectiveManager completion not persisted on Continue
 ([BUG][P2] in BACKLOG) — on restore, the 200-cell objective resets to 0. Active garrisons
@@ -66,9 +75,14 @@ Hand-playtest of all persistence paths. Zero new errors across three game runs.
 **New BACKLOG entries (2026-06-21):** [BUG][P2] ObjectiveManager completion not persisted on
 Continue; [ENHANCEMENT][P2] Galaxy nav outward-only — no UI to return to held territory.
 
-**Next session:** Per-territory win conditions for galaxy nodes ([ENHANCEMENT][P2] in BACKLOG).
-Each node currently has only the global map_completed objective. Design a per-node win condition
-system; this also gives the galaxy-nav return feature a meaningful unlock gate.
+**Next session (candidates — user picks):**
+1. [BUG][P2] Persist ObjectiveManager completion across Continue — directly shores up the
+   win-conditions track just shipped (a captured-but-quit territory currently resets its
+   200-cell objective to 0 on restore). Natural follow-on.
+2. [BUG][P1] Tower-next-to-spawn instakill (DMZ buffer) and [BUG][P1] enemies from only one
+   spawn — the two oldest gameplay-feel P1s still open from the 2026-06-20 playtest.
+3. [BUG][P1] System-hang monitor — if it recurs, capture frame count at hang per the repro
+   strategy in BACKLOG. Not reproduced 2026-06-22.
 
 ---
 

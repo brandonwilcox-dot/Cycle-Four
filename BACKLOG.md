@@ -19,7 +19,7 @@
   pathing. Investigate `_activate_all_spawns()` post-Academy and WaveSpawner per-wave
   spawn distribution. (Found: playtest 2026-06-20)
 
-- [BUG][P1] SYSTEM HANG — entire OS became unresponsive; Godot process wouldn't close.
+- [BUG][P1][MONITOR] SYSTEM HANG — entire OS became unresponsive; Godot process wouldn't close.
   Scenario: garrisons near spawn points claiming territory + new wave of Mesh units
   (orange) un-claiming territory. Collision/race on same cells. Theory: rapid
   claim/unclaim event ping-pong, rendering bottleneck, or pathfinding deadlock.
@@ -28,7 +28,11 @@
   won't exit, log the frame count at hang. No crash dump found; logs show clean exit.
   Fix direction: instrument claim_area/unclaim_cell with frame counts; add render
   coalescing; check for mutual waiting in FriendlyUnit pathfinding vs MapGrid updates.
-  (Found: playtest 2026-06-21)
+  STATUS: hardened the hot path (MapGrid.claim_area single-redraw batching documented;
+  Building._complete_raid event loop split) but found no definitive root cause — a whole-OS
+  freeze points more at GPU/driver/memory than a GDScript infinite-loop. DID NOT RECUR in the
+  2026-06-22 playtest. Left open as MONITOR: if it returns, capture frame count at hang.
+  (Found: playtest 2026-06-21 | not reproduced: 2026-06-22)
 
 - [BUG][P2] Garrison leveling has no felt effect. Design says levels raise squad cap +
   production speed, but no difference perceived in playtest. Verify level-up effects apply;
@@ -38,11 +42,12 @@
   ConvoyManager spawn conditions (connectivity BFS on `path_discovered`, depot detection).
   Likely no depot/path discovered on played map, or convoy never spawned. (Found: playtest 2026-06-20)
 
-- [BUG][P2] Per-territory persistence — Continue restore VERIFIED 2026-06-21. Garrison,
-  tower, FOB HP, energy rate, map seed, offline catch-up all restored correctly. Deploy
-  A→B capture also verified (code review + clean deploy run, zero errors). Remaining gap:
-  no UI to deploy back to a held territory (is_frontier blocks owned nodes), so restore-
-  on-return cannot be hand-tested. See [ENHANCEMENT][P2] galaxy return nav below.
+- [DONE — 2026-06-22] Per-territory persistence — Continue restore VERIFIED 2026-06-21
+  (garrison, tower, FOB HP, energy rate, map seed, offline catch-up all restored). Deploy
+  A→B capture verified. The remaining gap (no UI to deploy back to a held territory) was
+  closed by the galaxy return-nav work; restore-on-return is now reachable and playtested
+  2026-06-22. Residual: objective completion not persisted on Continue — tracked separately
+  as the [BUG][P2] ObjectiveManager entry below.
 
 - [BUG][P3] Academy scenarios (75/90/90s phases) had no player control pre-fix. Partially
   addressed 2026-06-21: Battle now accepts world input during scenario phase. Tower placement
