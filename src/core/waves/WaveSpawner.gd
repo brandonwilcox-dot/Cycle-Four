@@ -306,6 +306,14 @@ func _build_spawn_queue(total_units: int) -> void:
 		var sp    : SpawnPoint = active_spawns[i]
 		var share : int        = base_share + (1 if i < remainder else 0)
 		_spawn_queue[sp.id] = { count = share, position = sp.position }
+	## Re-verify hook (BUG[P1] "enemies from one spawn only"): log active-spawn count and
+	## per-spawn distribution at every wave start so a playtest confirms multi-direction
+	## emission. Debug-gated; remove once the multi-spawn fix is confirmed in play.
+	if OS.is_debug_build():
+		var dist : PackedStringArray = []
+		for sid in _spawn_queue:
+			dist.append("%s=%d" % [str(sid), int(_spawn_queue[sid].count)])
+		print("[WaveSpawner] wave distribution — active spawns=%d: %s" % [k, ", ".join(dist)])
 
 ## Picks a spawn from the pre-committed queue (weighted by remaining count),
 ## decrements its counter, and returns its map position.

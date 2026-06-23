@@ -29,6 +29,12 @@ const SPAWN_N_POS  := Vector2i(30, 0)
 const SPAWN_S_POS  := Vector2i(30, 33)
 const SPAWN_E_POS  := Vector2i(59, 17)
 
+## Tower no-fire DMZ: enemies emerging from an active spawn are untargetable until they
+## travel this many cells out, so they always clear the spawn mouth and reach the field
+## (fixes towers instakilling at the spawn point; garrisons then get engagement + XP).
+## Tunable — measured Chebyshev (square) in cells. See is_in_spawn_dmz().
+const SPAWN_DMZ_CELLS : int = 4
+
 var _cells : Array[int] = []
 var _astar  : AStar2D   = AStar2D.new()
 
@@ -161,6 +167,20 @@ func can_place_at(col: int, row: int) -> bool:
 		return true
 	## PATH cell: test that blocking it keeps every active spawn connected.
 	return _test_obstacle_ok(col, row)
+
+## Tower no-fire DMZ test. True when world_pos lies within SPAWN_DMZ_CELLS (Chebyshev,
+## in cells) of any ACTIVE spawn. Towers skip targets inside the DMZ so enemies always
+## clear the spawn mouth before they can be hit — fixes spawn-adjacent instakill, and
+## gives garrison defenders something to engage. DORMANT/SEALED spawns don't emit, so
+## they project no DMZ.
+func is_in_spawn_dmz(world_pos: Vector2) -> bool:
+	if map_data == null:
+		return false
+	var cell : Vector2i = world_to_cell(world_pos)
+	for sc in map_data.get_active_spawn_cells():
+		if maxi(absi(cell.x - sc.x), absi(cell.y - sc.y)) <= SPAWN_DMZ_CELLS:
+			return true
+	return false
 
 ## Marks (col, row) as occupied by a tower.
 ## If the cell was traversable (a PATH cell) it becomes OBSTACLE and the AStar

@@ -11,13 +11,21 @@
 
 ## Bugs (defects — something broken)
 
-- [BUG][P1] Towers placed next to a spawn instakill enemies at spawn point — enemies never
-  reach the field; garrisons get no XP. Fix direction: DMZ buffer, forbid tower placement
-  or targeting within N cells of each spawn. (Found: playtest 2026-06-20)
+- [BUG][P1][FIX — runtime-pending] Towers placed next to a spawn instakill enemies at the
+  spawn point — enemies never reach the field; garrisons get no XP. FIXED 2026-06-22 via a
+  no-fire DMZ: `MapGrid.is_in_spawn_dmz(world_pos)` returns true within `SPAWN_DMZ_CELLS`
+  (=4, Chebyshev) of any ACTIVE spawn; `Tower._select_target` skips DMZ targets. Unit-position
+  based, so it holds regardless of tower placement or range. Compile-verified; needs a playtest
+  to confirm enemies clear the mouth and DMZ size feels right (tune SPAWN_DMZ_CELLS).
+  (Found: playtest 2026-06-20 | fixed: 2026-06-22)
 
-- [BUG][P1] Enemies only entered from ONE spawn in wave play despite Phase-B multi-spawn
-  pathing. Investigate `_activate_all_spawns()` post-Academy and WaveSpawner per-wave
-  spawn distribution. (Found: playtest 2026-06-20)
+- [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
+  Code re-verify 2026-06-22: every procgen spawn now defaults to ACTIVE (MapGenerator._build_spawn_points),
+  `_activate_all_spawns()` runs post-Academy as a backstop, and `_build_spawn_queue` splits units
+  across ALL active spawns — so the path is correct. The 2026-06-21 detection rework also fixed the
+  "instant-seal" root cause. Added a debug-gated log at each wave start (`[WaveSpawner] wave
+  distribution — active spawns=N: …`) so the next playtest confirms multi-direction emission.
+  Close this once a playtest shows active spawns ≥ 2. (Found: 2026-06-20 | code-verified: 2026-06-22)
 
 - [BUG][P1][MONITOR] SYSTEM HANG — entire OS became unresponsive; Godot process wouldn't close.
   Scenario: garrisons near spawn points claiming territory + new wave of Mesh units

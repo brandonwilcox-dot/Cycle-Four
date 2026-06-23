@@ -102,6 +102,7 @@ func _select_target() -> Node:
 	var best_score : float = 0.0
 	var have       : bool  = false
 	var base_pos   : Vector2 = _base_pos()
+	var grid       : Node  = _get_map_grid()
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
@@ -110,6 +111,10 @@ func _select_target() -> Node:
 			continue
 		## Stealth: can't lock onto an undetected unit (outside any sensor sphere).
 		if unit.has_method("is_detectable") and not unit.call("is_detectable"):
+			continue
+		## DMZ: don't fire on enemies still inside a spawn's no-fire buffer — they need
+		## to clear the spawn mouth and reach the field (fixes spawn-adjacent instakill).
+		if grid != null and grid.call("is_in_spawn_dmz", unit.global_position):
 			continue
 		var score : float
 		match target_mode:
