@@ -130,14 +130,15 @@
   F2 mesh / F3 bloom). Tune in `FactionPerks`. Next: Phase 4B passives (walls / pollen / hijack), then
   Phase 5 build limits. Plan: planning/commander-and-faction-systems.md.
 
-- [FEATURE][P2 — runtime-pending] Phase 4B Architect walls (2026-06-24). `Wall.gd` — a destructible,
+- [DONE — playtest-verified 2026-06-24] Phase 4B Architect walls (2026-06-24). `Wall.gd` — a destructible,
   Commander-built barrier NOT in the enemy AStar; enemies path into a built wall and must destroy it to
   pass (`Unit._engaged_friendly` includes built walls as blockers). Architect-only "Build Wall" HUD button
   (programmatic, ActionBar HBox) → `wall_placement_requested` → Battle wall-placement mode (cost 15;
   density cap `WALL_MIN_SPACING` 2; no connectivity test). Walls in tower_layer (cleared on deploy);
-  `_wall_cells` pruned of destroyed walls. Compile-verified; NEEDS PLAYTEST. Tune `Wall.MAX_HEALTH` /
-  `WALL_COST` / `WALL_MIN_SPACING`. Remaining 4B: Bloom pollen (AoE slow+blind), Mesh hijack (convert an
-  enemy). Then Phase 5 build limits. Plan: planning/commander-and-faction-systems.md.
+  `_wall_cells` pruned of destroyed walls. PLAYTEST-VERIFIED 2026-06-24: walls build, take damage,
+  Commander repairs after construction, spacing good, towers farm stalled enemies. Tune `Wall.MAX_HEALTH`
+  / `WALL_COST` / `WALL_MIN_SPACING` later if needed. Remaining 4B: Bloom pollen (AoE slow+blind), Mesh
+  hijack (convert an enemy). Then Phase 5 build limits. Plan: planning/commander-and-faction-systems.md.
 
 - [ENHANCEMENT][P1] Garrison unit-type selection and composition. Player chooses which unit
   types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.

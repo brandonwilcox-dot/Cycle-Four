@@ -34,9 +34,10 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
-## Session 2026-06-24 (4) — Phase 4B (i): Architect walls — COMPILE VERIFIED
+## Session 2026-06-24 (4) — Phase 4B (i): Architect walls — PLAYTEST VERIFIED 2026-06-24
 
-First faction PASSIVE. New `src/entities/Wall.gd`: a destructible, cell-occupying Architect barrier,
+Verified in play: walls build, take damage, the Commander repairs them after construction, spacing
+reads well, and towers farm enemies stalled at a wall (the intended kill-zone synergy). First faction PASSIVE. New `src/entities/Wall.gd`: a destructible, cell-occupying Architect barrier,
 Commander-built (construction state like towers). Deliberately NOT added to the enemy AStar — enemies
 path straight into a built wall and must DESTROY it to pass ("block paths enemies have to unblock").
 `Unit._engaged_friendly` now also returns built walls as blockers, so an enemy stops + grinds a wall in
