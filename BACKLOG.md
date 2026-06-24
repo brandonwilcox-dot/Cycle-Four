@@ -37,6 +37,18 @@
   destroyed-state persistence (Continue/return currently respawns bases — same class as the
   [BUG][P2] ObjectiveManager-completion-not-persisted gap).
 
+- [FEATURE][P1 — runtime-pending] Commander as engineer — build + repair (Phase 2B, 2026-06-23).
+  First slice of "make the Commander a mortal, overworked engineer-leader" so building isn't pointless
+  (Phase-1 playtest: Commander solos everything). Towers + garrisons spawn INERT at 10 HP (tower won't
+  shoot; garrison earns no income / no production) and ghosted; the Commander must park at them and
+  channel its weapon-as-tool (`receive_engineering`, green beam, BUILD_RATE 50 HP/s, range 110px) to
+  bring them online; same tool repairs damage. Restored structures load built. Compile-verified; NEEDS
+  PLAYTEST (place tower → ghosted/inert → Commander builds it → online → shoots). Tune BUILD_RATE /
+  MAX_HEALTH (T100/G120) / ENGINEER_RANGE_PX. Plan: planning/commander-and-faction-systems.md.
+  Follow-ups: building still lacks urgency until PRESSURE lands (Commander mortality + enemy-base
+  response, next slices); verify the Academy path (may place/expect instant-working towers); incomplete
+  builds aren't persisted distinctly (a saved-then-restored half-built structure loads as built).
+
 - [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
   Code re-verify 2026-06-22: every procgen spawn now defaults to ACTIVE (MapGenerator._build_spawn_points),
   `_activate_all_spawns()` runs post-Academy as a backstop, and `_build_spawn_queue` splits units

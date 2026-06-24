@@ -32,11 +32,25 @@ const RAID_CLAIM_RADIUS  : int   = 1      ## cells claimed around the target on 
 const RAID_THREAT_RADIUS : float = 260.0  ## an enemy this close withholds/aborts a raid
 const RAID_REACH_DIST    : float = 44.0   ## a raider within this of the target completes the claim
 
+## Construction (Phase 2B — commander-and-faction-systems.md). A freshly placed garrison starts inert
+## at START_HEALTH — no income, no production — until the Commander builds it up to MAX_HEALTH (the
+## weapon doubles as the engineering tool). Restored garrisons load already built.
+const MAX_HEALTH   : float = 120.0
+const START_HEALTH : float = 10.0
+const BUILD_BAR_W  : float = 44.0
+
 var data : Resource = null   ## BuildingData instance
 var _income_active : bool = false
 ## True when this building was reconstructed by save-restore. Its income is already part of the
 ## restored territory_rates, so _ready must NOT re-add it (double-count). See persistence-design.md.
 var _restored      : bool = false
+
+## Construction state. _built false = under construction (inert); _health ramps from START_HEALTH to
+## MAX_HEALTH under the Commander's engineering tool, then the garrison comes online.
+var _max_health : float     = MAX_HEALTH
+var _health     : float     = MAX_HEALTH
+var _built      : bool      = true   ## _ready sets this from _restored / fresh
+var _build_bar  : ColorRect = null
 
 ## Garrison state.
 var _garrison_unit  : UnitData = null     ## the defender type this garrison produces
@@ -57,6 +71,43 @@ func setup(building_data: Resource, restored: bool = false) -> void:
 	data = building_data
 	_restored = restored
 
+## -- Construction / engineering (Phase 2B) --
+
+func is_built() -> bool:
+	return _built
+
+## True while the garrison still needs the Commander (under construction, or built-but-damaged).
+func needs_engineering() -> bool:
+	return _health < _max_health
+
+## The Commander channels its engineering tool here. Adds build/repair progress; on first reaching
+## full health the garrison comes online. Returns true if it changed anything (drives the build beam).
+func receive_engineering(amount: float) -> bool:
+	if _health >= _max_health:
+		return false
+	_health = minf(_max_health, _health + amount)
+	if not _built and _health >= _max_health:
+		_complete_build()
+	_refresh_build_visual()
+	return true
+
+## Construction finished: activate passive income and let _process run garrison production + raids.
+func _complete_build() -> void:
+	_built = true
+	if not _income_active:
+		_income_active = true
+		EconomyManager.add_territory_rate(FactionManager.get_primary_resource(), float(data.get("income_rate")))
+	var nm : String = str(data.get("building_name")) if data.get("building_name") != null else "Garrison"
+	EventBus.notification_pushed.emit("%s online." % nm, "positive")
+
+## Updates the build/repair bar and ghosts the garrison while it is under construction.
+func _refresh_build_visual() -> void:
+	var frac : float = clampf(_health / _max_health, 0.0, 1.0)
+	if _build_bar != null:
+		_build_bar.visible = _health < _max_health   ## show while building or damaged
+		_build_bar.size.x  = BUILD_BAR_W * frac
+	modulate = Color(1, 1, 1, 1) if _built else Color(0.6, 0.85, 1.0, 0.5)
+
 ## Item 3: stealth-reveal radius (px). Joins the "detectors" group contract (Unit scans it).
 func get_detector_radius() -> float:
 	return DETECT_RADIUS
@@ -67,15 +118,13 @@ func _ready() -> void:
 	if data == null:
 		push_error("Building: no BuildingData -- call setup() before adding to tree.")
 		return
-	## Start contributing income as soon as the building enters the tree.
-	_income_active = true
-	## A restored building's income is already in the restored territory_rates — re-adding would
-	## double-count. Fresh placements add normally.
-	if not _restored:
-		EconomyManager.add_territory_rate(
-			FactionManager.get_primary_resource(),
-			float(data.get("income_rate"))
-		)
+	## Construction gate: a restored garrison loads already built (its income is already part of the
+	## restored territory_rates, so don't re-add). A fresh placement starts UNDER CONSTRUCTION — no
+	## income or production until the Commander finishes it (receive_engineering → _complete_build).
+	_built  = _restored
+	_health = _max_health if _built else START_HEALTH
+	if _restored:
+		_income_active = true   ## already counted in restored rates; don't re-add
 	_build_visual()
 	## Garrison: resolve the shared unit layer (WorldMap/UnitLayer) and the defender type
 	## for the player's faction. Null faction (e.g. Academy) → no production, harmlessly.
@@ -84,6 +133,8 @@ func _ready() -> void:
 	_garrison_unit = FriendlyRosterScript.garrison_unit(FactionManager.active_faction)
 
 func _process(delta: float) -> void:
+	if not _built:
+		return   ## under construction — no income, production, or raids until the Commander finishes it
 	if _garrison_unit == null or _unit_layer == null:
 		return
 	_produce_timer -= delta
@@ -258,8 +309,17 @@ func _build_visual() -> void:
 	v_bar.color    = col.darkened(0.55)
 	add_child(v_bar)
 
+	## Construction / repair bar — below the body; shown only while building or damaged.
+	_build_bar = ColorRect.new()
+	_build_bar.size     = Vector2(BUILD_BAR_W, 4.0)
+	_build_bar.position = Vector2(-BUILD_BAR_W * 0.5, 24.0)
+	_build_bar.color    = Color(0.45, 1.0, 0.7, 0.95)   ## engineering green
+	add_child(_build_bar)
+
 	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
 	## would consume LMB before it reaches selection/placement handlers).
 	for child in get_children():
 		if child is Control:
 			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_refresh_build_visual()

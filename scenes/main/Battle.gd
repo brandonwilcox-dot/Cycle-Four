@@ -368,7 +368,7 @@ func _restore_towers(dev: Dictionary) -> void:
 ## cell for enemy pathing and restores veterancy level. No cost, no build-mode.
 func _restore_tower(tdata: Resource, cell: Vector2i, level: int) -> void:
 	var tower : Node2D = TOWER_SCENE.instantiate()
-	tower.call("setup", tdata)
+	tower.call("setup", tdata, true)   ## restored = already built (full HP, active)
 	tower_layer.add_child(tower)
 	tower.position = _cell_to_world(cell)
 	_occupied_cells[cell] = tower
@@ -611,7 +611,7 @@ func _try_place_tower(screen_pos: Vector2) -> void:
 	EconomyManager.spend(cost)
 	var route_changed : bool = _map_grid.mark_tower_placed(cell.x, cell.y)
 	_place_tower(cell)
-	EventBus.notification_pushed.emit("Tower placed.", "positive")
+	EventBus.notification_pushed.emit("Tower sited — move your Commander to it to finish construction.", "positive")
 	if route_changed:
 		EventBus.path_changed.emit()
 
@@ -707,7 +707,7 @@ func _try_place_building(screen_pos: Vector2) -> void:
 		return
 	EconomyManager.spend(cost)
 	_place_building(cell)
-	EventBus.notification_pushed.emit("Building placed.", "positive")
+	EventBus.notification_pushed.emit("Garrison sited — move your Commander to it to finish construction.", "positive")
 
 func _place_building(cell: Vector2i) -> void:
 	var building : Node2D = BUILDING_SCENE.instantiate()

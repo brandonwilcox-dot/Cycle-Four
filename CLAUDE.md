@@ -34,6 +34,40 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-23 (2) — Phase 2B: Commander as engineer (build + repair) — COMPILE VERIFIED
+
+Phase 1 playtest: the Commander could solo every base, so building was pointless. Locked w/ user
+(full vision in planning/commander-and-faction-systems.md): make the Commander a mortal, overworked
+engineer-leader. First slice (user's pick = engineering): structures need the Commander to construct + repair.
+
+**Construction state (`Tower.gd`, `Building.gd`):**
+- Both gain `_max_health`/`_health`/`_built` + `is_built()` / `needs_engineering()` / `receive_engineering(amount)`.
+- Fresh placements spawn at START_HEALTH (10), `_built=false`, INERT — a tower doesn't attack/buff/tick;
+  a garrison earns no income and runs no production/raids (gated in `_process`; income deferred to
+  `_complete_build`). Restored structures load already built (`Tower.setup(data, true)`; Building via `_restored`).
+- Visual: ghosted (modulate α 0.5) + a green build/repair bar until complete (`_refresh_build_visual`).
+- MAX_HEALTH: Tower 100, Building 120 (tunable).
+
+**Commander engineering (`Commander.gd`):**
+- `_try_engineering(delta)` each frame channels build/repair onto the nearest friendly structure within
+  ENGINEER_RANGE_PX (110) that `needs_engineering()`, at BUILD_RATE (50 HP/s). The weapon is the tool — a
+  green beam drawn in `_draw`. Short range forces the player to park the Commander at the structure.
+- The bottleneck: building now competes with claiming / attacking / base assault for the Commander's
+  position, so a lone Commander can no longer do everything.
+
+**`Battle.gd`:** `_restore_tower` passes built=true; placement messages now say "move your Commander to
+it to finish construction."
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** — place a tower, watch it
+sit ghosted/inert; move the Commander onto it, watch the green build beam + bar fill → "online"; confirm it
+then shoots. Tune BUILD_RATE / MAX_HEALTH / ENGINEER_RANGE_PX.
+
+**Next (Phase 2 continues):** Commander mortality (health bar + death = forced out), then enemy-base
+response (pressure). Note: building still lacks *urgency* until pressure lands (mortality + enemy response).
+Risk to verify: the Academy may place/expect instant-working towers — check the Academy path in playtest.
+
+---
+
 ## Session 2026-06-23 — Conquest Phase 1: enemy bases anchor spawns — COMPILE VERIFIED
 
 A debug playtest exposed that the `CLAIM_TERRITORY` default win condition auto-completed:

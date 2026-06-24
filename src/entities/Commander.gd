@@ -52,6 +52,14 @@ const SHOT_FLASH_DURATION   : float = 0.08    ## brief Line2D auto-clean
 const PRIMARY_LINE_COLOR    : Color = Color(1.00, 0.95, 0.40, 0.85)
 const CANNON_RING_COLOR     : Color = Color(1.00, 0.55, 0.18, 0.70)
 
+## Engineering (Phase 2B — commander-and-faction-systems.md). The Commander's weapon doubles as a
+## build/repair tool: it channels onto the nearest friendly structure within ENGINEER_RANGE_PX that
+## still needs work (under construction, or built-but-damaged) at BUILD_RATE HP/s. Short range — you
+## must park the Commander right at the structure, which is what makes building compete for its time.
+const ENGINEER_RANGE_PX   : float = 110.0
+const BUILD_RATE          : float = 50.0
+const ENGINEER_LINE_COLOR : Color = Color(0.40, 1.00, 0.70, 0.90)
+
 const CELL_SIZE_PX          : float = 64.0
 const LOS_RING_COLOR        : Color = Color(1.00, 1.00, 0.80, 0.35)
 const SENSOR_RING_COLOR     : Color = Color(0.40, 0.80, 1.00, 0.18)
@@ -85,6 +93,9 @@ var _current_move_speed : float = MOVE_BASE_SPEED
 var _damage_multiplier  : float = 1.0
 var _primary_timer      : float = 0.0
 var _cannon_ring_t      : float = 0.0   ## seconds remaining to draw the Lance/cannon AOE ring
+
+## Engineering: the structure being built/repaired this frame (drives the build beam in _draw). Null when idle.
+var _engineer_target : Node = null
 
 ## Untyped: AbilityController class_name isn't registered when Commander.gd parses.
 ## Same pattern as ConvoyManager/Convoy. Duck-typed access is safe at runtime.
@@ -129,6 +140,9 @@ func _process(delta: float) -> void:
 	if _cannon_ring_t > 0.0:
 		_cannon_ring_t -= delta
 		queue_redraw()
+
+	## Engineering: build/repair the nearest friendly structure in reach (weapon = tool).
+	_try_engineering(delta)
 
 	## Queue-driven movement: walk toward the first waypoint, pop it on arrival, and
 	## continue down any chained waypoints (shift-queued). Idle when the queue is empty.
@@ -326,6 +340,12 @@ func _draw() -> void:
 		draw_circle(hazard_local, hazard_r, Color(0.20, 0.55, 0.15, 0.18))
 		draw_arc(hazard_local, hazard_r, 0.0, TAU, 48, Color(0.25, 0.70, 0.20, 0.55), 2.0)
 
+	## Engineering beam: the build/repair tool firing on a friendly structure (Phase 2B).
+	if _engineer_target != null and is_instance_valid(_engineer_target):
+		var ep : Vector2 = (_engineer_target as Node2D).global_position - global_position
+		draw_line(Vector2.ZERO, ep, ENGINEER_LINE_COLOR, 2.5, true)
+		draw_circle(ep, 6.0, Color(ENGINEER_LINE_COLOR.r, ENGINEER_LINE_COLOR.g, ENGINEER_LINE_COLOR.b, 0.5))
+
 func _build_visual() -> void:
 	## 32×32 gold body -- distinct from enemy units (24×24, grey/faction colour)
 	_visual          = ColorRect.new()
@@ -426,6 +446,36 @@ func _find_nearest_unit_in_range() -> Node2D:
 		if bdist < best_dist:
 			best_dist = bdist
 			best      = base as Node2D
+	return best
+
+## -- Phase 2B engineering: the Commander builds + repairs its own structures --
+
+## Channels build/repair onto the nearest friendly structure in reach that still needs it. The
+## weapon doubles as the tool — same beam, friendly target. Drives _engineer_target (drawn in _draw).
+## This is the bottleneck: building competes with claiming, attacking, and base assault for the
+## Commander's position, so a lone Commander can no longer do everything.
+func _try_engineering(delta: float) -> void:
+	var prev : Node = _engineer_target
+	_engineer_target = _find_structure_needing_work()
+	if _engineer_target != null:
+		if not bool(_engineer_target.call("receive_engineering", BUILD_RATE * delta)):
+			_engineer_target = null
+	if _engineer_target != null or prev != null:
+		queue_redraw()   ## beam appears / updates / clears
+
+func _find_structure_needing_work() -> Node:
+	var best : Node = null
+	var best_dist : float = ENGINEER_RANGE_PX
+	for grp in ["towers", "buildings"]:
+		for s in get_tree().get_nodes_in_group(grp):
+			if not is_instance_valid(s) or not (s is Node2D) or not s.has_method("needs_engineering"):
+				continue
+			if not bool(s.call("needs_engineering")):
+				continue
+			var d : float = global_position.distance_to((s as Node2D).global_position)
+			if d < best_dist:
+				best_dist = d
+				best = s
 	return best
 
 ## Stealth detection (px): the Commander FULLY reveals stealth within its drawn LoS ring (item 2 —

@@ -32,6 +32,14 @@ const VETERAN_AURA_RADIUS    : float = 160.0  ## a max-level tower radiates a su
 const VETERAN_AURA_BONUS     : float = 0.10   ## +10% damage to friendly towers inside a veteran aura
 const TERRITORY_DAMAGE_BONUS : float = 0.15   ## +15% damage while standing on claimed ground
 
+## Construction (Phase 2B — commander-and-faction-systems.md). A freshly placed tower starts inert
+## at START_HEALTH and only comes online once the Commander builds it up to MAX_HEALTH (the weapon
+## doubles as the engineering tool). A built-but-damaged tower is repaired the same way. Restored
+## towers load already built. While not built the tower does not attack, buff, or tick.
+const MAX_HEALTH   : float = 100.0
+const START_HEALTH : float = 10.0
+const BUILD_BAR_W  : float = 40.0
+
 var data: Resource = null   ## TowerData instance
 var _attack_timer: float = 0.0
 
@@ -49,9 +57,19 @@ var _xp_bar            : Node2D = null   ## ProgressionBar instance
 var _chevrons          : Node2D = null   ## RankChevrons instance
 var _map_grid          : Node   = null   ## resolved lazily from the "map_grid" group
 
-## Called by Main before adding to scene tree.
-func setup(tower_data: Resource) -> void:
-	data = tower_data
+## Construction state. _built false = under construction (inert); _health ramps from START_HEALTH
+## to MAX_HEALTH under the Commander's engineering tool, then the tower comes online.
+var _max_health : float     = MAX_HEALTH
+var _health     : float     = MAX_HEALTH
+var _built      : bool      = true   ## setup() flips this false for fresh placements
+var _build_bar  : ColorRect = null
+
+## Called by Main before adding to scene tree. start_built=true for save-restore (already built);
+## fresh placements default to false so the Commander must construct them.
+func setup(tower_data: Resource, start_built: bool = false) -> void:
+	data    = tower_data
+	_built  = start_built
+	_health = _max_health if start_built else START_HEALTH
 
 func _ready() -> void:
 	add_to_group("towers")
@@ -61,9 +79,33 @@ func _ready() -> void:
 	_build_visual()
 	_refresh_detector_group()
 
+## -- Construction / engineering (Phase 2B) --
+
+func is_built() -> bool:
+	return _built
+
+## True while the tower still needs the Commander (under construction, or built-but-damaged).
+func needs_engineering() -> bool:
+	return _health < _max_health
+
+## The Commander channels its engineering tool here. Adds build/repair progress; on first reaching
+## full health the tower comes online. Returns true if it changed anything (drives the build beam).
+func receive_engineering(amount: float) -> bool:
+	if _health >= _max_health:
+		return false
+	_health = minf(_max_health, _health + amount)
+	if not _built and _health >= _max_health:
+		_built = true
+		var nm : String = str(data.get("tower_name")) if data.get("tower_name") != null else "Tower"
+		EventBus.notification_pushed.emit("%s online." % nm, "positive")
+	_refresh_build_visual()
+	return true
+
 func _process(delta: float) -> void:
 	if data == null:
 		return
+	if not _built:
+		return   ## under construction — inert until the Commander finishes it
 	_attack_timer += delta
 	if _attack_timer >= 1.0 / data.attack_speed:
 		_attack_timer = 0.0
@@ -319,8 +361,25 @@ func _build_visual() -> void:
 	add_child(_chevrons)
 	_chevrons.call("set_rank", level - 1)
 
+	## Construction / repair bar — below the body; shown only while building or damaged.
+	_build_bar = ColorRect.new()
+	_build_bar.size     = Vector2(BUILD_BAR_W, 4.0)
+	_build_bar.position = Vector2(-BUILD_BAR_W * 0.5, half + 4.0)
+	_build_bar.color    = Color(0.45, 1.0, 0.7, 0.95)   ## engineering green
+	add_child(_build_bar)
+
 	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
 	## would consume LMB before it reaches selection/placement handlers).
 	for child in get_children():
 		if child is Control:
 			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_refresh_build_visual()
+
+## Updates the build/repair bar and ghosts the tower while it is under construction.
+func _refresh_build_visual() -> void:
+	var frac : float = clampf(_health / _max_health, 0.0, 1.0)
+	if _build_bar != null:
+		_build_bar.visible = _health < _max_health   ## show while building or damaged
+		_build_bar.size.x  = BUILD_BAR_W * frac
+	modulate = Color(1, 1, 1, 1) if _built else Color(0.6, 0.85, 1.0, 0.5)
