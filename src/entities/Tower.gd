@@ -5,6 +5,7 @@
 extends Node2D
 
 const TowerDataClass    = preload("res://src/entities/TowerData.gd")
+const FACTION_PERKS     = preload("res://src/core/FactionPerks.gd")
 const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
 const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
 
@@ -64,10 +65,18 @@ var _health     : float     = MAX_HEALTH
 var _built      : bool      = true   ## setup() flips this false for fresh placements
 var _build_bar  : ColorRect = null
 
+## Phase 4A faction build-prefs: Bloom growth + Mesh chain damage multipliers (1.0 = none).
+var _growth_mult   : float = 1.0
+var _growth_stacks : int   = 0
+var _grow_timer    : float = 0.0
+var _chain_mult    : float = 1.0
+
 ## Called by Main before adding to scene tree. start_built=true for save-restore (already built);
 ## fresh placements default to false so the Commander must construct them.
 func setup(tower_data: Resource, start_built: bool = false) -> void:
 	data    = tower_data
+	## Phase 4A: Architects build sturdier structures (faction health multiplier).
+	_max_health = MAX_HEALTH * FACTION_PERKS.health_mult(FactionManager.active_faction)
 	_built  = start_built
 	_health = _max_health if start_built else START_HEALTH
 
@@ -115,6 +124,12 @@ func _process(delta: float) -> void:
 	if _buff_timer <= 0.0:
 		_buff_timer = BUFF_RECOMPUTE_PERIOD
 		_recompute_buffs()
+	## Phase 4A: Bloom towers grow stronger the longer they stand (max health + damage, capped).
+	if _growth_stacks < FACTION_PERKS.BLOOM_GROW_MAX_STACKS and FactionManager.active_faction == "bloom":
+		_grow_timer += delta
+		if _grow_timer >= FACTION_PERKS.BLOOM_GROW_INTERVAL:
+			_grow_timer = 0.0
+			_apply_growth()
 
 ## Replaces this tower's data with the next tier and rebuilds the visual in place.
 ## Called by Main._try_upgrade_tower() after spending the upgrade cost.
@@ -131,7 +146,7 @@ func upgrade(next_data: Resource) -> void:
 func _try_attack() -> void:
 	var target : Node = _select_target()
 	if target != null and target.has_method("take_damage"):
-		var effective_damage : float = data.damage * _damage_multiplier * _aura_recv_mult * _territory_mult
+		var effective_damage : float = data.damage * _damage_multiplier * _aura_recv_mult * _territory_mult * _growth_mult * _chain_mult
 		var killed : bool = target.take_damage(effective_damage, int(data.damage_type))
 		if killed:
 			_award_xp_for_kill(target)
@@ -283,6 +298,50 @@ func _recompute_buffs() -> void:
 			best_bonus = maxf(best_bonus, float(other.call("get_aura_bonus")))
 	_aura_recv_mult = 1.0 + best_bonus
 	_territory_mult = 1.0 + (TERRITORY_DAMAGE_BONUS if _on_claimed_ground() else 0.0)
+	## Phase 4A: Mesh connected-tower chains empower their endpoints.
+	_chain_mult = _compute_chain_mult() if FactionManager.active_faction == "mesh" else 1.0
+
+## Phase 4A: Bloom growth — a tick raises this tower's max health (heals to match) + damage, capped,
+## with a subtle scale-up so the growth reads on the board.
+func _apply_growth() -> void:
+	_growth_stacks += 1
+	_growth_mult = pow(1.0 + FACTION_PERKS.BLOOM_GROW_DAMAGE_PCT, float(_growth_stacks))
+	var grow_hp : float = _max_health * FACTION_PERKS.BLOOM_GROW_HEALTH_PCT
+	_max_health += grow_hp
+	_health = minf(_max_health, _health + grow_hp)
+	scale = Vector2.ONE * (1.0 + 0.03 * float(_growth_stacks))
+
+## Phase 4A: Mesh node-chains — an endpoint tower (linked to ≤1 other built tower) is empowered by the
+## size of the connected chain it terminates; interior relays aren't buffed (the line feeds its ends).
+func _compute_chain_mult() -> float:
+	var towers : Array = get_tree().get_nodes_in_group("towers")
+	var degree : int = 0
+	for t in towers:
+		if t == self or not _is_linkable(t):
+			continue
+		if global_position.distance_to((t as Node2D).global_position) <= FACTION_PERKS.MESH_LINK_RANGE:
+			degree += 1
+	if degree > 1:
+		return 1.0   ## interior relay — only the ends of the line are empowered
+	var comp : int = _chain_component_size(towers)
+	return 1.0 + float(maxi(0, comp - 1)) * FACTION_PERKS.MESH_CHAIN_DAMAGE_PCT
+
+func _is_linkable(t) -> bool:
+	return is_instance_valid(t) and (t is Node2D) and t.has_method("is_built") and bool(t.call("is_built"))
+
+func _chain_component_size(towers: Array) -> int:
+	var visited : Dictionary = {}
+	visited[self] = true   ## object key (a bare {self: true} literal would key the string "self")
+	var stack : Array = [self]
+	while not stack.is_empty():
+		var cur : Node2D = stack.pop_back() as Node2D
+		for t in towers:
+			if visited.has(t) or not _is_linkable(t):
+				continue
+			if cur.global_position.distance_to((t as Node2D).global_position) <= FACTION_PERKS.MESH_LINK_RANGE:
+				visited[t] = true
+				stack.append(t)
+	return visited.size()
 
 ## Item 3: every tower reveals hidden units. Base reveal = its attack range (it sees what it can
 ## engage); dedicated detector towers (detector_radius set) reveal farther. Returns the larger.

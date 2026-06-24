@@ -122,6 +122,14 @@
 
 ## Enhancements (new design — not currently built)
 
+- [FEATURE][P2 — runtime-pending] Phase 4A faction build preferences (2026-06-24). `FactionPerks.gd`
+  centralizes faction build tuning. **Architects** build faster (×1.6 rate) + sturdier (×1.4 structure
+  HP); **Bloom** towers grow over time (+8% HP / +6% dmg per 5s tick, cap 6, subtle scale-up); **Mesh**
+  connected-tower chains buff endpoints (+12% dmg per linked tower, `_compute_chain_mult`). Tower damage
+  factors `_growth_mult * _chain_mult`. Compile-verified; NEEDS PLAYTEST per faction (F1 architects /
+  F2 mesh / F3 bloom). Tune in `FactionPerks`. Next: Phase 4B passives (walls / pollen / hijack), then
+  Phase 5 build limits. Plan: planning/commander-and-faction-systems.md.
+
 - [ENHANCEMENT][P1] Garrison unit-type selection and composition. Player chooses which unit
   types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.
   Needs: garrison loadout UI, per-type XP, multi-type squad logic. (Found: playtest 2026-06-20)

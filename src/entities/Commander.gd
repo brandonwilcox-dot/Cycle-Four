@@ -16,6 +16,7 @@
 extends Node2D
 
 const Combat = preload("res://src/combat/Combat.gd")
+const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 
 ## Phase 6: vision radius (Chebyshev/square) in cells. Cells within this radius of
 ## the Commander become permanently revealed. ON_REVEAL spawns inside the revealed
@@ -487,7 +488,9 @@ func _try_engineering(delta: float) -> void:
 	var prev : Node = _engineer_target
 	_engineer_target = _find_structure_needing_work()
 	if _engineer_target != null:
-		if not bool(_engineer_target.call("receive_engineering", BUILD_RATE * delta)):
+		## Phase 4A: Architects build faster (faction build-rate multiplier).
+		var rate : float = BUILD_RATE * FACTION_PERKS.build_rate_mult(FactionManager.active_faction)
+		if not bool(_engineer_target.call("receive_engineering", rate * delta)):
 			_engineer_target = null
 	if _engineer_target != null or prev != null:
 		queue_redraw()   ## beam appears / updates / clears

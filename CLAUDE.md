@@ -34,6 +34,27 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-24 (3) — Phase 4A: faction build preferences — COMPILE VERIFIED
+
+First slice of faction identity. New `src/core/FactionPerks.gd` is the single source of faction
+build-pref tuning, preloaded by Commander/Tower/Building (global class_name resolution is unreliable).
+- **Architects** — build faster (Commander build rate × `ARCHITECT_BUILD_RATE_MULT` 1.6) + sturdier
+  structures (Tower/Building `_max_health` × `ARCHITECT_HEALTH_MULT` 1.4) at construction.
+- **Bloom** — towers grow while they stand: a tick (every `BLOOM_GROW_INTERVAL` 5s, cap 6) raises
+  `_max_health` (+8%, heals to match) and a `_growth_mult` on damage (+6% compounding) with a subtle
+  scale-up. `Tower._apply_growth`, gated in `_process` on `active_faction == "bloom"`.
+- **Mesh** — connected tower chains empower endpoints: towers within `MESH_LINK_RANGE` (200px) form a
+  graph; an endpoint (≤1 link) gets `_chain_mult` = 1 + 12%·(chain size − 1); interior relays don't.
+  `Tower._compute_chain_mult` on the existing buff throttle (`_recompute_buffs`).
+- Tower damage now factors `* _growth_mult * _chain_mult` alongside veterancy/aura/territory.
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** per faction (F1 architects
+= faster/tougher builds; F2 mesh = build a tower line, the ends hit harder; F3 bloom = towers strengthen
+the longer they stand). Tune in `FactionPerks`. **Next:** Phase 4B passives (walls / pollen / hijack), then
+Phase 5 build limits.
+
+---
+
 ## Session 2026-06-24 (2) — Phase 3: enemy bases fight back — PLAYTEST VERIFIED
 
 **MILESTONE (playtest 2026-06-24): the Commander-bottleneck arc (Phases 2A + 2B + 3) is verified end

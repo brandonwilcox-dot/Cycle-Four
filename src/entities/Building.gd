@@ -9,6 +9,7 @@ extends Node2D
 
 const FriendlyUnitScript = preload("res://src/entities/FriendlyUnit.gd")
 const FriendlyRosterScript = preload("res://src/core/army/FriendlyRoster.gd")
+const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 
 ## Item 3: every garrison reveals hidden (stealth) units within this modest bubble (~2.5 cells).
 const DETECT_RADIUS : float = 160.0
@@ -121,6 +122,8 @@ func _ready() -> void:
 	## Construction gate: a restored garrison loads already built (its income is already part of the
 	## restored territory_rates, so don't re-add). A fresh placement starts UNDER CONSTRUCTION — no
 	## income or production until the Commander finishes it (receive_engineering → _complete_build).
+	## Phase 4A: Architects build sturdier structures (faction health multiplier).
+	_max_health = MAX_HEALTH * FACTION_PERKS.health_mult(FactionManager.active_faction)
 	_built  = _restored
 	_health = _max_health if _built else START_HEALTH
 	if _restored:
