@@ -34,7 +34,13 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
-## Session 2026-06-24 (2) — Phase 3: enemy bases fight back — COMPILE VERIFIED
+## Session 2026-06-24 (2) — Phase 3: enemy bases fight back — PLAYTEST VERIFIED
+
+**MILESTONE (playtest 2026-06-24): the Commander-bottleneck arc (Phases 2A + 2B + 3) is verified end
+to end — the Commander can't solo the map.** Confirmed in play: towers can't be built next to a live
+enemy base; the Commander must complete tower + garrison construction; base defenders keep a lone
+Commander off the base (you need support); the Commander is destroyed by enemy units and forced to
+retreat. Defender-response fine-tuning deferred. **"Justify building" is solved.**
 
 Completes the "justify building" loop — enemy bases now defend themselves, so assaulting is a real
 fight and the danger exists even before a wave is called (closes the standby gap).
@@ -59,7 +65,7 @@ towers (defense). Next per plan: Phase 4 faction identity (build prefs + passive
 
 ---
 
-## Session 2026-06-24 — Phase 2A: Commander mortality — COMPILE VERIFIED
+## Session 2026-06-24 — Phase 2A: Commander mortality — PLAYTEST VERIFIED 2026-06-24
 
 Second slice of the Commander-bottleneck arc — the Commander can now be destroyed.
 
@@ -84,7 +90,7 @@ defenders) — so assaulting is dangerous even before a wave is called. That com
 
 ---
 
-## Session 2026-06-23 (2) — Phase 2B: Commander as engineer (build + repair) — COMPILE VERIFIED
+## Session 2026-06-23 (2) — Phase 2B: Commander as engineer (build + repair) — PLAYTEST VERIFIED 2026-06-24
 
 Phase 1 playtest: the Commander could solo every base, so building was pointless. Locked w/ user
 (full vision in planning/commander-and-faction-systems.md): make the Commander a mortal, overworked

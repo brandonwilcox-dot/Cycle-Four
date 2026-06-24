@@ -11,7 +11,7 @@
 
 ## Bugs (defects — something broken)
 
-- [BUG][P1][FIX — runtime-pending] Towers placed next to a spawn instakill enemies at the
+- [DONE — playtest-verified 2026-06-24] Towers placed next to a spawn instakill enemies at the
   spawn point — enemies never reach the field; garrisons get no XP. FIXED 2026-06-22 with a
   spawn DMZ (`SPAWN_DMZ_CELLS` = 4, Chebyshev, around each ACTIVE spawn), two layers:
   (1) NO-FIRE — `Tower._select_target` skips targets in `MapGrid.is_in_spawn_dmz` (unit-position
@@ -20,8 +20,8 @@
   greys the placement preview) inside the buffer. As of 2026-06-23 the lift is per-spawn and tied
   to conquest: each spawn projects its buffer only while its enemy base stands; destroying the base
   permaseals the spawn → it drops from the active set → its buffer lifts. (`_battle_won` removed.)
-  See the conquest entry below. Compile-verified; needs a playtest to confirm feel + tune SPAWN_DMZ_CELLS.
-  (Found: playtest 2026-06-20 | DMZ 2026-06-22 | re-keyed to bases 2026-06-23)
+  See the conquest entry below. PLAYTEST-VERIFIED 2026-06-24: towers can't be built next to a live
+  enemy base. Tune SPAWN_DMZ_CELLS later. (Found: 2026-06-20 | DMZ 2026-06-22 | verified 2026-06-24)
 
 - [FEATURE][P1 — runtime-pending] Conquest: enemy bases anchor spawns (Phase 1, 2026-06-23).
   Fixes the auto-completing CLAIM_TERRITORY default win condition (FOB starts ~1705 cells claimed
@@ -37,37 +37,37 @@
   destroyed-state persistence (Continue/return currently respawns bases — same class as the
   [BUG][P2] ObjectiveManager-completion-not-persisted gap).
 
-- [FEATURE][P1 — runtime-pending] Commander as engineer — build + repair (Phase 2B, 2026-06-23).
+- [DONE — playtest-verified 2026-06-24] Commander as engineer — build + repair (Phase 2B, 2026-06-23).
   First slice of "make the Commander a mortal, overworked engineer-leader" so building isn't pointless
   (Phase-1 playtest: Commander solos everything). Towers + garrisons spawn INERT at 10 HP (tower won't
   shoot; garrison earns no income / no production) and ghosted; the Commander must park at them and
   channel its weapon-as-tool (`receive_engineering`, green beam, BUILD_RATE 50 HP/s, range 110px) to
-  bring them online; same tool repairs damage. Restored structures load built. Compile-verified; NEEDS
-  PLAYTEST (place tower → ghosted/inert → Commander builds it → online → shoots). Tune BUILD_RATE /
+  bring them online; same tool repairs damage. Restored structures load built. PLAYTEST-VERIFIED
+  2026-06-24 (Commander must complete tower + garrison construction). Tune BUILD_RATE /
   MAX_HEALTH (T100/G120) / ENGINEER_RANGE_PX. Plan: planning/commander-and-faction-systems.md.
   Follow-ups: building still lacks urgency until PRESSURE lands (Commander mortality + enemy-base
   response, next slices); verify the Academy path (may place/expect instant-working towers); incomplete
   builds aren't persisted distinctly (a saved-then-restored half-built structure loads as built).
 
-- [FEATURE][P1 — runtime-pending] Commander mortality (Phase 2A, 2026-06-24). The Commander has HP
+- [DONE — playtest-verified 2026-06-24] Commander mortality (Phase 2A, 2026-06-24). The Commander has HP
   (300, ~FOB-durable, tunable) + a health bar; enemies grind it in melee (`Unit._engaged_friendly` now
   includes the "commander" group, 8 dmg/interval each). At 0 HP → `commander_destroyed` → forced retreat
   (`Battle._on_commander_destroyed`: stop waves, clear enemies, abandon invasion, revive at board centre,
   zoom to galaxy; in-battle progress lost). Academy-guarded (revives in place during scenarios).
-  Compile-verified; NEEDS PLAYTEST (swarm the Commander → drains → destroyed → retreat to galaxy). Tune
-  `Commander.MAX_HEALTH`. Follow-up: still soloable during STANDBY (no enemies) until Phase 3 enemy-base
-  response makes assaulting dangerous pre-wave. Plan: planning/commander-and-faction-systems.md.
+  PLAYTEST-VERIFIED 2026-06-24 (Commander destroyed by enemy units → forced retreat). Tune
+  `Commander.MAX_HEALTH`. Plan: planning/commander-and-faction-systems.md.
 
-- [FEATURE][P1 — runtime-pending] Enemy bases fight back (Phase 3, 2026-06-24). Bases field a standing
+- [DONE — playtest-verified 2026-06-24] Enemy bases fight back (Phase 3, 2026-06-24). Bases field a standing
   guard of their faction's units (`Unit` defender mode: guards the base, chases player targets within
   220px, leashed 240px, melee via `_engaged_friendly`; death doesn't count vs a wave). `EnemyBase`
   produces them — cap 3 idle / 5 threatened, 5s / 2s interval (responds to an assault) — in the
   EnemyBaseLayer (survives wave clears), freed on base death; `Battle` passes the enemy faction.
   Closes the standby gap (assaulting is dangerous pre-wave) and completes "justify building" (a lone
-  Commander can't crack a defended base → need a garrison army + towers). Compile-verified; NEEDS
-  PLAYTEST. Tune `EnemyBase.DEFENDER_*` / `Unit.DEFENDER_AGGRO`/`DEFENDER_LEASH`.
-  With this, the Commander-bottleneck arc (Phases 2A/2B/3) is feature-complete pending playtest; the
-  whole "justify building" loop should now hold. Plan: planning/commander-and-faction-systems.md.
+  Commander can't crack a defended base → need a garrison army + towers). PLAYTEST-VERIFIED 2026-06-24
+  (defenders keep a lone Commander off the base; with support you can crack it). Tune `EnemyBase.DEFENDER_*`
+  / `Unit.DEFENDER_AGGRO`/`DEFENDER_LEASH` to fine-tune the response later.
+  The Commander-bottleneck arc (Phases 2A/2B/3) is PLAYTEST-VERIFIED — the "justify building" loop holds:
+  Commander can't solo the map. Plan: planning/commander-and-faction-systems.md.
 
 - [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
   Code re-verify 2026-06-22: every procgen spawn now defaults to ACTIVE (MapGenerator._build_spawn_points),
