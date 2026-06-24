@@ -140,6 +140,15 @@
   / `WALL_COST` / `WALL_MIN_SPACING` later if needed. Remaining 4B: Bloom pollen (AoE slow+blind), Mesh
   hijack (convert an enemy). Then Phase 5 build limits. Plan: planning/commander-and-faction-systems.md.
 
+- [FEATURE][P2 — runtime-pending] Phase 4B Bloom pollen + Mesh hijack (2026-06-24). **Bloom:** built
+  towers emit a slow(×0.45)+blind cloud (radius 130, refresh 0.5s, lingers 1.1s); `Unit.apply_pollen`
+  slows movement + suppresses melee; `Tower._emit_pollen` + aura `_draw`. **Mesh:** built towers hijack
+  the nearest enemy (radius 180, cd 8s, dur 6s); `Unit.apply_hijack` swaps units→friendly_units (cyan),
+  chases + melees enemies, reverts on expiry (`_end_hijack`); `Tower._try_hijack`. Compile-verified;
+  NEEDS PLAYTEST (F3 bloom / F2 mesh). Tune `FactionPerks.BLOOM_POLLEN_*` / `MESH_HIJACK_*`. With this,
+  Phase 4B is feature-complete (walls already playtest-verified). Next: Phase 5 build limits — the last
+  faction-arc piece. Plan: planning/commander-and-faction-systems.md.
+
 - [ENHANCEMENT][P1] Garrison unit-type selection and composition. Player chooses which unit
   types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.
   Needs: garrison loadout UI, per-type XP, multi-type squad logic. (Found: playtest 2026-06-20)

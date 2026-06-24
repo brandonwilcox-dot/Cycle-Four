@@ -6,6 +6,7 @@
 extends Node2D
 
 const Combat = preload("res://src/combat/Combat.gd")
+const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
@@ -30,6 +31,9 @@ var _is_dead          : bool     = false
 var _visual           : ColorRect = null   ## placeholder until sprites exist
 var _speed_multiplier : float    = 1.0    ## set by AbilityController (Suppression Field)
 var _stun_until       : float    = -1.0   ## timestamp; movement skipped while now < _stun_until
+var _pollen_until     : float    = -1.0   ## Phase 4B Bloom pollen: slowed + blinded (can't attack) while active
+var _hijacked_until   : float    = -1.0   ## Phase 4B Mesh hijack: fighting former allies while active
+var _pre_hijack_modulate : Color = Color(1, 1, 1, 1)
 
 ## Stealth detection counterplay: recomputed on a throttle; true while this unit is
 ## inside an active detector's radius (FOB / Commander / detector tower).
@@ -85,6 +89,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead:
 		return
+	## Phase 4B Mesh hijack: revert on expiry; while active, fight former allies and skip enemy logic.
+	if _hijacked_until > 0.0 and Time.get_ticks_msec() / 1000.0 >= _hijacked_until:
+		_end_hijack()
+	if _is_hijacked():
+		_hijack_update(delta)
+		return
 	if _waypoints.is_empty() and not _is_defender:
 		return
 	## Stealth: refresh the live reveal tier on a throttle (scans the detectors group).
@@ -107,7 +117,8 @@ func _process(delta: float) -> void:
 		_melee_timer += delta
 		if _melee_timer >= MELEE_INTERVAL:
 			_melee_timer = 0.0
-			if foe.has_method("take_damage"):
+			## Phase 4B: blinded (pollened) enemies still block but can't land the hit.
+			if not _pollen_active() and foe.has_method("take_damage"):
 				foe.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))
 		return
 	## Phase 3: base defenders guard their stronghold — chase nearby player targets instead of
@@ -130,7 +141,7 @@ func _process(delta: float) -> void:
 	var target     : Vector2 = _waypoints[_wp_index]
 	var to_target  : Vector2 = target - global_position
 	var dist       : float   = to_target.length()
-	var step       : float   = data.move_speed * _speed_multiplier * delta
+	var step       : float   = data.move_speed * _speed_multiplier * _pollen_slow() * delta
 	if dist <= step or dist <= ARRIVE_DIST:
 		global_position = target
 		_wp_index += 1
@@ -226,6 +237,72 @@ func apply_stun(duration: float) -> void:
 		return
 	_stun_until = Time.get_ticks_msec() / 1000.0 + duration
 
+## Phase 4B Bloom pollen: while active the unit is slowed (_pollen_slow) and blinded (can't attack).
+## Bloom towers re-apply it each cadence; it lingers BLOOM_POLLEN_DURATION after leaving the cloud.
+func apply_pollen(duration: float) -> void:
+	if data != null and data.status_immune:
+		return
+	_pollen_until = Time.get_ticks_msec() / 1000.0 + duration
+
+func _pollen_active() -> bool:
+	return _pollen_until > 0.0 and Time.get_ticks_msec() / 1000.0 < _pollen_until
+
+func _pollen_slow() -> float:
+	return FACTION_PERKS.BLOOM_POLLEN_SLOW if _pollen_active() else 1.0
+
+## -- Phase 4B Mesh hijack --
+
+## Convert this enemy to fight its former allies for `duration`. Swaps groups (units → friendly_units)
+## so the player's towers/Commander ignore it and enemies attack it; reverts (cyan tint cleared) on expiry.
+func apply_hijack(duration: float) -> void:
+	if data != null and data.status_immune:
+		return
+	if not _is_hijacked():
+		_pre_hijack_modulate = modulate
+		remove_from_group("units")
+		add_to_group("friendly_units")
+		modulate = Color(0.35, 0.85, 1.0, 1.0)   ## cyan — converted
+	_hijacked_until = Time.get_ticks_msec() / 1000.0 + duration
+
+func _is_hijacked() -> bool:
+	return _hijacked_until > 0.0 and Time.get_ticks_msec() / 1000.0 < _hijacked_until
+
+func _end_hijack() -> void:
+	_hijacked_until = -1.0
+	remove_from_group("friendly_units")
+	add_to_group("units")
+	modulate = _pre_hijack_modulate
+
+## While hijacked: close on the nearest remaining enemy and grind it (no leash — it roams to fight).
+func _hijack_update(delta: float) -> void:
+	var target : Node2D = _nearest_enemy_unit()
+	if target == null:
+		return
+	var d : float = global_position.distance_to(target.global_position)
+	if d > MELEE_ENGAGE_RANGE:
+		var step : float = data.move_speed * _speed_multiplier * delta
+		var dir  : Vector2 = target.global_position - global_position
+		global_position += dir.normalized() * minf(step, dir.length())
+	else:
+		_melee_timer += delta
+		if _melee_timer >= MELEE_INTERVAL:
+			_melee_timer = 0.0
+			if target.has_method("take_damage"):
+				target.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))
+
+## Nearest real enemy (hijacked units are removed from "units", so this only finds true enemies).
+func _nearest_enemy_unit() -> Node2D:
+	var best : Node2D = null
+	var best_d : float = 1.0e20
+	for u in get_tree().get_nodes_in_group("units"):
+		if u == self or not is_instance_valid(u) or not (u is Node2D):
+			continue
+		var d : float = global_position.distance_to((u as Node2D).global_position)
+		if d < best_d:
+			best_d = d
+			best = u
+	return best
+
 ## Stealth gating (Pass 2): non-stealth units are always detectable. Stealth units
 ## are only visible/targetable while standing in a sensed cell (a sensor sphere).
 ## Attackers call this before locking on; AoE abilities ignore it.
@@ -294,7 +371,7 @@ func _nearest_player_target() -> Node2D:
 	return best
 
 func _move_toward_guard(point: Vector2, delta: float) -> void:
-	var step : float = data.move_speed * _speed_multiplier * delta
+	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * delta
 	var dir  : Vector2 = point - global_position
 	if dir.length() <= step:
 		global_position = point

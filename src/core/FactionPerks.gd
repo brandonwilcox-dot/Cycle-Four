@@ -19,9 +19,20 @@ const BLOOM_GROW_HEALTH_PCT : float = 0.08   ## +8% max health per tick (heals a
 const BLOOM_GROW_DAMAGE_PCT : float = 0.06   ## +6% damage per tick (compounding)
 const BLOOM_GROW_MAX_STACKS : int   = 6      ## cap → ~+59% health, +42% damage at full growth
 
+# -- Bloom passive: pollen (built towers emit a slow + blind cloud) --
+const BLOOM_POLLEN_RADIUS   : float = 130.0  ## px (~2 cells) cloud around a built Bloom tower
+const BLOOM_POLLEN_SLOW     : float = 0.45   ## enemies move at 45% speed inside the cloud
+const BLOOM_POLLEN_REFRESH  : float = 0.5    ## seconds between the tower re-applying pollen
+const BLOOM_POLLEN_DURATION : float = 1.1    ## pollen lingers this long after leaving the cloud
+
 # -- Mesh: connected tower chains empower their endpoints --
 const MESH_LINK_RANGE       : float = 200.0  ## towers within this (px) are linked
 const MESH_CHAIN_DAMAGE_PCT : float = 0.12   ## +12% damage per other tower in the chain (endpoints only)
+
+# -- Mesh passive: hijack (built towers convert a nearby enemy to fight its allies, briefly) --
+const MESH_HIJACK_RADIUS    : float = 180.0  ## px; tower converts an enemy within this
+const MESH_HIJACK_COOLDOWN  : float = 8.0    ## seconds between hijacks per tower
+const MESH_HIJACK_DURATION  : float = 6.0    ## the convert lasts this long, then the enemy reverts
 
 ## Construction-speed multiplier for the player's faction (Commander build rate).
 static func build_rate_mult(faction: String) -> float:

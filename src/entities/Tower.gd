@@ -70,6 +70,8 @@ var _growth_mult   : float = 1.0
 var _growth_stacks : int   = 0
 var _grow_timer    : float = 0.0
 var _chain_mult    : float = 1.0
+var _pollen_timer  : float = 0.0   ## Phase 4B Bloom pollen emit cadence
+var _hijack_timer  : float = 2.0   ## Phase 4B Mesh hijack cooldown (first convert ~2s after active)
 
 ## Called by Main before adding to scene tree. start_built=true for save-restore (already built);
 ## fresh placements default to false so the Commander must construct them.
@@ -130,6 +132,17 @@ func _process(delta: float) -> void:
 		if _grow_timer >= FACTION_PERKS.BLOOM_GROW_INTERVAL:
 			_grow_timer = 0.0
 			_apply_growth()
+	## Phase 4B: Bloom towers emit a pollen cloud — slow + blind enemies in radius.
+	if FactionManager.active_faction == "bloom":
+		_pollen_timer -= delta
+		if _pollen_timer <= 0.0:
+			_pollen_timer = FACTION_PERKS.BLOOM_POLLEN_REFRESH
+			_emit_pollen()
+	## Phase 4B: Mesh towers periodically hijack a nearby enemy to fight its allies.
+	if FactionManager.active_faction == "mesh":
+		_hijack_timer -= delta
+		if _hijack_timer <= 0.0:
+			_hijack_timer = FACTION_PERKS.MESH_HIJACK_COOLDOWN if _try_hijack() else 0.5
 
 ## Replaces this tower's data with the next tier and rebuilds the visual in place.
 ## Called by Main._try_upgrade_tower() after spending the upgrade cost.
@@ -343,6 +356,38 @@ func _chain_component_size(towers: Array) -> int:
 				stack.append(t)
 	return visited.size()
 
+## Phase 4B: re-apply pollen to every enemy unit inside this Bloom tower's cloud (slow + blind).
+func _emit_pollen() -> void:
+	for u in get_tree().get_nodes_in_group("units"):
+		if not is_instance_valid(u) or not (u is Node2D) or not u.has_method("apply_pollen"):
+			continue
+		if global_position.distance_to((u as Node2D).global_position) <= FACTION_PERKS.BLOOM_POLLEN_RADIUS:
+			u.call("apply_pollen", FACTION_PERKS.BLOOM_POLLEN_DURATION)
+
+## Phase 4B: convert the nearest enemy in range to fight its allies. Returns true if one was hijacked.
+func _try_hijack() -> bool:
+	var best : Node2D = null
+	var best_d : float = FACTION_PERKS.MESH_HIJACK_RADIUS
+	for u in get_tree().get_nodes_in_group("units"):
+		if not is_instance_valid(u) or not (u is Node2D) or not u.has_method("apply_hijack"):
+			continue
+		var d : float = global_position.distance_to((u as Node2D).global_position)
+		if d <= best_d:
+			best_d = d
+			best = u
+	if best == null:
+		return false
+	best.call("apply_hijack", FACTION_PERKS.MESH_HIJACK_DURATION)
+	return true
+
+## Phase 4B: draw the Bloom pollen cloud so its reach reads on the board (built Bloom towers only).
+func _draw() -> void:
+	if not (_built and FactionManager.active_faction == "bloom"):
+		return
+	var r : float = FACTION_PERKS.BLOOM_POLLEN_RADIUS
+	draw_circle(Vector2.ZERO, r, Color(0.35, 0.75, 0.30, 0.10))
+	draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(0.45, 0.85, 0.40, 0.45), 1.5, true)
+
 ## Item 3: every tower reveals hidden units. Base reveal = its attack range (it sees what it can
 ## engage); dedicated detector towers (detector_radius set) reveal farther. Returns the larger.
 func get_detector_radius() -> float:
@@ -442,3 +487,4 @@ func _refresh_build_visual() -> void:
 		_build_bar.visible = _health < _max_health   ## show while building or damaged
 		_build_bar.size.x  = BUILD_BAR_W * frac
 	modulate = Color(1, 1, 1, 1) if _built else Color(0.6, 0.85, 1.0, 0.5)
+	queue_redraw()   ## refresh the Bloom pollen aura (drawn in _draw) when build state changes

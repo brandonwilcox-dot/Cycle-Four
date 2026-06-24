@@ -75,8 +75,11 @@ function Export-Build {
 
         Write-Host "[$Mode] FAILED (exit $($proc.ExitCode))" -ForegroundColor Red
         if ($scriptErrors) { $scriptErrors | ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor Red } }
+        if (-not $scriptErrors -and (Test-Path $Out)) { Write-Host "  (no script errors -- the output file may be LOCKED; is the .exe still running?)" -ForegroundColor Yellow }
         Write-Host "--- stderr tail ---"
-        if (Test-Path $logErr) { Get-Content $logErr -Tail 12 }
+        ## Route the tail through Write-Host so it does NOT leak into the function's return value
+        ## (a bare Get-Content would make the caller see a truthy result and wrongly report success).
+        if (Test-Path $logErr) { Get-Content $logErr -Tail 12 | ForEach-Object { Write-Host $_ } }
         return $false
     }
     return $false

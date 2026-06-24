@@ -34,6 +34,27 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-24 (5) — Phase 4B (ii/iii): Bloom pollen + Mesh hijack — COMPILE VERIFIED
+
+The remaining two faction passives — Phase 4B is now feature-complete (compile).
+- **Bloom pollen:** built Bloom towers emit a cloud (`BLOOM_POLLEN_RADIUS` 130) that **slows** (×0.45)
+  and **blinds** (can't attack) enemies inside, re-applied every 0.5s and lingering ~1.1s after they
+  leave. `Unit.apply_pollen` slows movement (both move paths) + suppresses the melee hit; `Tower._emit_pollen`
+  applies it on a cadence and `Tower._draw` shows the aura ring. A control aura — pair with walls/towers
+  for a kill box.
+- **Mesh hijack:** built Mesh towers convert the nearest enemy in range (`MESH_HIJACK_RADIUS` 180) every
+  `MESH_HIJACK_COOLDOWN` 8s for `MESH_HIJACK_DURATION` 6s. `Unit.apply_hijack` swaps groups
+  (units → friendly_units, cyan tint) so the player's towers/Commander ignore it and enemies attack it; a
+  hijack branch in `Unit._process` makes it chase + melee the nearest remaining enemy; `_end_hijack`
+  reverts group + tint on expiry. `Tower._try_hijack` triggers it.
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** (F3 bloom: enemies crawl
++ stop attacking in a green cloud; F2 mesh: an enemy periodically turns cyan and fights its allies). Tune
+`FactionPerks.BLOOM_POLLEN_*` / `MESH_HIJACK_*`. **Phase 4B feature-complete** — walls verified; pollen +
+hijack compile-clean, need playtest. Next: **Phase 5 build limits** — the last faction-arc piece.
+
+---
+
 ## Session 2026-06-24 (4) — Phase 4B (i): Architect walls — PLAYTEST VERIFIED 2026-06-24
 
 Verified in play: walls build, take damage, the Commander repairs them after construction, spacing
