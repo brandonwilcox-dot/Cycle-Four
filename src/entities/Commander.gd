@@ -60,6 +60,13 @@ const ENGINEER_RANGE_PX   : float = 110.0
 const BUILD_RATE          : float = 50.0
 const ENGINEER_LINE_COLOR : Color = Color(0.40, 1.00, 0.70, 0.90)
 
+## Mortality (Phase 2A — commander-and-faction-systems.md). The Commander has health and can be
+## destroyed. Enemies grind it in melee (Unit._engaged_friendly now includes the "commander" group);
+## at 0 HP it emits commander_destroyed and Battle forces a retreat to the galaxy. ~FOB-durable; tunable.
+const MAX_HEALTH       : float = 300.0
+const HEALTH_BAR_W     : float = 34.0
+const HEALTH_BAR_COLOR : Color = Color(0.30, 0.95, 0.40, 1.0)
+
 const CELL_SIZE_PX          : float = 64.0
 const LOS_RING_COLOR        : Color = Color(1.00, 1.00, 0.80, 0.35)
 const SENSOR_RING_COLOR     : Color = Color(0.40, 0.80, 1.00, 0.18)
@@ -97,6 +104,12 @@ var _cannon_ring_t      : float = 0.0   ## seconds remaining to draw the Lance/c
 ## Engineering: the structure being built/repaired this frame (drives the build beam in _draw). Null when idle.
 var _engineer_target : Node = null
 
+## Mortality state. _dead halts all action until Battle revives the Commander after a forced retreat.
+var _max_health     : float     = MAX_HEALTH
+var _current_health : float     = MAX_HEALTH
+var _dead           : bool      = false
+var _health_bar     : ColorRect = null
+
 ## Untyped: AbilityController class_name isn't registered when Commander.gd parses.
 ## Same pattern as ConvoyManager/Convoy. Duck-typed access is safe at runtime.
 var _ability_controller = null
@@ -119,6 +132,8 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if _dead:
+		return   ## destroyed — inert until Battle revives the Commander for redeploy
 	## Toggle the move-path overlay with the Shift key (SupCom-style waypoint preview).
 	## Only redraw on a state change, and only when selected — the path is meaningless otherwise.
 	var shift_now : bool = Input.is_key_pressed(KEY_SHIFT)
@@ -387,12 +402,26 @@ func _build_visual() -> void:
 	_rank_chevrons.z_index = 20
 	add_child(_rank_chevrons)
 
+	## Mortality (Phase 2A): health bar below the body (rank bar + chevrons sit above it).
+	var hb_bg := ColorRect.new()
+	hb_bg.size     = Vector2(HEALTH_BAR_W, 4.0)
+	hb_bg.position = Vector2(-HEALTH_BAR_W * 0.5, 18.0)
+	hb_bg.color    = Color(0.12, 0.12, 0.12, 0.9)
+	add_child(hb_bg)
+	_health_bar = ColorRect.new()
+	_health_bar.size     = Vector2(HEALTH_BAR_W, 4.0)
+	_health_bar.position = Vector2(-HEALTH_BAR_W * 0.5, 18.0)
+	_health_bar.color    = HEALTH_BAR_COLOR
+	add_child(_health_bar)
+
 	## CRITICAL: the gold body is a ColorRect (a Control) — by default MOUSE_FILTER_STOP, so it
 	## consumes left-clicks in _gui_input before they reach _unhandled_input, i.e. clicking
 	## directly ON the Commander failed to select it. Make all visual Controls click-through.
 	for child in get_children():
 		if child is Control:
 			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_update_health_visual()
 
 func _update_rank_bar() -> void:
 	if _rank_bar == null:
@@ -477,6 +506,37 @@ func _find_structure_needing_work() -> Node:
 				best_dist = d
 				best = s
 	return best
+
+## -- Phase 2A mortality: the Commander can be destroyed --
+
+## Incoming damage from enemy melee. Flat for the hero (the damage/armor triangle governs units, not
+## the Commander). At 0 HP the Commander is destroyed → it emits commander_destroyed and Battle forces
+## a retreat. Returns true if dead (matches the take_damage contract enemy melee uses on any blocker).
+func take_damage(amount: float, _damage_type: int = -1) -> bool:
+	if _dead:
+		return true
+	_current_health = maxf(0.0, _current_health - amount)
+	_update_health_visual()
+	if _current_health <= 0.0:
+		_dead = true
+		hide()
+		EventBus.commander_destroyed.emit()
+		return true
+	return false
+
+## Restores the Commander for redeployment after a forced retreat (Battle calls this).
+func revive() -> void:
+	_dead = false
+	_current_health = _max_health
+	show()
+	_update_health_visual()
+
+func _update_health_visual() -> void:
+	if _health_bar == null:
+		return
+	var frac : float = clampf(_current_health / _max_health, 0.0, 1.0)
+	_health_bar.size.x = HEALTH_BAR_W * frac
+	_health_bar.color  = HEALTH_BAR_COLOR.lerp(Color(0.95, 0.25, 0.20, 1.0), 1.0 - frac)
 
 ## Stealth detection (px): the Commander FULLY reveals stealth within its drawn LoS ring (item 2 —
 ## tracks the live sight ring, which grows with rank). Matches the on-screen ring so "inside the ring

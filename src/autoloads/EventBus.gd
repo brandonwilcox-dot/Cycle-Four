@@ -100,6 +100,7 @@ signal academy_phase_ended()        ## HUD restores wave button after sorting
 signal academy_spawn_requested(spawn_idx: int, count: int)  ## WaveSpawner handles
 signal academy_clear_units()        ## WaveSpawner frees all units between scenarios
 signal commander_attacked()         ## Commander primary fire hit — Mesh behavior signal
+signal commander_destroyed()        ## Commander HP reached zero → Battle forces a retreat to the galaxy
 
 # -- Memory / Pilgrimage --
 signal memory_tier_unlocked(tier: int)

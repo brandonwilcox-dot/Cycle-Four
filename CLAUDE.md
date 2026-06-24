@@ -34,6 +34,31 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-24 — Phase 2A: Commander mortality — COMPILE VERIFIED
+
+Second slice of the Commander-bottleneck arc — the Commander can now be destroyed.
+
+- **HP + health bar** (`Commander.MAX_HEALTH` 300, ~FOB-durable, tunable) below the body;
+  `take_damage(amount, type)` (flat — the triangle governs units, not the hero), `revive()`, and a
+  `_dead` gate that halts all action (move/attack/engineer/claim) until revived.
+- **Enemies grind the Commander:** `Unit._engaged_friendly()` now also scans the "commander" group, so
+  any enemy within MELEE_ENGAGE_RANGE stops and hits it (ENEMY_MELEE_DAMAGE 8/interval each). Parking in
+  the fray — e.g. on a base amid spawns — is now dangerous.
+- **Death → forced retreat** (`commander_destroyed` → `Battle._on_commander_destroyed`): stop waves
+  (`WaveManager.reset`), clear pressing enemies, abandon the invasion (`invading_node=""`), revive the
+  Commander at board centre, zoom out to the galaxy. In-battle progress is lost (redeploy reloads fresh)
+  — that's the cost. Academy guard: during live scenarios the Commander just revives in place (no retreat).
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** — let a wave swarm the
+Commander → health bar drains → at 0 it's destroyed, "forced to retreat," zoomed to the galaxy with a
+healed Commander to redeploy. Tune `Commander.MAX_HEALTH`.
+
+**Loop note:** mortality bites while waves are live, but you can still destroy bases during STANDBY (no
+enemies = no danger). Closing that needs the next slice — **Phase 3 enemy-base response** (bases spawn
+defenders) — so assaulting is dangerous even before a wave is called. That completes "can't recklessly solo."
+
+---
+
 ## Session 2026-06-23 (2) — Phase 2B: Commander as engineer (build + repair) — COMPILE VERIFIED
 
 Phase 1 playtest: the Commander could solo every base, so building was pointless. Locked w/ user

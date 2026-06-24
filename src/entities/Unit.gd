@@ -210,7 +210,9 @@ func is_detectable() -> bool:
 		return true
 	return _is_detected
 
-## C2: nearest friendly army unit within melee range, or null. Drives blocking + retaliation.
+## C2: nearest meleeable friendly within range, or null. Drives blocking + retaliation.
+## Phase 2A: the Commander is meleeable too — sitting in the fray (e.g. assaulting a base amid
+## spawns) is now dangerous, so it can no longer solo with impunity.
 func _engaged_friendly() -> Node2D:
 	var best   : Node2D = null
 	var best_d : float  = MELEE_ENGAGE_RANGE
@@ -220,6 +222,13 @@ func _engaged_friendly() -> Node2D:
 		var d : float = global_position.distance_to((f as Node2D).global_position)
 		if d <= best_d:
 			best   = f
+			best_d = d
+	for c in get_tree().get_nodes_in_group("commander"):
+		if not is_instance_valid(c) or not (c is Node2D):
+			continue
+		var d : float = global_position.distance_to((c as Node2D).global_position)
+		if d <= best_d:
+			best   = c
 			best_d = d
 	return best
 

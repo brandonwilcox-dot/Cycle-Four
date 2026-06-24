@@ -49,6 +49,15 @@
   response, next slices); verify the Academy path (may place/expect instant-working towers); incomplete
   builds aren't persisted distinctly (a saved-then-restored half-built structure loads as built).
 
+- [FEATURE][P1 — runtime-pending] Commander mortality (Phase 2A, 2026-06-24). The Commander has HP
+  (300, ~FOB-durable, tunable) + a health bar; enemies grind it in melee (`Unit._engaged_friendly` now
+  includes the "commander" group, 8 dmg/interval each). At 0 HP → `commander_destroyed` → forced retreat
+  (`Battle._on_commander_destroyed`: stop waves, clear enemies, abandon invasion, revive at board centre,
+  zoom to galaxy; in-battle progress lost). Academy-guarded (revives in place during scenarios).
+  Compile-verified; NEEDS PLAYTEST (swarm the Commander → drains → destroyed → retreat to galaxy). Tune
+  `Commander.MAX_HEALTH`. Follow-up: still soloable during STANDBY (no enemies) until Phase 3 enemy-base
+  response makes assaulting dangerous pre-wave. Plan: planning/commander-and-faction-systems.md.
+
 - [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
   Code re-verify 2026-06-22: every procgen spawn now defaults to ACTIVE (MapGenerator._build_spawn_points),
   `_activate_all_spawns()` runs post-Academy as a backstop, and `_build_spawn_queue` splits units

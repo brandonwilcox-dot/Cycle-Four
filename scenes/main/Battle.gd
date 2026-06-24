@@ -89,6 +89,7 @@ func _ready() -> void:
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)
+	EventBus.commander_destroyed.connect(_on_commander_destroyed)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
 	EventBus.panel_sell_requested.connect(_on_panel_sell_requested)
 	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine_requested)
@@ -277,6 +278,39 @@ func _on_enemy_base_destroyed(spawn_id: StringName) -> void:
 		data.call("permaseal_spawn_by_id", spawn_id)
 	_map_grid.queue_redraw()   ## spawn rendering follows the now-sealed state
 	EventBus.notification_pushed.emit("Enemy stronghold destroyed — its spawn is sealed.", "positive")
+
+## Phase 2A: the Commander was destroyed → forced retreat to the galaxy. Break off the assault
+## (stop waves + clear the enemies pressing us), abandon the invasion (contested node stays enemy),
+## revive the Commander at the board centre for redeploy, and zoom out to the galaxy map. The
+## in-battle progress is lost because a later redeploy reloads the territory fresh — that's the cost.
+func _on_commander_destroyed() -> void:
+	## During the Academy's live scenarios the Commander must not trigger a galaxy retreat (it would
+	## break the tutorial) — just patch it back up in place.
+	if _academy_scenarios_active:
+		var c : Node = _commander()
+		if c != null and c.has_method("revive"):
+			c.call("revive")
+		return
+	EventBus.notification_pushed.emit("Commander destroyed — forced to retreat. Redeploy from the galaxy map.", "alert")
+	WaveManager.reset()
+	var ulayer : Node = get_node_or_null("WorldMap/UnitLayer")
+	if ulayer != null:
+		for c in ulayer.get_children():
+			c.queue_free()
+	GalaxyManager.invading_node = ""
+	var cmd : Node = _commander()
+	if cmd != null:
+		if cmd.has_method("revive"):
+			cmd.call("revive")
+		(cmd as Node2D).position = BOARD_CENTER
+		cmd.call("set_selected", true)
+	var cam : Node = get_node_or_null("WorldMap/Camera")
+	if cam != null and cam.has_method("board_min_zoom"):
+		var gz : float = float(cam.call("board_min_zoom")) * 0.5   ## below the galaxy threshold
+		cam.set("zoom", Vector2(gz, gz))
+		cam.set("position", BOARD_CENTER)
+	if _galaxy_view != null and is_instance_valid(_galaxy_view):
+		_galaxy_view.call("setup", BOARD_CENTER)
 
 ## [Persistence] Snapshots the current battle's per-territory development (Step 2: claimed cells)
 ## into the active node's saved state. Connected to EventBus.game_saving so it runs just before each
