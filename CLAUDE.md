@@ -34,6 +34,28 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-24 (4) — Phase 4B (i): Architect walls — COMPILE VERIFIED
+
+First faction PASSIVE. New `src/entities/Wall.gd`: a destructible, cell-occupying Architect barrier,
+Commander-built (construction state like towers). Deliberately NOT added to the enemy AStar — enemies
+path straight into a built wall and must DESTROY it to pass ("block paths enemies have to unblock").
+`Unit._engaged_friendly` now also returns built walls as blockers, so an enemy stops + grinds a wall in
+melee, then proceeds once it's down. Commander's engineering scan includes "walls" (it builds/repairs them).
+- **Placement:** Architect-only "Build Wall" button (added programmatically to the HUD ActionBar HBox,
+  shown on faction select for architects) → `wall_placement_requested` → `Battle` wall-placement mode (a
+  third mode beside tower/build: preview ghost, LEFT place / RIGHT|ESC cancel). `WALL_COST` 15.
+- **Density cap:** `WALL_MIN_SPACING` 2 — no two walls within 2 cells (can't make a solid wall). No
+  connectivity test (walls are meant to block; enemies destroy them rather than reroute).
+- Walls live in `tower_layer` (cleared on deploy); `_wall_cells` tracks them, pruned of enemy-destroyed
+  walls (they free themselves) and cleared on deploy.
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** — F1 architects → "Build
+Wall" → place on the enemy corridor → Commander raises it → enemies stop + grind it down to pass (towers
+shoot the stalled enemies). Tune `Wall.MAX_HEALTH`, `WALL_COST`, `WALL_MIN_SPACING`.
+**Remaining 4B:** Bloom pollen (AoE slow + blind), Mesh hijack (convert an enemy). Then Phase 5 build limits.
+
+---
+
 ## Session 2026-06-24 (3) — Phase 4A: faction build preferences — COMPILE VERIFIED
 
 First slice of faction identity. New `src/core/FactionPerks.gd` is the single source of faction

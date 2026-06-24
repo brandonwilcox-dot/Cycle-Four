@@ -48,6 +48,7 @@ var _minimap : Control = null
 @onready var place_tower_btn    : Button        = $ActionBar/PlaceTowerBtn
 @onready var place_building_btn : Button        = $ActionBar/PlaceBuildingBtn
 @onready var research_btn       : Button        = $ActionBar/ResearchBtn
+var _place_wall_btn   : Button = null   ## Phase 4B Architect-only action; created in _ready, shown on faction select
 
 ## ── Notifications ───────────────────────────────────────────────────────────
 @onready var notification_stack : VBoxContainer = $NotificationStack
@@ -98,6 +99,13 @@ func _ready() -> void:
 	EventBus.subpath_committed.connect(_on_subpath_committed_hud)
 	EventBus.academy_phase_started.connect(func() -> void: start_wave_btn.hide())
 	EventBus.academy_phase_ended.connect(func() -> void: start_wave_btn.show())
+	## Phase 4B: Architect-only "Build Wall" action. Added to the ActionBar (an HBoxContainer, so it
+	## auto-lays-out); hidden until faction select reveals it for Architects.
+	_place_wall_btn = Button.new()
+	_place_wall_btn.text = "Build Wall"
+	_place_wall_btn.hide()
+	_place_wall_btn.pressed.connect(_on_place_wall_pressed)
+	$ActionBar.add_child(_place_wall_btn)
 	obj_summary_btn.pressed.connect(_toggle_objective_panel)
 	start_wave_btn.pressed.connect(_on_start_wave_pressed)
 	place_tower_btn.pressed.connect(_on_place_tower_pressed)
@@ -132,6 +140,9 @@ func _on_faction_selected(faction_id: String, sub_path: String) -> void:
 	else:
 		place_building_btn.text     = "Place Building"
 		place_building_btn.disabled = true
+	## Phase 4B: the wall barrier is an Architect-only action.
+	if _place_wall_btn != null:
+		_place_wall_btn.visible = (faction_id == "architects")
 	## Sync resource display immediately (handles post-game-over reloads where
 	## resource_changed won't re-fire for values already set in EconomyManager).
 	var p : String = FactionManager.get_primary_resource()
@@ -261,6 +272,9 @@ func _on_placement_started(_tower_data: Resource) -> void:
 
 func _on_start_wave_pressed() -> void:
 	WaveManager.begin_waves()
+
+func _on_place_wall_pressed() -> void:
+	EventBus.wall_placement_requested.emit()
 
 func _on_place_tower_pressed() -> void:
 	if _starter_tower == null:

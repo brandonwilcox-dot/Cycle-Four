@@ -498,7 +498,7 @@ func _try_engineering(delta: float) -> void:
 func _find_structure_needing_work() -> Node:
 	var best : Node = null
 	var best_dist : float = ENGINEER_RANGE_PX
-	for grp in ["towers", "buildings"]:
+	for grp in ["towers", "buildings", "walls"]:
 		for s in get_tree().get_nodes_in_group(grp):
 			if not is_instance_valid(s) or not (s is Node2D) or not s.has_method("needs_engineering"):
 				continue

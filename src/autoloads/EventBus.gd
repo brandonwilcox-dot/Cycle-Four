@@ -33,6 +33,7 @@ signal tower_placed(tower_data: Resource, grid_pos: Vector2i)
 signal tower_upgraded(tower_data: Resource, grid_pos: Vector2i)  ## existing tower → next tier (distinct from a fresh placement)
 signal path_changed  ## Emitted by Main when a tower blocks a PATH cell; units reroute
 signal building_placement_requested(building_data: Resource) ## HUD -> Main: enter build mode
+signal wall_placement_requested()                            ## HUD -> Battle: enter Architect wall placement
 signal building_placed(building_data: Resource, grid_pos: Vector2i)
 signal building_destroyed(building_data: Resource, grid_pos: Vector2i)
 signal building_sold(building_data: Dictionary, grid_pos: Vector2i)

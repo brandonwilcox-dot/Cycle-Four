@@ -8,6 +8,10 @@ const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tsc
 const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.tscn")
 const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
 const ENEMY_BASE_SCRIPT     = preload("res://src/entities/EnemyBase.gd")
+const WALL_SCRIPT           = preload("res://src/entities/Wall.gd")
+## Phase 4B Architect walls: cheap barrier with a capped density (no two walls within N cells).
+const WALL_COST             : float = 15.0
+const WALL_MIN_SPACING      : int   = 2
 const GALAXY_VIEW_SCRIPT    = preload("res://src/ui/GalaxyView.gd")
 const MAP_GENERATOR_SCRIPT  = preload("res://src/core/map/MapGenerator.gd")
 const WAVE_TABLE_BUILDER    = preload("res://src/core/waves/WaveTableBuilder.gd")
@@ -64,6 +68,10 @@ var _building_cells   : Dictionary = {}
 ## destroying a base seals its spawn and lifts that spawn's DMZ. See planning/territory-conquest-plan.md.
 var _enemy_bases      : Dictionary = {}
 
+## Phase 4B Architect wall placement state.
+var _wall_mode   : bool       = false
+var _wall_cells  : Dictionary = {}   ## Vector2i -> Wall node
+
 ## Inspection state -- tracks which cell is currently open in the inspection panel.
 var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
 
@@ -88,6 +96,7 @@ func _ready() -> void:
 	academy.selection_confirmed.connect(_on_faction_confirmed)
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
 	EventBus.building_placement_requested.connect(_on_build_requested)
+	EventBus.wall_placement_requested.connect(_on_wall_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)
 	EventBus.commander_destroyed.connect(_on_commander_destroyed)
@@ -235,6 +244,7 @@ func _load_territory_map(node_id: String) -> void:
 				c.queue_free()
 	_occupied_cells.clear()
 	_building_cells.clear()
+	_wall_cells.clear()
 	_inspected_cell = Vector2i(-1, -1)
 	_map_grid.load_map_data(MAP_GENERATOR_SCRIPT.generate(GalaxyManager.node_seed(node_id)))
 	_activate_all_spawns()
@@ -521,6 +531,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_cancel_placement()
 			elif _build_mode:
 				_cancel_build()
+			elif _wall_mode:
+				_cancel_wall()
 			else:
 				hud.enter_glance_state()
 			get_viewport().set_input_as_handled()
@@ -550,6 +562,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif _build_mode:
 				_try_place_building(event.position)
 				get_viewport().set_input_as_handled()
+			elif _wall_mode:
+				_try_place_wall(event.position)
+				get_viewport().set_input_as_handled()
 			elif _in_galaxy_zoom():
 				_handle_galaxy_click(event.position)
 				get_viewport().set_input_as_handled()
@@ -563,6 +578,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif _build_mode:
 				_cancel_build()
 				get_viewport().set_input_as_handled()
+			elif _wall_mode:
+				_cancel_wall()
+				get_viewport().set_input_as_handled()
 			else:
 				_handle_move_click(event.position, event.shift_pressed)
 				get_viewport().set_input_as_handled()
@@ -570,7 +588,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## -- Placement preview ghost --
 
 func _process(_delta: float) -> void:
-	if not (_placement_mode or _build_mode):
+	if not (_placement_mode or _build_mode or _wall_mode):
 		if _placement_preview.visible:
 			_placement_preview.visible = false
 		return
@@ -613,12 +631,15 @@ func _is_cell_placeable(cell: Vector2i) -> bool:
 		return not _building_cells.has(cell) \
 			and bool(_map_grid.call("is_claimed", cell.x, cell.y)) \
 			and not bool(_map_grid.call("is_build_excluded", cell.x, cell.y))
+	if _wall_mode:
+		return _can_place_wall(cell)
 	return not _occupied_cells.has(cell) and _map_grid.can_place_at(cell.x, cell.y)
 
 ## -- Tower placement --
 
 func _on_placement_requested(tower_data: Resource) -> void:
 	_cancel_build()          ## Exit build mode if active
+	_cancel_wall()           ## Exit wall mode if active
 	hud.close_inspection()   ## Dismiss inspection panel when entering placement
 	_pending_tower  = tower_data
 	_placement_mode = true
@@ -708,6 +729,7 @@ func _try_upgrade_tower(cell: Vector2i, branch: int = 0) -> void:
 
 func _on_build_requested(building_data: Resource) -> void:
 	_cancel_placement()       ## Exit tower mode if active
+	_cancel_wall()            ## Exit wall mode if active
 	hud.close_inspection()    ## Dismiss inspection panel when entering build mode
 	_pending_building = building_data
 	_build_mode       = true
@@ -762,6 +784,70 @@ func _cancel_build() -> void:
 	GameState.placement_active = false
 	_pending_building = null
 	hud.end_build_mode()
+
+## -- Phase 4B: Architect wall placement --
+
+## Enter wall-placement mode (Architects only — the HUD only shows the button for them, but guard here too).
+func _on_wall_requested() -> void:
+	if FactionManager.active_faction != "architects":
+		return
+	_cancel_placement()
+	_cancel_build()
+	hud.close_inspection()
+	_wall_mode = true
+	GameState.placement_active = true
+	_preview_cell = Vector2i(-9999, -9999)
+
+## A wall may go on any in-bounds cell that isn't the base, a spawn, a spawn DMZ, already occupied
+## (tower/building/wall), or within WALL_MIN_SPACING of another wall (the density cap). No connectivity
+## test — walls are meant to block; enemies destroy them rather than reroute.
+func _can_place_wall(cell: Vector2i) -> bool:
+	var data = _map_grid.get("map_data")
+	if data == null:
+		return false
+	## Drop entries for walls the enemy has since destroyed (they free themselves).
+	for k in _wall_cells.keys():
+		if not is_instance_valid(_wall_cells[k]):
+			_wall_cells.erase(k)
+	if cell.x < 0 or cell.y < 0 or cell.x >= data.dimensions.x or cell.y >= data.dimensions.y:
+		return false
+	if _wall_cells.has(cell) or _occupied_cells.has(cell) or _building_cells.has(cell):
+		return false
+	if int(_map_grid.get_cell(cell.x, cell.y)) == 3:   ## Cell.BASE
+		return false
+	if bool(data.is_spawn_at(cell)):
+		return false
+	if bool(_map_grid.call("is_build_excluded", cell.x, cell.y)):   ## live-spawn DMZ
+		return false
+	for wc in _wall_cells:
+		if maxi(absi(cell.x - wc.x), absi(cell.y - wc.y)) < WALL_MIN_SPACING:
+			return false
+	return true
+
+func _try_place_wall(screen_pos: Vector2) -> void:
+	var cell : Vector2i = _screen_to_cell(screen_pos)
+	if not _can_place_wall(cell):
+		EventBus.notification_pushed.emit("Can't raise a wall here — keep clear of spawns, structures, and other walls.", "warning")
+		return
+	var cost : Dictionary = {FactionManager.get_primary_resource(): WALL_COST}
+	if not EconomyManager.can_afford(cost):
+		EventBus.notification_pushed.emit("Not enough %s to raise a wall." % FactionManager.get_primary_resource(), "warning")
+		return
+	EconomyManager.spend(cost)
+	_place_wall(cell)
+	EventBus.notification_pushed.emit("Wall sited — move your Commander to it to raise it.", "positive")
+
+func _place_wall(cell: Vector2i) -> void:
+	var wall : Node2D = WALL_SCRIPT.new()
+	tower_layer.add_child(wall)
+	wall.position = _cell_to_world(cell)
+	_wall_cells[cell] = wall
+	## Single-shot like towers; re-press Build Wall to add more.
+	_cancel_wall()
+
+func _cancel_wall() -> void:
+	_wall_mode = false
+	GameState.placement_active = false
 
 ## -- Territory raids (building destruction) --
 

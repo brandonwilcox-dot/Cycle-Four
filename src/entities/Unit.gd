@@ -254,6 +254,17 @@ func _engaged_friendly() -> Node2D:
 		if d <= best_d:
 			best   = c
 			best_d = d
+	## Phase 4B: a BUILT Architect wall is a blocker too — enemies stop and grind it down to pass
+	## ("block paths enemies have to unblock"). An unbuilt (ghost) wall doesn't block yet.
+	for w in get_tree().get_nodes_in_group("walls"):
+		if not is_instance_valid(w) or not (w is Node2D):
+			continue
+		if w.has_method("is_built") and not bool(w.call("is_built")):
+			continue
+		var d : float = global_position.distance_to((w as Node2D).global_position)
+		if d <= best_d:
+			best   = w
+			best_d = d
 	return best
 
 ## Phase 3 defender movement: close on the nearest player target near our base (the melee path
