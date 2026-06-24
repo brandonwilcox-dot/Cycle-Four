@@ -17,6 +17,19 @@ const BODY_SIZE   : float = 52.0   ## larger than towers (44-56) / units (16-24)
 const BODY_COLOR  : Color = Color(0.72, 0.12, 0.12, 1.0)   ## crimson — "enemy structure to destroy"
 const CORE_COLOR  : Color = Color(1.00, 0.78, 0.20, 1.0)   ## bright core pip
 
+const UNIT_SCENE      = preload("res://scenes/main/Unit.tscn")
+const FRIENDLY_ROSTER = preload("res://src/core/army/FriendlyRoster.gd")
+
+## Phase 3 — base defenders (commander-and-faction-systems.md). The base fields a standing guard of
+## its own faction's units that chase + grind player forces near it; it produces faster and holds
+## more while a player target is close (it responds to an assault). This is what stops a lone
+## Commander from cracking a base, and makes approaching one dangerous even before a wave is called.
+const DEFENDER_MAX             : int   = 3
+const DEFENDER_MAX_THREATENED  : int   = 5
+const DEFENDER_INTERVAL        : float = 5.0
+const DEFENDER_THREAT_INTERVAL : float = 2.0
+const DEFENDER_THREAT_RADIUS   : float = 240.0
+
 var spawn_id : StringName = &""
 
 var _max_health     : float = MAX_HEALTH
@@ -24,13 +37,21 @@ var _current_health : float = MAX_HEALTH
 var _is_dead        : bool  = false
 var _health_fg      : ColorRect = null
 
-## Called by Battle before adding to the tree. faction is accepted for future theming.
-func setup(p_spawn_id: StringName, _faction: String = "") -> void:
+## Defender state.
+var _faction       : String   = ""
+var _defender_unit : UnitData = null
+var _defenders     : Array    = []     ## live guards (pruned each tick)
+var _produce_timer : float    = 1.0    ## first guard appears shortly after the base does
+
+## Called by Battle before adding to the tree. faction = the base's (enemy) faction, picks its defenders.
+func setup(p_spawn_id: StringName, faction: String = "") -> void:
 	spawn_id = p_spawn_id
+	_faction = faction
 
 func _ready() -> void:
 	add_to_group("enemy_bases")
 	_build_visual()
+	_defender_unit = FRIENDLY_ROSTER.garrison_unit(_faction)   ## same roster the waves draw from
 
 ## Army damage. Type is ignored (no armor triangle on structures for Phase 1 — flat HP).
 ## Returns true when this hit destroys the base (matches the Unit/FriendlyUnit contract so
@@ -42,10 +63,54 @@ func take_damage(amount: float, _damage_type: int = -1) -> bool:
 	_update_health_visual()
 	if _current_health <= 0.0:
 		_is_dead = true
+		_free_defenders()
 		EventBus.enemy_base_destroyed.emit(spawn_id)
 		queue_free()
 		return true
 	return false
+
+## -- Phase 3: defender production --
+
+func _process(delta: float) -> void:
+	if _is_dead or _defender_unit == null:
+		return
+	_defenders = _defenders.filter(func(u): return is_instance_valid(u))
+	var threatened : bool = _player_near()
+	var cap : int = DEFENDER_MAX_THREATENED if threatened else DEFENDER_MAX
+	if _defenders.size() >= cap:
+		return
+	_produce_timer -= delta
+	if _produce_timer > 0.0:
+		return
+	_produce_timer = DEFENDER_THREAT_INTERVAL if threatened else DEFENDER_INTERVAL
+	_spawn_defender()
+
+## True if a player target (commander / friendly unit) is within threat range of the base.
+func _player_near() -> bool:
+	for grp in ["commander", "friendly_units"]:
+		for t in get_tree().get_nodes_in_group(grp):
+			if is_instance_valid(t) and (t is Node2D) \
+					and global_position.distance_to((t as Node2D).global_position) <= DEFENDER_THREAT_RADIUS:
+				return true
+	return false
+
+## Spawns one defender of our faction into the enemy-base layer (NOT UnitLayer, which waves clear),
+## anchored near this base so it guards here. Tracked so we respect the cap and free them on death.
+func _spawn_defender() -> void:
+	var layer : Node = get_parent()
+	if layer == null:
+		return
+	var offset : Vector2 = Vector2(randf_range(-28.0, 28.0), randf_range(-28.0, 28.0))
+	var d : Node2D = UNIT_SCENE.instantiate()
+	d.call("setup_as_defender", _defender_unit, global_position + offset)
+	layer.add_child(d)
+	_defenders.append(d)
+
+func _free_defenders() -> void:
+	for d in _defenders:
+		if is_instance_valid(d):
+			d.queue_free()
+	_defenders.clear()
 
 func _build_visual() -> void:
 	var half : float = BODY_SIZE * 0.5

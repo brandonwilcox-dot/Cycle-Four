@@ -34,6 +34,31 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-24 (2) — Phase 3: enemy bases fight back — COMPILE VERIFIED
+
+Completes the "justify building" loop — enemy bases now defend themselves, so assaulting is a real
+fight and the danger exists even before a wave is called (closes the standby gap).
+
+- **Defender mode (`Unit`):** `setup_as_defender(data, home)` — no waypoints; guards the base, chases
+  the nearest player target (commander/friendly) within DEFENDER_AGGRO (220) of the base, leashed to
+  DEFENDER_LEASH (240); the existing `_engaged_friendly` melee applies the damage. A defender's death
+  does NOT count against a WaveManager wave.
+- **Defender production (`EnemyBase`):** fields a standing guard of its faction's units
+  (`FriendlyRoster.garrison_unit(enemy_faction)`) — cap 3 idle / 5 when a player target is within
+  DEFENDER_THREAT_RADIUS (240); interval 5s idle / 2s threatened (it *responds* to an assault).
+  Defenders live in the EnemyBaseLayer (not UnitLayer, which waves clear) and are freed when the base
+  dies. `Battle._spawn_enemy_bases` passes the enemy faction so bases defend with the right units.
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** — approach a base with
+just the Commander → it spawns defenders that swarm + grind you (mortality bites) → you need a garrison
+army + the Commander to crack it. Tune `EnemyBase.DEFENDER_*` and `Unit.DEFENDER_AGGRO/LEASH`.
+
+**The loop is now whole:** building is gated by the Commander (2B), the Commander is mortal (2A), and
+bases generate real pressure (3) — a lone Commander can't solo, so you must build garrisons (army) +
+towers (defense). Next per plan: Phase 4 faction identity (build prefs + passives), Phase 5 build limits.
+
+---
+
 ## Session 2026-06-24 — Phase 2A: Commander mortality — COMPILE VERIFIED
 
 Second slice of the Commander-bottleneck arc — the Commander can now be destroyed.

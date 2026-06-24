@@ -10,6 +10,7 @@ const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWa
 const ENEMY_BASE_SCRIPT     = preload("res://src/entities/EnemyBase.gd")
 const GALAXY_VIEW_SCRIPT    = preload("res://src/ui/GalaxyView.gd")
 const MAP_GENERATOR_SCRIPT  = preload("res://src/core/map/MapGenerator.gd")
+const WAVE_TABLE_BUILDER    = preload("res://src/core/waves/WaveTableBuilder.gd")
 const GRID_SIZE             : int = 64
 ## World centre of the tactical board (COLS/2 × ROWS/2 cells) — the galaxy view recentres here.
 const BOARD_CENTER          : Vector2 = Vector2(1920.0, 1088.0)
@@ -261,9 +262,11 @@ func _spawn_enemy_bases() -> void:
 	var data = _map_grid.get("map_data")
 	if data == null:
 		return
+	## Bases belong to the enemy faction (the player's weak matchup) — they defend with its units.
+	var enemy_faction : String = WAVE_TABLE_BUILDER.enemy_of(FactionManager.active_faction)
 	for sp in data.get_active_spawn_points():
 		var base : Node2D = ENEMY_BASE_SCRIPT.new()
-		base.call("setup", sp.id, "")
+		base.call("setup", sp.id, enemy_faction)
 		layer.add_child(base)
 		base.position = _cell_to_world(sp.position)
 		_enemy_bases[sp.id] = base

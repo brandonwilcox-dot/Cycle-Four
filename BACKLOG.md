@@ -58,6 +58,17 @@
   `Commander.MAX_HEALTH`. Follow-up: still soloable during STANDBY (no enemies) until Phase 3 enemy-base
   response makes assaulting dangerous pre-wave. Plan: planning/commander-and-faction-systems.md.
 
+- [FEATURE][P1 — runtime-pending] Enemy bases fight back (Phase 3, 2026-06-24). Bases field a standing
+  guard of their faction's units (`Unit` defender mode: guards the base, chases player targets within
+  220px, leashed 240px, melee via `_engaged_friendly`; death doesn't count vs a wave). `EnemyBase`
+  produces them — cap 3 idle / 5 threatened, 5s / 2s interval (responds to an assault) — in the
+  EnemyBaseLayer (survives wave clears), freed on base death; `Battle` passes the enemy faction.
+  Closes the standby gap (assaulting is dangerous pre-wave) and completes "justify building" (a lone
+  Commander can't crack a defended base → need a garrison army + towers). Compile-verified; NEEDS
+  PLAYTEST. Tune `EnemyBase.DEFENDER_*` / `Unit.DEFENDER_AGGRO`/`DEFENDER_LEASH`.
+  With this, the Commander-bottleneck arc (Phases 2A/2B/3) is feature-complete pending playtest; the
+  whole "justify building" loop should now hold. Plan: planning/commander-and-faction-systems.md.
+
 - [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
   Code re-verify 2026-06-22: every procgen spawn now defaults to ACTIVE (MapGenerator._build_spawn_points),
   `_activate_all_spawns()` runs post-Academy as a backstop, and `_build_spawn_queue` splits units

@@ -57,6 +57,15 @@ var _map_grid_ref  : Node     = null
 const TERRITORY_RATE_PER_CELL : float = 0.05
 const RAID_RESOURCE_PENALTY   : float = 15.0   ## primary resources stolen on a successful raid
 
+## Phase 3 — base defender state (commander-and-faction-systems.md). A defender guards its enemy
+## base instead of marching to the FOB: it chases player targets (commander/friendly) within
+## DEFENDER_AGGRO of the base and never strays past DEFENDER_LEASH from it. Melee uses the same
+## _engaged_friendly path; a defender's death does NOT count against a WaveManager wave.
+const DEFENDER_AGGRO : float    = 220.0
+const DEFENDER_LEASH : float    = 240.0
+var _is_defender     : bool     = false
+var _guard_home      : Vector2  = Vector2.ZERO
+
 func _ready() -> void:
 	add_to_group("units")
 	if data == null:
@@ -74,7 +83,9 @@ func _ready() -> void:
 	_update_fog_visibility()
 
 func _process(delta: float) -> void:
-	if _is_dead or _waypoints.is_empty():
+	if _is_dead:
+		return
+	if _waypoints.is_empty() and not _is_defender:
 		return
 	## Stealth: refresh the live reveal tier on a throttle (scans the detectors group).
 	if data != null and data.stealth:
@@ -98,6 +109,11 @@ func _process(delta: float) -> void:
 			_melee_timer = 0.0
 			if foe.has_method("take_damage"):
 				foe.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))
+		return
+	## Phase 3: base defenders guard their stronghold — chase nearby player targets instead of
+	## marching to the FOB (the melee above applies damage once we close to range).
+	if _is_defender:
+		_defender_update(delta)
 		return
 	## Flankers: if our target was already raided by another unit, grab the next one.
 	## get_cell() is an O(1) array lookup -- safe to call every frame.
@@ -163,6 +179,14 @@ func setup_as_flanker(unit_data: UnitData, waypoints: Array,
 	_is_flanker   = true
 	_target_cell  = target_cell
 	_map_grid_ref = map_grid
+
+## Variant of setup() for base defenders (Phase 3). No waypoints — the unit guards home_world,
+## chasing player targets that come near its base instead of marching to the FOB.
+func setup_as_defender(unit_data: UnitData, home_world: Vector2) -> void:
+	data         = unit_data
+	_is_defender = true
+	_guard_home  = home_world
+	position     = home_world
 
 ## Called by WaveSpawner when EventBus.path_changed fires mid-wave.
 ## Finds the nearest traversable cell to current position and gets a fresh
@@ -231,6 +255,43 @@ func _engaged_friendly() -> Node2D:
 			best   = c
 			best_d = d
 	return best
+
+## Phase 3 defender movement: close on the nearest player target near our base (the melee path
+## applies the damage once in range), or fall back to holding home. Leashed to the stronghold.
+func _defender_update(delta: float) -> void:
+	var target : Node2D = _nearest_player_target()
+	if target != null:
+		_move_toward_guard(target.global_position, delta)
+	elif global_position.distance_to(_guard_home) > ARRIVE_DIST:
+		_move_toward_guard(_guard_home, delta)
+
+## Nearest commander/friendly within DEFENDER_AGGRO of our BASE (so we defend our patch, not roam).
+func _nearest_player_target() -> Node2D:
+	var best : Node2D = null
+	var best_d : float = 1.0e20
+	for grp in ["commander", "friendly_units"]:
+		for t in get_tree().get_nodes_in_group(grp):
+			if not is_instance_valid(t) or not (t is Node2D):
+				continue
+			var n : Node2D = t as Node2D
+			if n.global_position.distance_to(_guard_home) > DEFENDER_AGGRO:
+				continue
+			var d : float = global_position.distance_to(n.global_position)
+			if d < best_d:
+				best_d = d
+				best = n
+	return best
+
+func _move_toward_guard(point: Vector2, delta: float) -> void:
+	var step : float = data.move_speed * _speed_multiplier * delta
+	var dir  : Vector2 = point - global_position
+	if dir.length() <= step:
+		global_position = point
+	else:
+		global_position += dir.normalized() * step
+	var from_home : Vector2 = global_position - _guard_home
+	if from_home.length() > DEFENDER_LEASH:
+		global_position = _guard_home + from_home.normalized() * DEFENDER_LEASH
 
 ## Melee damage we deal to a blocking friendly. Falls back to a constant when the roster
 ## resource hasn't authored attack_damage (it's tuned as a marching wave unit).
@@ -328,7 +389,8 @@ func _reach_base() -> void:
 
 func _die() -> void:
 	_is_dead = true
-	WaveManager.report_enemy_killed()
+	if not _is_defender:
+		WaveManager.report_enemy_killed()   ## defenders aren't part of a wave — don't skew its count
 	EconomyManager.add_resource(FactionManager.get_primary_resource(), data.resource_reward)
 	EventBus.unit_died.emit({"unit": data.unit_name, "faction": data.faction_id})
 	queue_free()
