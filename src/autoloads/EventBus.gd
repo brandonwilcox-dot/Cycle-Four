@@ -42,6 +42,7 @@ signal building_upgraded(building_data: Dictionary, tier: int)
 signal territory_claimed(cell: Vector2i)     ## Commander stepped onto a new GROUND cell
 signal territory_raided(cell: Vector2i)      ## Flanker successfully unclaimed a cell
 signal spawn_activated(spawn_id: StringName) ## A previously-dormant spawn became active (Phase 4+: spawn_id, not cell)
+signal enemy_base_destroyed(spawn_id: StringName) ## Conquest: the enemy base anchoring this spawn was destroyed (seals the spawn, lifts its DMZ)
 signal region_revealed(cells: Array[Vector2i]) ## Phase 6: fog-of-war reveal — list of newly-visible cells
 signal path_discovered(edge_id: StringName)    ## Phase 7: an ancient PathEdge transitioned to discovered=true
 signal region_sensed(cells: Array[Vector2i])   ## Sensor ring: cells detected but not yet revealed

@@ -49,12 +49,6 @@ var _friendly_astar : AStar2D = AStar2D.new()
 ## Set by load_map_data(); consumers (Commander, WaveSpawner) may read it directly.
 var map_data : MapData = null
 
-## True once the current territory's battle is won (all objectives complete → map_completed).
-## Gates the spawn no-build exclusion zone: while false, building is forbidden inside a spawn's
-## DMZ; conquering the territory opens those approaches. Reset per map in load_map_data() and
-## persisted per-territory by Battle (saved in node development as "won").
-var _battle_won : bool = false
-
 ## Phase 4: register_active_spawn() / _active_spawns are retired.
 ## Connectivity validation now derives active spawn cells from map_data.spawn_points
 ## (see _all_spawns_connected()).
@@ -114,7 +108,6 @@ func load_map_data(data: MapData) -> void:
 		]
 	)
 	map_data = data
-	_battle_won = false   ## fresh territory — spawn no-build exclusion zones are in force until won
 	for i in COLS * ROWS:
 		_cells[i] = data.cell_types[i] as int
 	_rebuild_astar()
@@ -197,20 +190,13 @@ func is_in_spawn_dmz(world_pos: Vector2) -> bool:
 	var cell : Vector2i = world_to_cell(world_pos)
 	return _in_spawn_buffer_cell(cell.x, cell.y)
 
-## No-BUILD exclusion zone: the same spawn buffer, but only while the battle is unwon. Conquering
-## the territory (all objectives met → map_completed → set_battle_won) lifts it, opening the spawn
-## approaches for towers and buildings. See can_place_at() and Battle._try_place_building().
+## No-BUILD exclusion zone: the same spawn buffer. A spawn projects its buffer only while ACTIVE,
+## i.e. while its enemy base still stands — destroying the base permaseals the spawn (Battle
+## ._on_enemy_base_destroyed), which drops it from get_active_spawn_cells() and lifts the buffer
+## there. So building opens up at each spawn as you take its base, and fully once the territory is
+## conquered. See can_place_at() and Battle._try_place_building().
 func is_build_excluded(col: int, row: int) -> bool:
-	return not _battle_won and _in_spawn_buffer_cell(col, row)
-
-## The current territory's battle-won state. Set true on map_completed (Battle._on_map_completed),
-## persisted per-territory, restored on Continue/return. Reset to false on every map load.
-func set_battle_won(value: bool) -> void:
-	_battle_won = value
-	queue_redraw()   ## exclusion-zone shading (when drawn) follows the won state
-
-func is_battle_won() -> bool:
-	return _battle_won
+	return _in_spawn_buffer_cell(col, row)
 
 ## Marks (col, row) as occupied by a tower.
 ## If the cell was traversable (a PATH cell) it becomes OBSTACLE and the AStar

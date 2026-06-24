@@ -17,11 +17,25 @@
   (1) NO-FIRE — `Tower._select_target` skips targets in `MapGrid.is_in_spawn_dmz` (unit-position
   based, holds regardless of tower placement/range; always on so enemies always clear the mouth).
   (2) EXCLUSION (no-build) — `MapGrid.is_build_excluded` blocks tower + building placement (and
-  greys the placement preview) inside the buffer UNTIL the territory is conquered. Conquering
-  (all objectives met → `map_completed` → `MapGrid.set_battle_won(true)`) lifts the no-build and
-  opens the spawn approaches; "won" persists per-territory in node development, restored on
-  Continue/return. Compile-verified; needs a playtest to confirm feel + tune SPAWN_DMZ_CELLS.
-  (Found: playtest 2026-06-20 | fixed: 2026-06-22)
+  greys the placement preview) inside the buffer. As of 2026-06-23 the lift is per-spawn and tied
+  to conquest: each spawn projects its buffer only while its enemy base stands; destroying the base
+  permaseals the spawn → it drops from the active set → its buffer lifts. (`_battle_won` removed.)
+  See the conquest entry below. Compile-verified; needs a playtest to confirm feel + tune SPAWN_DMZ_CELLS.
+  (Found: playtest 2026-06-20 | DMZ 2026-06-22 | re-keyed to bases 2026-06-23)
+
+- [FEATURE][P1 — runtime-pending] Conquest: enemy bases anchor spawns (Phase 1, 2026-06-23).
+  Fixes the auto-completing CLAIM_TERRITORY default win condition (FOB starts ~1705 cells claimed
+  vs a 200 target, so every territory was "conquered" on arrival → exclusion zone lifted on frame 1).
+  Now each active spawn has a destructible `EnemyBase` (500 HP, group `enemy_bases`). Army assault:
+  Commander + garrison `FriendlyUnit`s damage bases via take_damage (towers can't — no-fire DMZ).
+  Destroying a base permaseals its spawn (stops emitting + lifts its DMZ) and ticks the new
+  `DESTROY_BASES` objective; last base → map_completed → capture. Compile-verified; NEEDS PLAYTEST
+  (drive Commander to a base, grind it, confirm seal+DMZ-open+objective tick; clear all → captured).
+  Tune `EnemyBase.MAX_HEALTH`. Plan: planning/territory-conquest-plan.md.
+  Deferred follow-ups: [Phase 2] intermediate encampments that spawn enemies + gate exploration
+  (currently ~90s to skirt the perimeter); [Phase 3] build limits (can't carpet towers); base
+  destroyed-state persistence (Continue/return currently respawns bases — same class as the
+  [BUG][P2] ObjectiveManager-completion-not-persisted gap).
 
 - [BUG][P1][LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.
   Code re-verify 2026-06-22: every procgen spawn now defaults to ACTIVE (MapGenerator._build_spawn_points),

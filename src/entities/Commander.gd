@@ -417,6 +417,15 @@ func _find_nearest_unit_in_range() -> Node2D:
 		if dist < best_dist:
 			best_dist = dist
 			best      = unit
+	## Conquest: the Commander also assaults enemy bases (army-only — towers can't, by DMZ design).
+	## Drive the Commander up to a base and it grinds the stronghold down toward destruction.
+	for base in get_tree().get_nodes_in_group("enemy_bases"):
+		if not is_instance_valid(base):
+			continue
+		var bdist : float = global_position.distance_to((base as Node2D).global_position)
+		if bdist < best_dist:
+			best_dist = bdist
+			best      = base as Node2D
 	return best
 
 ## Stealth detection (px): the Commander FULLY reveals stealth within its drawn LoS ring (item 2 —

@@ -306,29 +306,29 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
     <div class="pr"><div class="pd done"></div><div class="pl">A</div><div class="pn"><div>Enemy factions in waves</div></div><span class="badge b-green">Done</span></div>
     <div class="pr"><div class="pd done"></div><div class="pl">B</div><div class="pn"><div>Faction-flavored pathing</div></div><span class="badge b-green">Done</span></div>
     <div class="pr"><div class="pd done"></div><div class="pl">C</div><div class="pn"><div>Garrisons + army</div><div class="psub">C1–C4 complete</div></div><span class="badge b-green">Done</span></div>
-    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence</div><div class="psub">Persistence done · win conditions done · P1 bugs blocking</div></div><span class="badge b-amber">Active</span></div>
+    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence</div><div class="psub">Persistence ✓ · win conditions ✓ · galaxy nav ✓ · P1 fixes pending playtest</div></div><span class="badge b-amber">Active</span></div>
     <!-- PHASES_END -->
   </div>
 
   <div class="mbox">
     <!-- MILESTONE_START -->
     <div class="ml">⚡ Next Required Milestone</div>
-    <div class="mt">Stable playtest session — fix system hang (OS freeze) + spawn bugs so the core galaxy loop can be hand-playtested end-to-end</div>
-    <div class="mf">BACKLOG.md — [BUG][P1] system hang · spawn DMZ · multi-spawn</div>
+    <div class="mt">Playtest confirmation of spawn DMZ + multi-spawn P1 fixes · then ObjectiveManager persistence (P2) to close the galaxy loop for real Continue runs</div>
+    <div class="mf">BACKLOG.md — [BUG][P1][FIX-pending] spawn DMZ · multi-spawn · [BUG][P2] ObjectiveManager persist</div>
     <!-- MILESTONE_END -->
   </div>
 
   <div class="section">
     <div class="sh">P1 — Blocks Fun</div>
     <!-- BACKLOG_P1_START -->
-    <div class="bi" onclick="pick(this,'BUG','SYSTEM HANG — entire OS became unresponsive; Godot process would not close.\n\nScenario: garrisons near spawn points claiming territory + new wave of Mesh units (orange) un-claiming territory. Collision/race on same cells causes hang.\n\nTheory: rapid claim/unclaim event ping-pong, rendering bottleneck, or pathfinding deadlock.\n\nRepro strategy:\n1. Place garrisons in a 3×3 cluster near a spawn\n2. Watch them claim outward\n3. Call a new wave\n4. Monitor frame rate — if <1fps and process won\'t exit, log the frame count at hang\n\nFix direction: instrument claim_area/unclaim_cell with frame counts; add render coalescing; check for mutual waiting in FriendlyUnit pathfinding vs MapGrid updates.','src/core/map/MapGrid.gd\nsrc/entities/FriendlyUnit.gd\nsrc/entities/Building.gd')">
-      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">SYSTEM HANG — OS freeze on garrison + Mesh unclaim race</span>
+    <div class="bi" onclick="pick(this,'BUG','[MONITOR] SYSTEM HANG — entire OS became unresponsive; Godot process would not close.\n\nScenario: garrisons near spawn points claiming territory + new wave of Mesh units (orange) un-claiming territory. Collision/race on same cells.\n\nHardened hot path (MapGrid.claim_area single-redraw batching; Building._complete_raid event loop split). DID NOT RECUR in 2026-06-22 playtest. Left open as MONITOR.\n\nRepro strategy:\n1. Place garrisons in a 3×3 cluster near a spawn\n2. Watch them claim outward\n3. Call a new wave\n4. Monitor frame rate — if <1fps and process won\'t exit, log the frame count at hang\n\nIf it recurs: instrument claim_area/unclaim_cell with frame counts; add render coalescing; check for mutual waiting in FriendlyUnit pathfinding vs MapGrid updates.','src/core/map/MapGrid.gd\nsrc/entities/FriendlyUnit.gd\nsrc/entities/Building.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">SYSTEM HANG [MONITOR] — OS freeze on garrison + Mesh unclaim race (not reproduced 2026-06-22)</span>
     </div>
-    <div class="bi" onclick="pick(this,'BUG','Towers next to a spawn instakill enemies at the spawn point. Enemies never reach the field. Fix: add a DMZ/spawn buffer — forbid tower placement (and targeting) within N cells of each spawn so enemies enter the field before being engaged.','src/core/waves/WaveSpawner.gd\nsrc/core/map/MapGrid.gd')">
-      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Towers instakill at spawn — add DMZ buffer</span>
+    <div class="bi" onclick="pick(this,'VERIFY','[FIX — runtime-pending] Towers next to a spawn instakill enemies at the spawn point.\n\nCODE FIX APPLIED 2026-06-22 — compile-verified, needs playtest:\n- SPAWN_DMZ_CELLS = 4 (Chebyshev) around each ACTIVE spawn\n- NO-FIRE: Tower._select_target skips targets in MapGrid.is_in_spawn_dmz\n- EXCLUSION: MapGrid.is_build_excluded blocks tower + building placement inside the buffer until territory is conquered (map_completed lifts the no-build)\n- \"won\" persists per-territory in node development, restored on Continue/return\n\nPlaytest to confirm:\n1. New Game → place tower adjacent to a spawn → Begin Waves → enemies should cross the spawn mouth before being targeted\n2. Tune SPAWN_DMZ_CELLS if enemies still die at spawn or if the buffer feels too large\n3. After map_completed → verify the spawn approach opens for tower placement','src/core/map/MapGrid.gd\nsrc/core/waves/WaveSpawner.gd\nsrc/entities/Tower.gd')">
+      <span class="btag ver">VERIFY</span><span class="bpri">P1</span><span class="btxt">Spawn DMZ [FIX-pending playtest] — code fix applied 2026-06-22, confirm feel + tune</span>
     </div>
-    <div class="bi" onclick="pick(this,'BUG','Enemies only enter from ONE spawn despite Phase-B multi-spawn pathing. Investigate _activate_all_spawns() post-Academy and WaveSpawner per-wave spawn distribution.','scenes/main/Battle.gd\nsrc/core/waves/WaveSpawner.gd')">
-      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">Enemies enter only one spawn — investigate multi-spawn activation</span>
+    <div class="bi" onclick="pick(this,'VERIFY','[LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.\n\nCODE VERIFIED 2026-06-22:\n- MapGenerator._build_spawn_points now defaults every procgen spawn to ACTIVE\n- _activate_all_spawns() runs post-Academy as a backstop\n- _build_spawn_queue splits units across ALL active spawns\n- Debug log added at each wave start: [WaveSpawner] wave distribution — active spawns=N: …\n\nPlaytest to confirm:\n1. New Game → Begin Waves → check debug log shows active spawns ≥ 2\n2. Watch enemies enter from multiple directions on the map\n3. Close this once a playtest shows multi-direction emission','scenes/main/Battle.gd\nsrc/core/waves/WaveSpawner.gd\nsrc/core/map/MapGenerator.gd')">
+      <span class="btag ver">VERIFY</span><span class="bpri">P1</span><span class="btxt">Multi-spawn [LIKELY-FIXED] — code-verified 2026-06-22, confirm in next playtest</span>
     </div>
     <div class="bi" onclick="pick(this,'ENHANCEMENT','Garrison unit-type selection and composition. Player chooses which unit types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.\n\nNeeds: garrison loadout UI in InspectionPanel, per-type XP tracking, multi-type squad spawn logic in Building.gd.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd\nsrc/entities/FriendlyUnit.gd')">
       <span class="btag enh">FEAT</span><span class="bpri">P1</span><span class="btxt">Garrison unit-type selection + squad composition</span>
@@ -630,7 +630,7 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
 // ══ DATA (scheduled task updates this block) ══
 // DATA_START
 const D = {
-  lastUpdated: "2026-06-22",
+  lastUpdated: "2026-06-23",
   phaseBadge: "Phase D — Active"
 };
 // DATA_END

@@ -34,6 +34,39 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-23 — Conquest Phase 1: enemy bases anchor spawns — COMPILE VERIFIED
+
+A debug playtest exposed that the `CLAIM_TERRITORY` default win condition auto-completed:
+the FOB starts ~1705 cells claimed vs a 200 target, so every territory was "conquered" on
+arrival and the spawn no-build exclusion lifted on frame one. New direction (locked w/ user;
+full plan in `planning/territory-conquest-plan.md`): conquest = destroy the enemy base anchoring
+each spawn. Army assault (Commander + garrison units; towers can't, by the no-fire DMZ).
+
+**Phase 1 (this session):**
+- **EnemyBase** (`src/entities/EnemyBase.gd`): destructible structure (500 HP, crimson body +
+  HP bar), group `enemy_bases`; `take_damage` → on death emits `EventBus.enemy_base_destroyed(spawn_id)`.
+- **One per active spawn** via `Battle._spawn_enemy_bases()` (after `_activate_all_spawns`, in both
+  the start and deploy paths) into a dedicated `EnemyBaseLayer` (not cleared at wave end).
+- **Army assault:** `Commander._find_nearest_unit_in_range` and `FriendlyUnit._acquire_target` now
+  also target `enemy_bases` (reuse `take_damage`). Towers deliberately do NOT.
+- **Base destroyed → spawn permasealed** (`MapData.permaseal_spawn_by_id` via `Battle._on_enemy_base_destroyed`):
+  the spawn stops emitting and its DMZ (no-fire + no-build) lifts, because the DMZ keys on ACTIVE spawns.
+- **Win = DESTROY_BASES** (`ObjectiveData.ObjectiveKind` + `ObjectiveManager._make_bases_objective`):
+  target = active-spawn count, +1 per `enemy_base_destroyed`; last base → `map_completed` → capture.
+  Retires the auto-completing `CLAIM_TERRITORY` default (kind kept for authored maps).
+- **Removed `_battle_won`** (MapGrid flag + `dev["won"]` persistence + map_completed/restore wiring):
+  redundant now that the DMZ keys purely on active spawns (= standing bases).
+
+**Compile:** zero new errors via MCP + clean release export. **Runtime: needs playtest** — drive the
+Commander onto a base, grind it down, confirm the spawn seals + that spawn's DMZ opens + the objective
+ticks; clear all bases → "Territory captured." Tune `EnemyBase.MAX_HEALTH` for feel.
+
+**Deferred (next phases):** Phase 2 intermediate encampments (gate the ~90s perimeter skirt), Phase 3
+build limits. Also: base destroyed-state isn't persisted yet (Continue/return respawns bases — same
+class as the [BUG][P2] objective-persistence gap).
+
+---
+
 ## Session 2026-06-22 — Per-territory win conditions + galaxy return nav — PLAYTEST VERIFIED
 
 Closes the two P2 BACKLOG items from the persistence session. Hand-playtested

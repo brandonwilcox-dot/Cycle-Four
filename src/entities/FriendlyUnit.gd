@@ -103,6 +103,18 @@ func _acquire_target() -> Node2D:
 		if d <= best_dist:
 			best      = e
 			best_dist = d
+	## Conquest: garrison units also assault enemy bases within their leash, so a garrison built
+	## forward near a spawn helps the Commander take that base (army-only — towers can't, by DMZ).
+	for base in get_tree().get_nodes_in_group("enemy_bases"):
+		if not is_instance_valid(base) or not (base is Node2D):
+			continue
+		var b : Node2D = base as Node2D
+		if b.global_position.distance_to(_home) > MAX_LEASH:
+			continue
+		var bd : float = global_position.distance_to(b.global_position)
+		if bd <= best_dist:
+			best      = b
+			best_dist = bd
 	return best
 
 func _fire(target: Node2D) -> void:

@@ -7,6 +7,7 @@ extends Node
 const TOWER_SCENE           : PackedScene = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE        : PackedScene = preload("res://scenes/main/Building.tscn")
 const ANCIENT_WATCHER_SCENE : PackedScene = preload("res://scenes/main/AncientWatcher.tscn")
+const ENEMY_BASE_SCRIPT     = preload("res://src/entities/EnemyBase.gd")
 const GALAXY_VIEW_SCRIPT    = preload("res://src/ui/GalaxyView.gd")
 const MAP_GENERATOR_SCRIPT  = preload("res://src/core/map/MapGenerator.gd")
 const GRID_SIZE             : int = 64
@@ -58,6 +59,10 @@ var _pending_building : Resource = null
 ## Vector2i -> Node2D (Building); used for double-place guard and raid destruction.
 var _building_cells   : Dictionary = {}
 
+## Conquest (Phase 1): StringName spawn_id -> EnemyBase node. One base per active spawn;
+## destroying a base seals its spawn and lifts that spawn's DMZ. See planning/territory-conquest-plan.md.
+var _enemy_bases      : Dictionary = {}
+
 ## Inspection state -- tracks which cell is currently open in the inspection panel.
 var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
 
@@ -83,6 +88,7 @@ func _ready() -> void:
 	EventBus.tower_placement_requested.connect(_on_placement_requested)
 	EventBus.building_placement_requested.connect(_on_build_requested)
 	EventBus.territory_raided.connect(_on_territory_raided)
+	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade_requested)
 	EventBus.panel_sell_requested.connect(_on_panel_sell_requested)
 	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine_requested)
@@ -136,6 +142,7 @@ func _start_game_world(is_restore: bool = false) -> void:
 	## session always has enemies regardless of where the player wandered during
 	## the Academy scenarios.
 	_activate_all_spawns()
+	_spawn_enemy_bases()   ## conquest: an enemy base anchors each spawn (destroy them to win)
 	## Start with the Commander selected so the move controls are immediately usable.
 	var cmd : Node = _commander()
 	if cmd != null:
@@ -214,7 +221,7 @@ func _deploy_to_node(node_id: String) -> void:
 	if _galaxy_view != null:
 		_galaxy_view.call("setup", BOARD_CENTER)   ## recenter on the new active node + redraw
 	var msg : String = "Returning to held territory." if is_owned else \
-		"Deploying to contested territory — claim %d sectors to capture it." % ObjectiveManager.TERRITORY_CLAIM_TARGET
+		"Deploying to contested territory — destroy the enemy strongholds to capture it."
 	EventBus.notification_pushed.emit(msg, "info")
 
 ## Clears the current battle's transient entities (towers/buildings/units) and loads node_id's
@@ -229,6 +236,47 @@ func _load_territory_map(node_id: String) -> void:
 	_inspected_cell = Vector2i(-1, -1)
 	_map_grid.load_map_data(MAP_GENERATOR_SCRIPT.generate(GalaxyManager.node_seed(node_id)))
 	_activate_all_spawns()
+	_spawn_enemy_bases()   ## conquest: re-anchor this territory's spawns with destructible bases
+
+## -- Conquest: enemy bases (Phase 1, planning/territory-conquest-plan.md) --
+
+## Returns (lazily creating) the dedicated layer that holds enemy bases. Kept separate from
+## UnitLayer — which WaveSpawner clears at each wave end — so bases persist across waves.
+func _enemy_base_layer() -> Node2D:
+	var layer := $WorldMap.get_node_or_null("EnemyBaseLayer") as Node2D
+	if layer == null:
+		layer = Node2D.new()
+		layer.name = "EnemyBaseLayer"
+		$WorldMap.add_child(layer)
+	return layer
+
+## Places one destructible EnemyBase at each active spawn (clearing any from a prior battle).
+## The DESTROY_BASES objective target (ObjectiveManager._make_bases_objective) matches this count.
+func _spawn_enemy_bases() -> void:
+	var layer : Node2D = _enemy_base_layer()
+	for c in layer.get_children():
+		c.queue_free()
+	_enemy_bases.clear()
+	var data = _map_grid.get("map_data")
+	if data == null:
+		return
+	for sp in data.get_active_spawn_points():
+		var base : Node2D = ENEMY_BASE_SCRIPT.new()
+		base.call("setup", sp.id, "")
+		layer.add_child(base)
+		base.position = _cell_to_world(sp.position)
+		_enemy_bases[sp.id] = base
+
+## The army destroyed a base: seal its spawn (it stops emitting AND its DMZ lifts, since the DMZ
+## keys on active spawns) and drop it from tracking. ObjectiveManager advances DESTROY_BASES off
+## the same EventBus.enemy_base_destroyed signal; the last base fires map_completed → capture.
+func _on_enemy_base_destroyed(spawn_id: StringName) -> void:
+	_enemy_bases.erase(spawn_id)
+	var data = _map_grid.get("map_data")
+	if data != null:
+		data.call("permaseal_spawn_by_id", spawn_id)
+	_map_grid.queue_redraw()   ## spawn rendering follows the now-sealed state
+	EventBus.notification_pushed.emit("Enemy stronghold destroyed — its spawn is sealed.", "positive")
 
 ## [Persistence] Snapshots the current battle's per-territory development (Step 2: claimed cells)
 ## into the active node's saved state. Connected to EventBus.game_saving so it runs just before each
@@ -242,7 +290,6 @@ func _capture_territory_development() -> void:
 	dev["buildings"] = _capture_buildings()
 	dev["towers"] = _capture_towers()
 	dev["fob"] = _capture_fob()
-	dev["won"] = bool(_map_grid.call("is_battle_won"))   ## conquered-state → spawn approaches stay open on return
 	GalaxyManager.star_systems[node_id]["development"] = dev
 
 ## [Persistence Step 3] Snapshots placed garrisons as [{id, cell, level}] for save/restore.
@@ -349,15 +396,9 @@ func _restore_territory_development(dev: Dictionary) -> void:
 	_restore_buildings(dev)
 	_restore_towers(dev)
 	_restore_fob(dev)
-	## A conquered territory keeps its spawn approaches buildable; an unwon one re-arms the exclusion.
-	_map_grid.call("set_battle_won", bool(dev.get("won", false)))
 
-## Territory won (all objectives complete) → capture the node being invaded, opening new frontier.
+## Territory won (all enemy bases destroyed) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:
-	## Conquering the territory lifts its spawn no-build exclusion zones — the approaches open up.
-	## Runs for the home territory too (invading_node empty), so winning at home opens its spawns.
-	if _map_grid != null and _map_grid.has_method("set_battle_won"):
-		_map_grid.call("set_battle_won", true)
 	if GalaxyManager.invading_node.is_empty():
 		return
 	var node_id : String = GalaxyManager.invading_node

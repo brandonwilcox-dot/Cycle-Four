@@ -210,6 +210,16 @@ func activate_spawn_by_id(id: StringName) -> bool:
 		return true
 	return false
 
+## Conquest: permanently seals a spawn (its enemy base was destroyed). PERMANENTLY_SEALED
+## spawns never re-activate and drop out of get_active_spawn_points/cells, so the spawn stops
+## emitting and its DMZ (no-fire + no-build) lifts. Returns true if found.
+func permaseal_spawn_by_id(id: StringName) -> bool:
+	var sp : SpawnPoint = get_spawn_by_id(id)
+	if sp == null:
+		return false
+	sp.state = SpawnPoint.SpawnState.PERMANENTLY_SEALED
+	return true
+
 ## Flips an ACTIVE spawn back to DORMANT by id. Returns true if found and transitioned.
 ## Phase 4 manual hook; future phases derive state from objective lapses.
 func deactivate_spawn_by_id(id: StringName) -> bool:

@@ -11,7 +11,8 @@ enum ObjectiveKind {
 	PLACE_RELAY_COVERAGE,
 	ELIMINATE_SPAWN,
 	HOLD_CONTROL_POINT,
-	CLAIM_TERRITORY,   ## Default win condition for procgen maps: claim N cells.
+	CLAIM_TERRITORY,   ## Claim N cells (authored maps may still use this).
+	DESTROY_BASES,     ## Default win condition for procgen maps: destroy the N enemy bases anchoring the spawns.
 	## Additional kinds require a schema bump — do not add ad-hoc variants.
 }
 

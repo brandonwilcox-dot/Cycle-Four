@@ -22,6 +22,7 @@ var _map_already_done    : bool                  = false   ## true after map_com
 func _ready() -> void:
 	EventBus.territory_claimed.connect(_on_territory_claimed)
 	EventBus.territory_raided.connect(_on_territory_raided)
+	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)
 	EventBus.faction_selected.connect(_on_faction_selected)
 	EventBus.region_revealed.connect(_on_region_revealed)
 	EventBus.region_sensed.connect(_on_region_sensed)
@@ -50,7 +51,7 @@ func _resolve_for_current_faction() -> void:
 		FactionManager.active_sub_path,
 	)
 	if _active_objectives.is_empty():
-		_active_objectives = [_make_territory_objective()]
+		_active_objectives = [_make_bases_objective()]
 	_map_data.resolve_spawn_seal_refs(_active_objectives)
 
 func _on_faction_selected(_faction_id: String, _sub_path: String) -> void:
@@ -120,12 +121,20 @@ func get_active_objectives() -> Array[ObjectiveData]:
 func _on_territory_claimed(_cell: Vector2i) -> void:
 	if _map_data == null:
 		return
-	## For Phase 5 stub: every objective increments by 1 per claim.
-	## Phase 5+ refinements will key on objective.kind / tracked_refs.
+	## Only CLAIM_TERRITORY objectives advance on a claim (authored maps may use them).
+	## The default procgen win condition is now DESTROY_BASES — see _on_enemy_base_destroyed.
 	for obj in _active_objectives:
-		if obj == null:
-			continue
-		_apply_progress_delta(obj, 1)
+		if obj != null and obj.kind == ObjectiveData.ObjectiveKind.CLAIM_TERRITORY:
+			_apply_progress_delta(obj, 1)
+
+## Conquest: each destroyed enemy base advances the DESTROY_BASES objective. When the last
+## base falls, progress hits target → map_completed (handled in _apply_progress_delta) → capture.
+func _on_enemy_base_destroyed(_spawn_id: StringName) -> void:
+	if _map_data == null:
+		return
+	for obj in _active_objectives:
+		if obj != null and obj.kind == ObjectiveData.ObjectiveKind.DESTROY_BASES:
+			_apply_progress_delta(obj, 1)
 
 func _on_territory_raided(_cell: Vector2i) -> void:
 	if _map_data == null:
@@ -200,22 +209,26 @@ func _find_objective(id: StringName) -> ObjectiveData:
 			return obj
 	return null
 
-## Builds the default territory-capture objective for procgen maps that have no authored
-## objectives. Faction-voiced description; progress is driven by territory_claimed events.
-func _make_territory_objective() -> ObjectiveData:
+## Builds the default conquest objective for procgen maps that have no authored objectives:
+## destroy the enemy base anchoring each active spawn. Target = active-spawn count (one base
+## each, placed by Battle). Faction-voiced; progress is driven by enemy_base_destroyed events.
+func _make_bases_objective() -> ObjectiveData:
 	var obj := ObjectiveData.new()
-	obj.objective_id = &"territory_claim"
-	obj.kind         = ObjectiveData.ObjectiveKind.CLAIM_TERRITORY
-	obj.target       = TERRITORY_CLAIM_TARGET
+	obj.objective_id = &"destroy_bases"
+	obj.kind         = ObjectiveData.ObjectiveKind.DESTROY_BASES
+	var n : int = 0
+	if _map_data != null:
+		n = _map_data.get_active_spawn_points().size()
+	obj.target = maxi(1, n)
 	match FactionManager.active_faction:
 		"architects":
-			obj.description = "Achieve infrastructure control — claim %d sectors of this region." % TERRITORY_CLAIM_TARGET
+			obj.description = "Dismantle the enemy strongholds anchoring each spawn (%d)." % obj.target
 		"bloom":
-			obj.description = "Establish biomass dominance — spread across %d sectors of terrain." % TERRITORY_CLAIM_TARGET
+			obj.description = "Overrun the enemy strongholds anchoring each spawn (%d)." % obj.target
 		"mesh":
-			obj.description = "Assert network presence — route through %d sectors of the region." % TERRITORY_CLAIM_TARGET
+			obj.description = "Sever the enemy strongholds anchoring each spawn (%d)." % obj.target
 		_:
-			obj.description = "Establish territorial dominance — claim %d sectors." % TERRITORY_CLAIM_TARGET
+			obj.description = "Destroy the enemy strongholds anchoring each spawn (%d)." % obj.target
 	return obj
 
 ## Fires map_completed once all active objectives are complete, then promotes every
