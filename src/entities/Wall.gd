@@ -32,6 +32,12 @@ func _ready() -> void:
 func is_built() -> bool:
 	return _built
 
+## [Persistence] Restore a saved wall as already built (full HP, functional) — like towers/garrisons.
+func mark_built() -> void:
+	_health = _max_health
+	_built  = true
+	_refresh_build_visual()
+
 func needs_engineering() -> bool:
 	return _health < _max_health
 

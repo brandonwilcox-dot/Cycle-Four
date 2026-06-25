@@ -116,6 +116,16 @@ func _on_region_sensed(cells: Array[Vector2i]) -> void:
 func get_active_objectives() -> Array[ObjectiveData]:
 	return _active_objectives
 
+## [Persistence] On Continue/return, set the DESTROY_BASES objective progress to the number of bases
+## already destroyed (Battle restores the sealed spawns; this restores the matching progress) so the
+## win still completes when the remaining bases fall. Does not fire completion — a fully-conquered
+## territory is already owned, and the objective was resolved against the full spawn count at map load.
+func restore_bases_progress(n: int) -> void:
+	for obj in _active_objectives:
+		if obj != null and obj.kind == ObjectiveData.ObjectiveKind.DESTROY_BASES:
+			obj.progress = clampi(n, 0, obj.target)
+			EventBus.objective_progressed.emit(obj.objective_id, 0, obj.progress)
+
 ## -- Event handlers --
 
 func _on_territory_claimed(_cell: Vector2i) -> void:

@@ -34,8 +34,8 @@
   Tune `EnemyBase.MAX_HEALTH`. Plan: planning/territory-conquest-plan.md.
   Deferred follow-ups: [Phase 2] intermediate encampments that spawn enemies + gate exploration
   (currently ~90s to skirt the perimeter); [Phase 3] build limits (can't carpet towers); base
-  destroyed-state persistence (Continue/return currently respawns bases — same class as the
-  [BUG][P2] ObjectiveManager-completion-not-persisted gap).
+  destroyed-state persistence (DONE 2026-06-24 — `bases_destroyed` in the dev snapshot keeps bases
+  destroyed + spawns sealed + caps raised on Continue/return).
 
 - [DONE — playtest-verified 2026-06-24] Commander as engineer — build + repair (Phase 2B, 2026-06-23).
   First slice of "make the Commander a mortal, overworked engineer-leader" so building isn't pointless
@@ -111,12 +111,17 @@
   addressed 2026-06-21: Battle now accepts world input during scenario phase. Tower placement
   during scenarios still needs HUD shown — smaller follow-up. (Flagged: 2026-06-21)
 
-- [BUG][P2] ObjectiveManager completion state not persisted on Continue. On restore,
-  objectives reset to 0/N even if they were completed before quit. An active garrison
-  re-triggering territory_claimed immediately masks this, but objectives that require
-  a one-time-only event (path_discovered, convoy_spawned) will stay stuck at 0 until
-  that event fires again. Fix direction: persist completed-objective IDs in save and
-  replay them into ObjectiveManager on restore. (Found: playtest 2026-06-21)
+- [DONE — 2026-06-24, compile-verified / NEEDS PLAYTEST] Conquest persistence on Continue/return.
+  The per-territory `development` snapshot now also stores `bases_destroyed` (destroyed-base spawn-ids)
+  and `walls` (cells). On restore, `Battle._spawn_enemy_bases` re-seals those spawns + skips respawning
+  them and derives the build caps (`_destroyed_base_ids`), and `ObjectiveManager.restore_bases_progress`
+  re-sets the DESTROY_BASES progress so the win still completes when the remaining bases fall; walls
+  restore as built (`Wall.mark_built`). A half-conquered territory stays half-conquered; a fully
+  conquered one returns peaceful + buildable. Backward-compatible (old saves lack the keys → fresh-deploy
+  behaviour). NEEDS PLAYTEST: destroy a base, quit, Continue → base stays down / spawn sealed / cap
+  raised / walls present. Residual (still open): general one-time-event objectives (path_discovered,
+  convoy_spawned) are NOT persisted — no current procgen map uses them (default is DESTROY_BASES, now
+  handled); revisit only if an authored map relies on them. (Was [BUG][P2]; found 2026-06-21.)
 
 ---
 

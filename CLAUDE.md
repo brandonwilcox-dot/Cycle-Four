@@ -34,6 +34,31 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-24 (7) — Persistence: conquest state survives Continue/return — COMPILE VERIFIED
+
+Closes the [BUG][P2] persistence gap for the live game. The per-territory `development` snapshot now
+also carries the conquest state, so Continue / returning to a held territory no longer resets it.
+- **Destroyed bases** — `dev["bases_destroyed"]` = spawn-ids of bases already destroyed. On restore
+  `Battle._spawn_enemy_bases` permaseals those spawns (so they don't respawn + their DMZ stays lifted),
+  repopulates `_destroyed_base_ids` (→ build caps restored), and calls
+  `ObjectiveManager.restore_bases_progress(n)` so the DESTROY_BASES objective keeps its progress and the
+  win still fires when the remaining bases fall. Half-conquered stays half-conquered; fully conquered
+  returns peaceful + buildable.
+- **Walls** — `dev["walls"]` = wall cells; `_restore_walls` recreates them as built (`Wall.mark_built`),
+  mirroring how towers/garrisons restore.
+- Backward-compatible: old saves lack the keys → `.get(..., [])` → behaves like a fresh deploy.
+- Build-cap refactor: `_bases_destroyed:int` → `_destroyed_base_ids:Array` (one source for caps +
+  persistence); the per-battle reset now lives in `_spawn_enemy_bases` (re-read from dev), not
+  `_load_territory_map`.
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** — destroy a base, quit,
+Continue → base stays down, spawn sealed, cap raised, any walls present.
+
+**Residual:** general one-time-event objectives (path_discovered / convoy_spawned) still aren't persisted,
+but no procgen map uses them (default is DESTROY_BASES, now handled). Revisit only if an authored map needs it.
+
+---
+
 ## Session 2026-06-24 (6) — Phase 5: build limits — COMPILE VERIFIED (4A/4B now playtest-verified)
 
 Closes the faction-identity arc. Caps on player towers + garrisons, raised by conquest.

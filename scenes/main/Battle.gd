@@ -80,8 +80,9 @@ var _enemy_bases      : Dictionary = {}
 var _wall_mode   : bool       = false
 var _wall_cells  : Dictionary = {}   ## Vector2i -> Wall node
 
-## Phase 5: enemy bases destroyed this battle — raises the tower/garrison caps. Reset per territory.
-var _bases_destroyed : int = 0
+## Phase 5: spawn-ids of enemy bases destroyed this battle — raises the tower/garrison caps AND is
+## persisted (so destroyed bases stay destroyed on Continue / return). Repopulated in _spawn_enemy_bases.
+var _destroyed_base_ids : Array = []
 
 ## Inspection state -- tracks which cell is currently open in the inspection panel.
 var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
@@ -256,7 +257,6 @@ func _load_territory_map(node_id: String) -> void:
 	_occupied_cells.clear()
 	_building_cells.clear()
 	_wall_cells.clear()
-	_bases_destroyed = 0
 	_inspected_cell = Vector2i(-1, -1)
 	_map_grid.load_map_data(MAP_GENERATOR_SCRIPT.generate(GalaxyManager.node_seed(node_id)))
 	_activate_all_spawns()
@@ -281,9 +281,19 @@ func _spawn_enemy_bases() -> void:
 	for c in layer.get_children():
 		c.queue_free()
 	_enemy_bases.clear()
+	_destroyed_base_ids.clear()
 	var data = _map_grid.get("map_data")
 	if data == null:
 		return
+	## Persistence: re-seal spawns whose bases were already destroyed (Continue / return to a partly- or
+	## fully-conquered territory) so they don't respawn and their DMZ stays lifted. Excluded from
+	## get_active_spawn_points below, so no base is recreated for them.
+	var dev : Dictionary = GalaxyManager.star_systems.get(GalaxyManager.active_node, {}).get("development", {})
+	for sid_str in dev.get("bases_destroyed", []):
+		var sid : StringName = StringName(str(sid_str))
+		data.call("permaseal_spawn_by_id", sid)
+		if not _destroyed_base_ids.has(sid):
+			_destroyed_base_ids.append(sid)
 	## Bases belong to the enemy faction (the player's weak matchup) — they defend with its units.
 	var enemy_faction : String = WAVE_TABLE_BUILDER.enemy_of(FactionManager.active_faction)
 	for sp in data.get_active_spawn_points():
@@ -292,13 +302,18 @@ func _spawn_enemy_bases() -> void:
 		layer.add_child(base)
 		base.position = _cell_to_world(sp.position)
 		_enemy_bases[sp.id] = base
+	## Restore the DESTROY_BASES objective progress to match the bases already down, so the win still
+	## completes when the rest fall (the objective was resolved at the full spawn count in load_map_data).
+	if not _destroyed_base_ids.is_empty():
+		ObjectiveManager.restore_bases_progress(_destroyed_base_ids.size())
 
 ## The army destroyed a base: seal its spawn (it stops emitting AND its DMZ lifts, since the DMZ
 ## keys on active spawns) and drop it from tracking. ObjectiveManager advances DESTROY_BASES off
 ## the same EventBus.enemy_base_destroyed signal; the last base fires map_completed → capture.
 func _on_enemy_base_destroyed(spawn_id: StringName) -> void:
 	_enemy_bases.erase(spawn_id)
-	_bases_destroyed += 1   ## Phase 5: conquest raises the build caps
+	if not _destroyed_base_ids.has(spawn_id):
+		_destroyed_base_ids.append(spawn_id)   ## Phase 5 caps + persistence
 	var data = _map_grid.get("map_data")
 	if data != null:
 		data.call("permaseal_spawn_by_id", spawn_id)
@@ -350,7 +365,36 @@ func _capture_territory_development() -> void:
 	dev["buildings"] = _capture_buildings()
 	dev["towers"] = _capture_towers()
 	dev["fob"] = _capture_fob()
+	dev["bases_destroyed"] = _captured_destroyed_base_ids()   ## Phase 1/5: conquest progress
+	dev["walls"] = _capture_walls()                           ## Phase 4B
 	GalaxyManager.star_systems[node_id]["development"] = dev
+
+## [Persistence] Destroyed-base spawn-ids as strings (JSON-safe). Restored in _spawn_enemy_bases.
+func _captured_destroyed_base_ids() -> Array:
+	var out : Array = []
+	for id in _destroyed_base_ids:
+		out.append(String(id))
+	return out
+
+## [Persistence] Wall cells [[x,y], ...]. Restored as already built (mark_built), like towers/garrisons.
+func _capture_walls() -> Array:
+	var out : Array = []
+	for cell in _wall_cells:
+		if is_instance_valid(_wall_cells[cell]):
+			out.append([int(cell.x), int(cell.y)])
+	return out
+
+func _restore_walls(dev: Dictionary) -> void:
+	for wrec in dev.get("walls", []):
+		if typeof(wrec) != TYPE_ARRAY or (wrec as Array).size() != 2:
+			continue
+		var cell : Vector2i = Vector2i(int(wrec[0]), int(wrec[1]))
+		var wall : Node2D = WALL_SCRIPT.new()
+		tower_layer.add_child(wall)
+		wall.position = _cell_to_world(cell)
+		if wall.has_method("mark_built"):
+			wall.call("mark_built")
+		_wall_cells[cell] = wall
 
 ## [Persistence Step 3] Snapshots placed garrisons as [{id, cell, level}] for save/restore.
 func _capture_buildings() -> Array:
@@ -456,6 +500,7 @@ func _restore_territory_development(dev: Dictionary) -> void:
 	_restore_buildings(dev)
 	_restore_towers(dev)
 	_restore_fob(dev)
+	_restore_walls(dev)
 
 ## Territory won (all enemy bases destroyed) → capture the node being invaded, opening new frontier.
 func _on_map_completed() -> void:
@@ -653,10 +698,10 @@ func _is_cell_placeable(cell: Vector2i) -> bool:
 
 ## Current tower / garrison caps — base + a bonus per enemy base destroyed this battle.
 func _tower_cap() -> int:
-	return TOWER_CAP_BASE + TOWER_CAP_PER_BASE * _bases_destroyed
+	return TOWER_CAP_BASE + TOWER_CAP_PER_BASE * _destroyed_base_ids.size()
 
 func _garrison_cap() -> int:
-	return GARRISON_CAP_BASE + GARRISON_CAP_PER_BASE * _bases_destroyed
+	return GARRISON_CAP_BASE + GARRISON_CAP_PER_BASE * _destroyed_base_ids.size()
 
 ## -- Tower placement --
 
