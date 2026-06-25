@@ -122,7 +122,7 @@
 
 ## Enhancements (new design — not currently built)
 
-- [FEATURE][P2 — runtime-pending] Phase 4A faction build preferences (2026-06-24). `FactionPerks.gd`
+- [DONE — playtest-verified 2026-06-24] Phase 4A faction build preferences (2026-06-24). `FactionPerks.gd`
   centralizes faction build tuning. **Architects** build faster (×1.6 rate) + sturdier (×1.4 structure
   HP); **Bloom** towers grow over time (+8% HP / +6% dmg per 5s tick, cap 6, subtle scale-up); **Mesh**
   connected-tower chains buff endpoints (+12% dmg per linked tower, `_compute_chain_mult`). Tower damage
@@ -140,7 +140,7 @@
   / `WALL_COST` / `WALL_MIN_SPACING` later if needed. Remaining 4B: Bloom pollen (AoE slow+blind), Mesh
   hijack (convert an enemy). Then Phase 5 build limits. Plan: planning/commander-and-faction-systems.md.
 
-- [FEATURE][P2 — runtime-pending] Phase 4B Bloom pollen + Mesh hijack (2026-06-24). **Bloom:** built
+- [DONE — playtest-verified 2026-06-24] Phase 4B Bloom pollen + Mesh hijack (2026-06-24). **Bloom:** built
   towers emit a slow(×0.45)+blind cloud (radius 130, refresh 0.5s, lingers 1.1s); `Unit.apply_pollen`
   slows movement + suppresses melee; `Tower._emit_pollen` + aura `_draw`. **Mesh:** built towers hijack
   the nearest enemy (radius 180, cd 8s, dur 6s); `Unit.apply_hijack` swaps units→friendly_units (cyan),
@@ -148,6 +148,15 @@
   NEEDS PLAYTEST (F3 bloom / F2 mesh). Tune `FactionPerks.BLOOM_POLLEN_*` / `MESH_HIJACK_*`. With this,
   Phase 4B is feature-complete (walls already playtest-verified). Next: Phase 5 build limits — the last
   faction-arc piece. Plan: planning/commander-and-faction-systems.md.
+
+- [FEATURE][P2 — runtime-pending] Phase 5 build limits (2026-06-24). Caps on player towers + garrisons,
+  raised by conquest: `TOWER_CAP_BASE` 8 +2/base, `GARRISON_CAP_BASE` 4 +1/base (`Battle._tower_cap` /
+  `_garrison_cap` scaled by `_bases_destroyed`; reset per battle). Walls uncapped (density cap). Enforced
+  in `_try_place_tower` / `_try_place_building` (reject at cap), preview greys at cap (`_is_cell_placeable`),
+  placement notifications show the count; destroying a base bumps the cap + announces it. Ties build
+  capacity to the conquest loop; stops carpeting. Compile-verified; NEEDS PLAYTEST. Tune `TOWER_CAP_*` /
+  `GARRISON_CAP_*`. **Closes the faction-identity arc (Phases 4–5).** Next horizons: Phase 6 multiplayer
+  (far future) + standing backlog. Plan: planning/commander-and-faction-systems.md.
 
 - [ENHANCEMENT][P1] Garrison unit-type selection and composition. Player chooses which unit
   types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.

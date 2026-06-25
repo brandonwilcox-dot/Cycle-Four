@@ -34,7 +34,29 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
-## Session 2026-06-24 (5) — Phase 4B (ii/iii): Bloom pollen + Mesh hijack — COMPILE VERIFIED
+## Session 2026-06-24 (6) — Phase 5: build limits — COMPILE VERIFIED (4A/4B now playtest-verified)
+
+Closes the faction-identity arc. Caps on player towers + garrisons, raised by conquest.
+- `TOWER_CAP_BASE` 8 + 2 per enemy base destroyed; `GARRISON_CAP_BASE` 4 + 1 per base (`Battle._tower_cap`
+  / `_garrison_cap`, scaled by `_bases_destroyed`). Walls are uncapped (their density cap limits them).
+- Enforced in `_try_place_tower` / `_try_place_building` (reject at cap — "destroy an enemy base to raise
+  it"); the placement preview greys at cap (`_is_cell_placeable`); placement toasts show the count
+  ("Tower sited (4/8)"). Destroying a base bumps `_bases_destroyed` + announces the new capacity. Reset
+  per battle (`_load_territory_map`).
+- Ties capacity to the conquest loop: fortify modestly early (forces placement choices), earn more as you
+  take bases. Stops carpeting.
+
+**Compile:** zero new errors via MCP + clean export. **Runtime: needs playtest** (place towers to the cap →
+blocked + greyed preview; destroy a base → cap rises). Tune `TOWER_CAP_*` / `GARRISON_CAP_*`.
+
+**Faction-identity arc (Phases 4–5) feature-complete.** Also flipped Phase 4A (build prefs) + 4B
+pollen/hijack to PLAYTEST VERIFIED (2026-06-24 — user confirmed all factions good). Remaining horizons:
+Phase 6 multiplayer (far future) + the standing backlog (Continue persistence, monitored hang, garrison
+leveling/unit-type, convoy).
+
+---
+
+## Session 2026-06-24 (5) — Phase 4B (ii/iii): Bloom pollen + Mesh hijack — PLAYTEST VERIFIED 2026-06-24
 
 The remaining two faction passives — Phase 4B is now feature-complete (compile).
 - **Bloom pollen:** built Bloom towers emit a cloud (`BLOOM_POLLEN_RADIUS` 130) that **slows** (×0.45)
@@ -78,7 +100,7 @@ shoot the stalled enemies). Tune `Wall.MAX_HEALTH`, `WALL_COST`, `WALL_MIN_SPACI
 
 ---
 
-## Session 2026-06-24 (3) — Phase 4A: faction build preferences — COMPILE VERIFIED
+## Session 2026-06-24 (3) — Phase 4A: faction build preferences — PLAYTEST VERIFIED 2026-06-24
 
 First slice of faction identity. New `src/core/FactionPerks.gd` is the single source of faction
 build-pref tuning, preloaded by Commander/Tower/Building (global class_name resolution is unreliable).

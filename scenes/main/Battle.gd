@@ -12,6 +12,14 @@ const WALL_SCRIPT           = preload("res://src/entities/Wall.gd")
 ## Phase 4B Architect walls: cheap barrier with a capped density (no two walls within N cells).
 const WALL_COST             : float = 15.0
 const WALL_MIN_SPACING      : int   = 2
+
+## Phase 5 build limits: caps on towers + garrisons, raised by conquest (each enemy base destroyed
+## adds capacity). Walls are uncapped — their density cap limits them. Prevents carpeting and makes
+## each placement a real choice; expansion (taking bases) earns more.
+const TOWER_CAP_BASE        : int = 8
+const TOWER_CAP_PER_BASE    : int = 2
+const GARRISON_CAP_BASE     : int = 4
+const GARRISON_CAP_PER_BASE : int = 1
 const GALAXY_VIEW_SCRIPT    = preload("res://src/ui/GalaxyView.gd")
 const MAP_GENERATOR_SCRIPT  = preload("res://src/core/map/MapGenerator.gd")
 const WAVE_TABLE_BUILDER    = preload("res://src/core/waves/WaveTableBuilder.gd")
@@ -71,6 +79,9 @@ var _enemy_bases      : Dictionary = {}
 ## Phase 4B Architect wall placement state.
 var _wall_mode   : bool       = false
 var _wall_cells  : Dictionary = {}   ## Vector2i -> Wall node
+
+## Phase 5: enemy bases destroyed this battle — raises the tower/garrison caps. Reset per territory.
+var _bases_destroyed : int = 0
 
 ## Inspection state -- tracks which cell is currently open in the inspection panel.
 var _inspected_cell   : Vector2i  = Vector2i(-1, -1)
@@ -245,6 +256,7 @@ func _load_territory_map(node_id: String) -> void:
 	_occupied_cells.clear()
 	_building_cells.clear()
 	_wall_cells.clear()
+	_bases_destroyed = 0
 	_inspected_cell = Vector2i(-1, -1)
 	_map_grid.load_map_data(MAP_GENERATOR_SCRIPT.generate(GalaxyManager.node_seed(node_id)))
 	_activate_all_spawns()
@@ -286,11 +298,12 @@ func _spawn_enemy_bases() -> void:
 ## the same EventBus.enemy_base_destroyed signal; the last base fires map_completed → capture.
 func _on_enemy_base_destroyed(spawn_id: StringName) -> void:
 	_enemy_bases.erase(spawn_id)
+	_bases_destroyed += 1   ## Phase 5: conquest raises the build caps
 	var data = _map_grid.get("map_data")
 	if data != null:
 		data.call("permaseal_spawn_by_id", spawn_id)
 	_map_grid.queue_redraw()   ## spawn rendering follows the now-sealed state
-	EventBus.notification_pushed.emit("Enemy stronghold destroyed — its spawn is sealed.", "positive")
+	EventBus.notification_pushed.emit("Enemy stronghold destroyed — spawn sealed; build capacity raised (towers %d / garrisons %d)." % [_tower_cap(), _garrison_cap()], "positive")
 
 ## Phase 2A: the Commander was destroyed → forced retreat to the galaxy. Break off the assault
 ## (stop waves + clear the enemies pressing us), abandon the invasion (contested node stays enemy),
@@ -628,12 +641,22 @@ func _is_cell_placeable(cell: Vector2i) -> bool:
 		if cell.x < 0 or cell.y < 0 or cell.x >= data.dimensions.x or cell.y >= data.dimensions.y:
 			return false
 	if _build_mode:
-		return not _building_cells.has(cell) \
+		return _building_cells.size() < _garrison_cap() \
+			and not _building_cells.has(cell) \
 			and bool(_map_grid.call("is_claimed", cell.x, cell.y)) \
 			and not bool(_map_grid.call("is_build_excluded", cell.x, cell.y))
 	if _wall_mode:
 		return _can_place_wall(cell)
-	return not _occupied_cells.has(cell) and _map_grid.can_place_at(cell.x, cell.y)
+	return _occupied_cells.size() < _tower_cap() and not _occupied_cells.has(cell) and _map_grid.can_place_at(cell.x, cell.y)
+
+## -- Phase 5 build limits --
+
+## Current tower / garrison caps — base + a bonus per enemy base destroyed this battle.
+func _tower_cap() -> int:
+	return TOWER_CAP_BASE + TOWER_CAP_PER_BASE * _bases_destroyed
+
+func _garrison_cap() -> int:
+	return GARRISON_CAP_BASE + GARRISON_CAP_PER_BASE * _bases_destroyed
 
 ## -- Tower placement --
 
@@ -650,6 +673,9 @@ func _try_place_tower(screen_pos: Vector2) -> void:
 	var cell : Vector2i = _screen_to_cell(screen_pos)
 	if _occupied_cells.has(cell):
 		EventBus.notification_pushed.emit("Cell already occupied.", "warning")
+		return
+	if _occupied_cells.size() >= _tower_cap():
+		EventBus.notification_pushed.emit("Tower limit reached (%d). Destroy an enemy base to raise it." % _tower_cap(), "warning")
 		return
 	## Exclusion zone: clearer message than the generic can_place_at rejection below.
 	if bool(_map_grid.call("is_build_excluded", cell.x, cell.y)):
@@ -669,7 +695,7 @@ func _try_place_tower(screen_pos: Vector2) -> void:
 	EconomyManager.spend(cost)
 	var route_changed : bool = _map_grid.mark_tower_placed(cell.x, cell.y)
 	_place_tower(cell)
-	EventBus.notification_pushed.emit("Tower sited — move your Commander to it to finish construction.", "positive")
+	EventBus.notification_pushed.emit("Tower sited (%d/%d) — move your Commander to it to finish construction." % [_occupied_cells.size(), _tower_cap()], "positive")
 	if route_changed:
 		EventBus.path_changed.emit()
 
@@ -755,6 +781,9 @@ func _try_place_building(screen_pos: Vector2) -> void:
 	if _building_cells.has(cell):
 		EventBus.notification_pushed.emit("Cell already has a building.", "warning")
 		return
+	if _building_cells.size() >= _garrison_cap():
+		EventBus.notification_pushed.emit("Garrison limit reached (%d). Destroy an enemy base to raise it." % _garrison_cap(), "warning")
+		return
 	var primary_res : String = FactionManager.get_primary_resource()
 	var cost_val    : float  = float(_pending_building.get("primary_cost"))
 	var cost : Dictionary = {primary_res: cost_val}
@@ -766,7 +795,7 @@ func _try_place_building(screen_pos: Vector2) -> void:
 		return
 	EconomyManager.spend(cost)
 	_place_building(cell)
-	EventBus.notification_pushed.emit("Garrison sited — move your Commander to it to finish construction.", "positive")
+	EventBus.notification_pushed.emit("Garrison sited (%d/%d) — move your Commander to it to finish construction." % [_building_cells.size(), _garrison_cap()], "positive")
 
 func _place_building(cell: Vector2i) -> void:
 	var building : Node2D = BUILDING_SCENE.instantiate()
