@@ -7,8 +7,10 @@ extends Node3D
 
 const WORLD3D     = preload("res://src/core/World3D.gd")
 const CAM_RIG     = preload("res://src/core/CameraRig3D.gd")
-const UNIT_SCENE  = preload("res://scenes/main/Unit.tscn")
-const TOWER_SCENE = preload("res://scenes/main/Tower.tscn")
+const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
+const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
+const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
+const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -38,6 +40,7 @@ func _ready() -> void:
 	add_child(_rig)
 
 	_spawn_demo_towers()
+	_spawn_demo_building()
 	_spawn_demo_units()
 
 	var title : Label3D = Label3D.new()
@@ -181,3 +184,14 @@ func _spawn_demo_towers() -> void:
 		t.call("setup", entry[0], true)            ## start_built so it attacks immediately
 		t.call("place_at", _cell_center2(entry[1]))
 		add_child(t)
+
+## Stage 2c demo: place one converted Building (garrison) to show its 3D mesh. Inert here (no
+## faction/unit-layer), so it just demonstrates the structure; production lights up post-FriendlyUnit.
+func _spawn_demo_building() -> void:
+	var bd : BuildingData = BUILDING_DATA.new()
+	bd.building_name = "Demo Garrison"
+	bd.color_hint = Color(0.55, 0.75, 0.95)
+	var b : Node = BUILDING_SCENE.instantiate()
+	b.call("setup", bd, true)                       ## restored=true → built/solid, no economy side effects
+	b.call("place_at", _cell_center2(Vector2i(16, 20)))
+	add_child(b)

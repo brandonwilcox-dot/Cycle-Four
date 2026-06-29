@@ -48,9 +48,20 @@ Branch `feat/3d` (main = 2D checkpoint `69f3694`). Per `planning/3d-migration-pl
   replacing the ColorRect; hijack/pollen/reveal adapted to material tinting. `Unit.tscn` root retyped
   Node3D. Battle3D demo spawns a marching column. MCP-verified clean.
 
-**Carry-overs noted:** 3D death VFX deferred to Stage 4 (the 2D `Vfx` no-ops in the 3D world);
-proper 3D HP bar polish later. **Next:** Stage 2b — `Tower` → `Node3D` (re-express the A1 stat-driven
-silhouette as meshes), then Building/Base/Commander/EnemyBase/Wall/FriendlyUnit/Convoy/AncientWatcher.
+- **Camera controls** (`bcf8e6c`) — `CameraRig3D` now orbits: hold MIDDLE+drag = rotate (yaw/pitch),
+  MIDDLE+wheel = pitch, wheel = zoom, WASD = pan, Delete = reset to preferred, Insert = lock current
+  view as preferred. (Pitch clamped 15–80°.)
+- **Stage 2b** (`7ed8fe1`) — **`Tower` → `Node3D`.** Static plane pos `_p` + `place_at()`/`plane_pos()`;
+  all targeting/aura/chain/pollen/hijack/sight via `World3D.node_plane()`. A1 silhouette re-expressed
+  as meshes: tier-sided body (cylinder 4/6/8 seg) + torus tier rings + stat-driven box barrels
+  (count~fire-rate, length~range, thickness~damage) on a yawing turret + emissive damage-type core +
+  role emblem (support halo / detector antenna). Construction ghosts via material alpha + billboard
+  build bar. 2D XP-bar/chevrons deferred (null-guarded). `Tower.tscn` root→Node3D; `TowerData.range`
+  warning silenced. Battle3D demo: a spread of tiers/branches/roles shoot the marching units. MCP clean.
+
+**Carry-overs:** 3D death VFX → Stage 4 (2D `Vfx` no-ops in 3D); 3D XP bar/chevrons + HP-bar polish later.
+**Next:** continue Stage 2 — Building → Base → Commander → EnemyBase → Wall → FriendlyUnit → Convoy →
+AncientWatcher (each Node3D, model/view, MCP-verified), then Stages 3–6.
 
 ---
 
