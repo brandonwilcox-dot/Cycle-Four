@@ -81,8 +81,16 @@ shooting a marching enemy column, an enemy base fielding defenders, walls on the
 - Deferred 3D overlays: tower/commander/base/convoy XP/rank bars + chevrons, Commander LoS/sensor/
   move-path/ability rings. Defender production needs a live faction + 3D unit layer.
 
-**Next:** Stage 3 — 3D terrain/map + fog (replace `MapGrid._draw`); sets up backlog F1 (real terrain).
-Then 4 (VFX), 5 (galaxy view), 6 (controls + full parity → switch `main_scene`, merge `feat/3d`).
+**STAGE 3 COMPLETE** (`aed8795`) — `MapGrid` → `Node3D`; board renders as a MultiMesh of flat tiles
+(per-instance colored by cell type + fog) replacing 2D `_draw`; `queue_redraw()` repurposed as a
+dirty-flag so all callers keep working; logic (cells/AStar/claim/reveal) unchanged. Battle3D spawns the
+real MapGrid → a true 3D battlefield with fog revealing around FOB/Commander + claimed cells greening.
+Depot markers + real terrain features (height/water/biomes — backlog F1) deferred.
+
+**Next:** Stage 4 — 3D VFX (rebuild the `Vfx` autoload: tracers/muzzle/impact/death as meshes/particles;
+re-add the deferred shot-flash + engineer beam). Then 5 (galaxy view), 6 (controls + full parity →
+switch `main_scene`, merge `feat/3d`). Also pending: AbilityController plane-coord pass; deferred 3D
+overlay bars/rings.
 
 ---
 
