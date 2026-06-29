@@ -13,7 +13,8 @@ const PITCH_MIN_DEG     : float = 15.0
 const PITCH_MAX_DEG     : float = 80.0
 const FOV               : float = 50.0
 const DIST_MIN          : float = 350.0
-const DIST_MAX          : float = 3200.0
+const DIST_MAX          : float = 14000.0   ## allows zooming out into galaxy range
+const GALAXY_ZOOM_DIST  : float = 5000.0    ## past this, the galaxy view shows (board shrinks away)
 const ZOOM_STEP         : float = 1.12
 const PAN_SPEED         : float = 1500.0   ## px/s at keyboard pan
 const YAW_DRAG_SENS     : float = 0.006    ## rad per pixel of horizontal drag
@@ -29,13 +30,19 @@ var _camera     : Camera3D = null
 var _rotating   : bool = false
 
 func _ready() -> void:
+	add_to_group("camera_rig")   ## GalaxyView finds the rig here to gate its visibility
 	_camera = Camera3D.new()
 	_camera.fov = FOV
+	_camera.far = 40000.0        ## see galaxy nodes far from the board when zoomed out
 	add_child(_camera)
 	_update_camera()
 
 func get_camera() -> Camera3D:
 	return _camera
+
+## True while zoomed out into galaxy range — continuous tactical→galactic zoom (no separate screen).
+func is_galaxy_zoom() -> bool:
+	return _dist >= GALAXY_ZOOM_DIST
 
 func _update_camera() -> void:
 	rotation.y = _yaw

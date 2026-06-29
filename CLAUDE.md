@@ -87,10 +87,16 @@ dirty-flag so all callers keep working; logic (cells/AStar/claim/reveal) unchang
 real MapGrid → a true 3D battlefield with fog revealing around FOB/Commander + claimed cells greening.
 Depot markers + real terrain features (height/water/biomes — backlog F1) deferred.
 
-**Next:** Stage 4 — 3D VFX (rebuild the `Vfx` autoload: tracers/muzzle/impact/death as meshes/particles;
-re-add the deferred shot-flash + engineer beam). Then 5 (galaxy view), 6 (controls + full parity →
-switch `main_scene`, merge `feat/3d`). Also pending: AbilityController plane-coord pass; deferred 3D
-overlay bars/rings.
+**STAGE 4 COMPLETE** (`9941f30`) — `Vfx`/`VfxBolt`/`VfxPulse` rebuilt as Node3D. API still takes plane
+`Vector2` so callers are unchanged: Tower (muzzle/bolt) + Unit (death) render in 3D for free; also wired
+3D tracers for Commander primary (restores the shot flash), FOB turret, FriendlyUnit. Bolt = emissive
+tracer bar + impact `CPUParticles3D` sparks; muzzle/death = expanding emissive sphere. Effects spawn into
+a `VfxLayer` under the MapGrid; no-op without a map.
+
+**Next:** Stage 5 — galaxy view in 3D (`GalaxyView`/continuous zoom reconciled with the Camera3D rig).
+Then Stage 6 — controls + full parity (RTS select/move via 3D ray, placement preview, HUD reconnect →
+switch `main_scene`, merge `feat/3d`). Deferred: Commander engineer beam + ability/LoS rings + 3D XP/rank
+bars; AbilityController plane-coord pass; real terrain features (backlog F1).
 
 ---
 

@@ -16,6 +16,7 @@ const COMMANDER_SCRIPT  = preload("res://src/entities/Commander.gd")
 const ENEMY_BASE_SCRIPT = preload("res://src/entities/EnemyBase.gd")
 const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
 const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
+const GALAXY_VIEW       = preload("res://src/ui/GalaxyView.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -42,6 +43,7 @@ func _ready() -> void:
 	_spawn_commander()
 	_spawn_enemy_base()
 	_spawn_walls()
+	_spawn_galaxy()
 
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
@@ -52,7 +54,7 @@ func _ready() -> void:
 	_spawn_demo_units()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stage 2a: enemy units marching in 3D\nWheel = zoom | WASD/arrows = pan | hold MIDDLE+drag = rotate | MIDDLE+wheel = angle | Delete = reset view | Insert = lock view | Left-click = cell marker"
+	title.text = "3D MIGRATION — Stages 2–5: 3D battle + terrain/fog + VFX + galaxy\nWheel = zoom (zoom OUT far for the galaxy view) | WASD = pan | MIDDLE+drag = rotate | MIDDLE+wheel = angle | Delete/Insert = reset/lock view | Left-click = move Commander"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
@@ -105,6 +107,14 @@ func _spawn_enemy_base() -> void:
 	eb.call("setup", &"demo_spawn", "mesh")
 	eb.call("place_at", _cell_center2(Vector2i(6, 17)))
 	add_child(eb)
+
+## Stage 5: populate a galaxy + add the 3D GalaxyView. Zoom the camera OUT past the galaxy
+## threshold (wheel) and the board shrinks away to reveal the 3D territory-node graph.
+func _spawn_galaxy() -> void:
+	GalaxyManager.ensure_galaxy("architects")
+	var gv : Node = GALAXY_VIEW.new()
+	add_child(gv)
+	gv.call("setup", Vector2(COLS * CELL * 0.5, ROWS * CELL * 0.5))
 
 ## Stage 2g: a couple of built walls on the enemy approach — enemies grind them to pass.
 func _spawn_walls() -> void:
