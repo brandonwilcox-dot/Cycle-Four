@@ -93,10 +93,20 @@ Depot markers + real terrain features (height/water/biomes — backlog F1) defer
 tracer bar + impact `CPUParticles3D` sparks; muzzle/death = expanding emissive sphere. Effects spawn into
 a `VfxLayer` under the MapGrid; no-op without a map.
 
-**Next:** Stage 5 — galaxy view in 3D (`GalaxyView`/continuous zoom reconciled with the Camera3D rig).
-Then Stage 6 — controls + full parity (RTS select/move via 3D ray, placement preview, HUD reconnect →
-switch `main_scene`, merge `feat/3d`). Deferred: Commander engineer beam + ability/LoS rings + 3D XP/rank
-bars; AbilityController plane-coord pass; real terrain features (backlog F1).
+**STAGE 5 COMPLETE** (`09d6068`) — `GalaxyView` → `Node3D`; the territory graph renders as 3D meshes
+(owner-colored system spheres + edge bars + active/frontier rings), visible when the camera rig reports
+`is_galaxy_zoom()`. CameraRig3D zoom range extended to galaxy distance + `is_galaxy_zoom()`; rig in group
+`camera_rig`. Zoom out → board shrinks → 3D galaxy. `node_at()` pick kept for deploy.
+
+**Next: Stage 6 — controls + full parity (the home stretch, and the largest remaining piece).** This is
+where the 3D build becomes the real game, not a demo: rebuild the **Battle controller** for 3D (it's the
+2D `Battle.gd` driving WorldMap/Academy/HUD/faction-select/save) — RTS select/move via **3D ground
+raycast** (replace `get_global_mouse_position`), tower/building/wall **placement preview** in 3D, **HUD
+reconnect** (CanvasLayer overlay; entity bars via `unproject_position` or the deferred 3D bars), Academy +
+FactionSelect + GameOver screens, deploy/capture via the 3D GalaxyView, then **switch `main_scene`** from
+the 2D path and **merge `feat/3d` → main**. Also fold in the deferred items (engineer beam, ability/LoS
+rings, 3D XP/rank bars, AbilityController plane-coord pass). Big — likely its own multi-session arc.
+`scenes/test/Battle3D.tscn` is the proven reference for all the 3D building blocks.
 
 ---
 

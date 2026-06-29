@@ -35,10 +35,19 @@ var _rig       : Node3D = null
 var _marker    : MeshInstance3D = null
 var _commander : Node = null
 
+## Stage 6 controls.
+const TOWER_DATA = preload("res://resources/towers/architects_t1.tres")
+const SELECT_RADIUS : float = 52.0
+var _map_grid    : Node = null
+var _placing     : bool = false
+var _preview     : MeshInstance3D = null
+var _preview_mat : StandardMaterial3D = null
+
 func _ready() -> void:
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
+	_setup_preview()
 	_spawn_base()
 	_spawn_commander()
 	_spawn_enemy_base()
@@ -54,7 +63,7 @@ func _ready() -> void:
 	_spawn_demo_units()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stages 2–5: 3D battle + terrain/fog + VFX + galaxy\nWheel = zoom (zoom OUT far for the galaxy view) | WASD = pan | MIDDLE+drag = rotate | MIDDLE+wheel = angle | Delete/Insert = reset/lock view | Left-click = move Commander"
+	title.text = "3D MIGRATION — Stage 6: RTS controls\nLEFT = select Commander | RIGHT = move (Shift = chain) | B = build tower (LEFT place / RIGHT cancel) | wheel = zoom (out far = galaxy) | WASD = pan | MIDDLE+drag = rotate | Delete/Insert = reset/lock view"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
@@ -84,6 +93,7 @@ func _spawn_map_grid() -> void:
 	var mg : Node = MAP_GRID_SCRIPT.new()
 	mg.name = "MapGrid"
 	add_child(mg)
+	_map_grid = mg
 
 ## Stage 2d: the real Base (FOB) entity at the base cell — 3D bunker, HP bar, turret that
 ## shoots units in range and takes breach damage when units arrive.
@@ -137,26 +147,111 @@ func _setup_marker() -> void:
 	_marker.visible = false
 	add_child(_marker)
 
+func _process(_delta: float) -> void:
+	if _placing:
+		_update_preview()
+
+## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
+## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb : InputEventMouseButton = event
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			_pick(mb.position)
+		if not mb.pressed:
+			return
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if _placing:
+				_try_place_tower(_hovered_cell())
+				if not Input.is_key_pressed(KEY_SHIFT):
+					_set_placing(false)
+			else:
+				_select_at(_mouse_ground())
+		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			if _placing:
+				_set_placing(false)
+			elif is_instance_valid(_commander) and bool(_commander.call("is_selected")):
+				var g : Vector2 = _mouse_ground()
+				if WORLD3D.is_valid(g):
+					_commander.call("move_command", g, Input.is_key_pressed(KEY_SHIFT))
+					_flash_marker(g)
+	elif event is InputEventKey and event.pressed and not event.echo:
+		var k : InputEventKey = event
+		if k.keycode == KEY_B:
+			_set_placing(not _placing)
+		elif k.keycode == KEY_ESCAPE:
+			if _placing:
+				_set_placing(false)
+			elif is_instance_valid(_commander):
+				_commander.call("set_selected", false)
 
-## Click → ground point → cell → snap a marker to the cell centre (proves the mapping + picking).
-func _pick(screen_pos: Vector2) -> void:
-	var cam : Camera3D = (_rig as Object).call("get_camera")
-	var ground2d : Vector2 = WORLD3D.ground_point(cam, screen_pos, 0.0)
-	if not WORLD3D.is_valid(ground2d):
+## -- RTS control helpers (Stage 6) --
+
+func _mouse_ground() -> Vector2:
+	var cam : Camera3D = _rig.call("get_camera")
+	return WORLD3D.ground_point(cam, get_viewport().get_mouse_position(), 0.0)
+
+func _hovered_cell() -> Vector2i:
+	var g : Vector2 = _mouse_ground()
+	if not WORLD3D.is_valid(g):
+		return Vector2i(-1, -1)
+	return Vector2i(int(clampf(floor(g.x / CELL), 0, COLS - 1)), int(clampf(floor(g.y / CELL), 0, ROWS - 1)))
+
+## Select the Commander if the click landed within SELECT_RADIUS of it, else deselect.
+func _select_at(world2: Vector2) -> void:
+	if not is_instance_valid(_commander):
 		return
-	var col : int = int(clampf(floor(ground2d.x / CELL), 0, COLS - 1))
-	var row : int = int(clampf(floor(ground2d.y / CELL), 0, ROWS - 1))
-	_marker.position = _cell_center3(Vector2i(col, row), CELL * 0.4)
+	var hit : bool = WORLD3D.is_valid(world2) and world2.distance_to(_commander.call("plane_pos")) <= SELECT_RADIUS
+	_commander.call("set_selected", hit)
+
+## Place an (unbuilt) tower at the hovered cell if the map allows it; the Commander then builds it.
+func _try_place_tower(cell: Vector2i) -> void:
+	if cell == Vector2i(-1, -1) or _map_grid == null:
+		return
+	if not bool(_map_grid.call("can_place_at", cell.x, cell.y)):
+		return
+	var t : Node = TOWER_SCENE.instantiate()
+	t.call("setup", TOWER_DATA, false)   ## unbuilt — the Commander constructs it
+	t.call("place_at", _cell_center2(cell))
+	add_child(t)
+	_map_grid.call("mark_tower_placed", cell.x, cell.y)
+
+func _set_placing(value: bool) -> void:
+	_placing = value
+	if _preview != null:
+		_preview.visible = value
+	if value:
+		_update_preview()
+
+func _update_preview() -> void:
+	if _preview == null:
+		return
+	var cell : Vector2i = _hovered_cell()
+	if cell == Vector2i(-1, -1):
+		_preview.visible = false
+		return
+	_preview.visible = true
+	_preview.position = _cell_center3(cell, 6.0)
+	var ok : bool = _map_grid != null and bool(_map_grid.call("can_place_at", cell.x, cell.y))
+	_preview_mat.albedo_color = Color(0.3, 1.0, 0.4, 0.5) if ok else Color(1.0, 0.3, 0.25, 0.5)
+
+func _setup_preview() -> void:
+	_preview = MeshInstance3D.new()
+	var bx : BoxMesh = BoxMesh.new()
+	bx.size = Vector3(CELL * 0.9, 8.0, CELL * 0.9)
+	_preview.mesh = bx
+	_preview_mat = StandardMaterial3D.new()
+	_preview_mat.albedo_color = Color(0.3, 1.0, 0.4, 0.5)
+	_preview_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_preview_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_preview.material_override = _preview_mat
+	_preview.visible = false
+	add_child(_preview)
+
+## Brief flash at a Commander move order.
+func _flash_marker(world2: Vector2) -> void:
+	if _marker == null:
+		return
+	_marker.position = WORLD3D.to3(world2, CELL * 0.3)
 	_marker.visible = true
-	## Stage 2e: left-click also issues a move order to the demo Commander (proves 3D movement).
-	if is_instance_valid(_commander):
-		_commander.call("move_command", _cell_center2(Vector2i(col, row)), false)
-	print("[Battle3D] picked cell (%d, %d)" % [col, row])
 
 func _cell_center3(cell: Vector2i, height: float) -> Vector3:
 	return WORLD3D.to3(_cell_center2(cell), height)
