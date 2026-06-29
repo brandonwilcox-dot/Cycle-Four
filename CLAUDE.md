@@ -59,9 +59,18 @@ Branch `feat/3d` (main = 2D checkpoint `69f3694`). Per `planning/3d-migration-pl
   build bar. 2D XP-bar/chevrons deferred (null-guarded). `Tower.tscn` root→Node3D; `TowerData.range`
   warning silenced. Battle3D demo: a spread of tiers/branches/roles shoot the marching units. MCP clean.
 
-**Carry-overs:** 3D death VFX → Stage 4 (2D `Vfx` no-ops in 3D); 3D XP bar/chevrons + HP-bar polish later.
-**Next:** continue Stage 2 — Building → Base → Commander → EnemyBase → Wall → FriendlyUnit → Convoy →
-AncientWatcher (each Node3D, model/view, MCP-verified), then Stages 3–6.
+- **Stage 2c** (`018bbd3`) — **`Building` (garrison) → `Node3D`.** Box garrison + raised cross identity;
+  ghost via material alpha. Production/raid/level/offline logic preserved (defender spawn passes plane
+  coords, no-ops until FriendlyUnit is 3D). `Building.tscn` root→Node3D.
+- **Stage 2d** (`cd0efd7`) — **`Base` (FOB) → `Node3D`.** 3D bunker (apron/body/corners/turret) +
+  billboard HP bar recoloring by ratio. HP/fortification/influence/doctrine preserved; 2D rank bar
+  deferred. Battle3D spawns the real Base (shoots units, takes breach damage). `WorldMap.tscn` (2D world,
+  abandoned) left untouched per plan.
+
+**Stage 2 entities done: Unit, Tower, Building, Base (4/10).** Battle3D is now a real 3D mini-battle
+(towers + FOB shooting marching units, garrison present). **Carry-overs:** 3D death VFX → Stage 4 (2D
+`Vfx` no-ops in 3D); 3D XP/rank bars + chevrons polish later; defender production lights up after
+FriendlyUnit. **Next:** Commander → EnemyBase → Wall → FriendlyUnit → Convoy → AncientWatcher, then 3–6.
 
 ---
 
