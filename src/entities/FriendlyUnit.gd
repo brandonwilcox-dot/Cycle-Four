@@ -109,7 +109,9 @@ func _acquire_target() -> Node:
 func _fire(target: Node) -> void:
 	if not target.has_method("take_damage"):
 		return
-	var killed : bool = bool(target.call("take_damage", data.attack_damage, Combat.faction_damage_type(_faction)))
+	var dt : int = Combat.faction_damage_type(_faction)
+	Vfx.bolt(_p, WORLD3D.node_plane(target), dt)
+	var killed : bool = bool(target.call("take_damage", data.attack_damage, dt))
 	if killed and is_instance_valid(_garrison) and _garrison.has_method("report_kill"):
 		_garrison.call("report_kill")
 

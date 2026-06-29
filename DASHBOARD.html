@@ -306,15 +306,15 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
     <div class="pr"><div class="pd done"></div><div class="pl">A</div><div class="pn"><div>Enemy factions in waves</div></div><span class="badge b-green">Done</span></div>
     <div class="pr"><div class="pd done"></div><div class="pl">B</div><div class="pn"><div>Faction-flavored pathing</div></div><span class="badge b-green">Done</span></div>
     <div class="pr"><div class="pd done"></div><div class="pl">C</div><div class="pn"><div>Garrisons + army</div><div class="psub">C1–C4 complete</div></div><span class="badge b-green">Done</span></div>
-    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence</div><div class="psub">Persistence ✓ · win conditions ✓ · galaxy nav ✓ · conquest arc + Commander bottleneck verified · Phase 4 next</div></div><span class="badge b-amber">Active</span></div>
+    <div class="pr"><div class="pd active"></div><div class="pl">D</div><div class="pn"><div>Galaxy + persistence + 3D migration</div><div class="psub">Persistence ✓ · conquest arc ✓ · faction identity (4A/4B/5) ✓ · 3D branch feat/3d: Stages 0–3 ✓ · Stage 4 (3D VFX) next</div></div><span class="badge b-amber">Active</span></div>
     <!-- PHASES_END -->
   </div>
 
   <div class="mbox">
     <!-- MILESTONE_START -->
     <div class="ml">⚡ Next Required Milestone</div>
-    <div class="mt">Phase 4 — faction identity: build preferences + passives per faction · then Phase 5 build limits · and confirm multi-spawn emission in next playtest</div>
-    <div class="mf">planning/commander-and-faction-systems.md · [BUG][P1][LIKELY-FIXED] multi-spawn · [BUG][P2] ObjectiveManager persist</div>
+    <div class="mt">Stage 4 — 3D VFX: rebuild Vfx autoload (tracers/muzzle/impact/death as meshes/particles + shot-flash + engineer beam). Then Stage 5 (galaxy view), Stage 6 (controls + full parity → switch main_scene, merge feat/3d). Also pending: AbilityController plane-coord pass before abilities work in 3D.</div>
+    <div class="mf">planning/3d-migration-plan.md · feat/3d branch · src/vfx/ · src/abilities/AbilityController.gd</div>
     <!-- MILESTONE_END -->
   </div>
 
@@ -328,6 +328,9 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
     <div class="bi" onclick="pick(this,'VERIFY','[LIKELY-FIXED — confirm in play] Enemies only entered from ONE spawn in wave play.\n\nCODE VERIFIED 2026-06-22:\n- MapGenerator._build_spawn_points now defaults every procgen spawn to ACTIVE\n- _activate_all_spawns() runs post-Academy as a backstop\n- _build_spawn_queue splits units across ALL active spawns\n- Debug log added at each wave start: [WaveSpawner] wave distribution — active spawns=N: …\n\nPlaytest to confirm:\n1. New Game → Begin Waves → check debug log shows active spawns ≥ 2\n2. Watch enemies enter from multiple directions on the map\n3. Close this once a playtest shows multi-direction emission','scenes/main/Battle.gd\nsrc/core/waves/WaveSpawner.gd\nsrc/core/map/MapGenerator.gd')">
       <span class="btag ver">VERIFY</span><span class="bpri">P1</span><span class="btxt">Multi-spawn [LIKELY-FIXED] — code-verified 2026-06-22, confirm in next playtest</span>
     </div>
+    <div class="bi" onclick="pick(this,'BUG','AbilityController plane-coord pass required before abilities work in 3D.\n\nAbilityController (src/abilities/AbilityController.gd) is a Node child of Commander and still mixes Vector2 field/hazard centers with now-Vector3 unit positions. This needs a plane-coordinate pass using World3D.node_plane() or plane_pos() for all position reads/writes.\n\nCurrently no-ops without a controller and not exercised in Battle3D. MUST be fixed before abilities work in the 3D game.\n\nFix: replace all Vector2 positional field/hazard references with plane-coordinate reads via World3D.node_plane() following the same pattern used in Stage 2 entity migrations.','src/abilities/AbilityController.gd\nsrc/core/World3D.gd')">
+      <span class="btag bug">BUG</span><span class="bpri">P1</span><span class="btxt">AbilityController plane-coord pass — abilities broken in 3D (Vector2/Vector3 mismatch)</span>
+    </div>
     <div class="bi" onclick="pick(this,'ENHANCEMENT','Garrison unit-type selection and composition. Player chooses which unit types to spawn; XP improves those types; higher levels unlock mixed-squad combinations.\n\nNeeds: garrison loadout UI in InspectionPanel, per-type XP tracking, multi-type squad spawn logic in Building.gd.','src/entities/Building.gd\nsrc/ui/InspectionPanel.gd\nsrc/entities/FriendlyUnit.gd')">
       <span class="btag enh">FEAT</span><span class="bpri">P1</span><span class="btxt">Garrison unit-type selection + squad composition</span>
     </div>
@@ -337,6 +340,9 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
   <div class="section">
     <div class="sh">P2 — Hurts Feel</div>
     <!-- BACKLOG_P2_START -->
+    <div class="bi" onclick="pick(this,'VERIFY','Phase 5 build limits (2026-06-24) — compile-verified, NEEDS PLAYTEST.\n\nCaps: TOWER_CAP_BASE 8 +2/base destroyed, GARRISON_CAP_BASE 4 +1/base. Enforced in _try_place_tower/_try_place_building; preview greys at cap; destroying a base raises cap + announces it. Reset per battle.\n\nPlaytest checklist:\n1. Place towers to the cap → placement blocked + preview greys\n2. Destroy an enemy base → cap rises + toast announces new limit\n3. Try to place beyond original cap → now allowed up to new cap\n\nTune TOWER_CAP_* / GARRISON_CAP_* in Battle.gd if feel is wrong.','scenes/main/Battle.gd')">
+      <span class="btag ver">VERIFY</span><span class="bpri">P2</span><span class="btxt">Phase 5 build limits — compile-clean, needs playtest to confirm cap enforcement</span>
+    </div>
     <div class="bi" onclick="pick(this,'BUG','BUG [P2] — ObjectiveManager completion not persisted on Continue. On restore, all objectives reset to 0/N. Territory objectives re-complete via garrison raids, masking the bug. But one-time events (path_discovered, convoy_spawned) stay stuck at 0 permanently.\n\nFix: persist completed-objective IDs in SaveManager and restore them into ObjectiveManager on load.','src/autoloads/ObjectiveManager.gd\nsrc/autoloads/SaveManager.gd')">
       <span class="btag bug">BUG</span><span class="bpri">P2</span><span class="btxt">ObjectiveManager completion not persisted on Continue</span>
     </div>
@@ -345,6 +351,9 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
     </div>
     <div class="bi" onclick="pick(this,'BUG','Convoy not operational — depot-to-FOB ferry never ran during playtest. Investigate ConvoyManager spawn conditions (connectivity BFS on path_discovered, depot detection). Likely no depot/path discovered on played map, or convoy never spawned.','src/autoloads/ConvoyManager.gd')">
       <span class="btag bug">BUG</span><span class="bpri">P2</span><span class="btxt">Convoy not operational — investigate ConvoyManager</span>
+    </div>
+    <div class="bi" onclick="pick(this,'ENHANCEMENT','Deferred 3D overlays (feat/3d branch carry-over from Stage 2). The following visual overlays were deferred during entity-to-Node3D migration:\n- Tower/Commander/Base/Convoy XP and rank bars (2D bars null-guarded, deferred)\n- Commander LoS/sensor/move-path/ability rings in 3D\n- Defender production in garrison needs a live faction + 3D unit layer\n\nAddress before Stage 6 parity / merge of feat/3d into main.','src/entities/Tower.gd\nsrc/entities/Commander.gd\nsrc/entities/Base.gd\nsrc/entities/Convoy.gd\nsrc/entities/Building.gd')">
+      <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">Deferred 3D overlays — XP/rank bars + Commander rings (feat/3d carry-over, due before Stage 6)</span>
     </div>
     <div class="bi" onclick="pick(this,'ENHANCEMENT','HUD should be visible during Academy scenario phase (75/90/90s). Player should be able to place towers and observe the behavior tracker. Currently HUD is hidden during scenarios.','scenes/main/Battle.gd\nsrc/ui/HUD.gd')">
       <span class="btag enh">FEAT</span><span class="bpri">P2</span><span class="btxt">HUD visible during Academy scenario phase</span>
@@ -628,8 +637,8 @@ textarea{resize:vertical;font-size:11px;line-height:1.5;}
 // ══ DATA (scheduled task updates this block) ══
 // DATA_START
 const D = {
-  lastUpdated: "2026-06-24",
-  phaseBadge: "Phase D — Active"
+  lastUpdated: "2026-06-29",
+  phaseBadge: "Phase D — 3D Migration Active"
 };
 // DATA_END
 

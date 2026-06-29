@@ -162,7 +162,10 @@ func _try_attack() -> void:
 			nearest_dist = dist
 			nearest      = unit
 	if nearest != null and nearest.has_method("take_damage"):
-		nearest.take_damage(DAMAGE, _turret_damage_type())
+		var dt : int = _turret_damage_type()
+		Vfx.muzzle(_p, dt)
+		Vfx.bolt(_p, WORLD3D.node_plane(nearest), dt)
+		nearest.take_damage(DAMAGE, dt)
 
 ## -- Visual (3D) --
 

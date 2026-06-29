@@ -261,9 +261,11 @@ func _try_primary_attack() -> void:
 	var dmg : float = PRIMARY_DAMAGE * _damage_multiplier
 	if _ability_controller != null and _ability_controller.is_overdrive_active:
 		dmg *= _ability_controller.overdrive_damage_mult
-	target.take_damage(dmg, Combat.faction_damage_type(FactionManager.active_faction))
+	var dt : int = Combat.faction_damage_type(FactionManager.active_faction)
+	Vfx.muzzle(_p, dt)
+	Vfx.bolt(_p, WORLD3D.node_plane(target), dt)   ## 3D tracer (replaces the old 2D shot flash)
+	target.take_damage(dmg, dt)
 	EventBus.commander_attacked.emit()
-	## NOTE: 3D shot flash arrives in migration Stage 4 (was a 2D Line2D).
 	if _ability_controller != null:
 		_ability_controller.add_lance_charge(dmg)
 		_ability_controller.on_primary_hit()
