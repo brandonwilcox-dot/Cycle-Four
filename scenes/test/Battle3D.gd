@@ -43,6 +43,13 @@ var _placing     : bool = false
 var _preview     : MeshInstance3D = null
 var _preview_mat : StandardMaterial3D = null
 
+## Stage 6b waves.
+const SPAWN_INTERVAL : float = 1.6
+var _unit_layer  : Node3D = null
+var _spawn_cells : Array[Vector2i] = []
+var _spawn_idx   : int   = 0
+var _spawn_timer : float = 2.0
+
 func _ready() -> void:
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
@@ -60,7 +67,7 @@ func _ready() -> void:
 
 	_spawn_demo_towers()
 	_spawn_demo_building()
-	_spawn_demo_units()
+	_setup_waves()
 
 	var title : Label3D = Label3D.new()
 	title.text = "3D MIGRATION — Stage 6: RTS controls\nLEFT = select Commander | RIGHT = move (Shift = chain) | B = build tower (LEFT place / RIGHT cancel) | wheel = zoom (out far = galaxy) | WASD = pan | MIDDLE+drag = rotate | Delete/Insert = reset/lock view"
@@ -147,9 +154,14 @@ func _setup_marker() -> void:
 	_marker.visible = false
 	add_child(_marker)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _placing:
 		_update_preview()
+	## Stage 6b: trickle enemy waves from the map's spawn points along their real A* paths.
+	_spawn_timer -= delta
+	if _spawn_timer <= 0.0:
+		_spawn_timer = SPAWN_INTERVAL
+		_spawn_one_enemy()
 
 ## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
 ## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
@@ -259,29 +271,37 @@ func _cell_center3(cell: Vector2i, height: float) -> Vector3:
 func _cell_center2(cell: Vector2i) -> Vector2:
 	return Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
 
-## Stage 2 demo: spawn a column of converted enemy Units that march to the FOB in 3D, using the
-## REAL Unit logic (waypoints/movement/visual) — proving the Node3D conversion drives correctly.
-func _spawn_demo_units() -> void:
-	var path : Array[Vector2] = [
-		_cell_center2(Vector2i(2, 17)),
-		_cell_center2(Vector2i(14, 10)),
-		_cell_center2(Vector2i(24, 24)),
-		_cell_center2(BASE_CELL),
-	]
-	for i in 10:
-		var ud : UnitData = UnitData.new()
-		ud.unit_name = "Demo Crawler"
-		ud.faction_id = "mesh"
-		ud.max_health = 60.0
-		ud.move_speed = 95.0
-		ud.color_hint = Color(0.85, 0.45, 0.95)
-		var wp : Array[Vector2] = []
-		## Stagger each unit further back so they stream in as a column.
-		wp.append(path[0] + Vector2(-float(i) * 90.0, float(i % 3 - 1) * 50.0))
-		wp.append_array(path)
-		var u : Node = UNIT_SCENE.instantiate()
-		u.call("setup", ud, wp)
-		add_child(u)
+## Stage 6b: real waves — collect the map's spawn cells and trickle enemies down their A* paths.
+func _setup_waves() -> void:
+	_unit_layer = Node3D.new()
+	_unit_layer.name = "UnitLayer"
+	add_child(_unit_layer)
+	var md : MapData = _map_grid.map_data if _map_grid != null else null
+	if md != null:
+		for sp in md.spawn_points:
+			if sp != null:
+				_spawn_cells.append(sp.position)
+
+func _spawn_one_enemy() -> void:
+	if _spawn_cells.is_empty() or _map_grid == null:
+		return
+	var cell : Vector2i = _spawn_cells[_spawn_idx % _spawn_cells.size()]
+	_spawn_idx += 1
+	var wp : Array = _map_grid.call("get_path_to_base", cell)
+	if wp.is_empty():
+		return
+	var u : Node = UNIT_SCENE.instantiate()
+	u.call("setup", _enemy_data(), wp)
+	_unit_layer.add_child(u)
+
+func _enemy_data() -> UnitData:
+	var ud : UnitData = UnitData.new()
+	ud.unit_name = "Raider"
+	ud.faction_id = "mesh"
+	ud.max_health = 60.0
+	ud.move_speed = 95.0
+	ud.color_hint = Color(0.85, 0.45, 0.95)
+	return ud
 
 ## Stage 2b demo: place converted Towers (built) along the path so they shoot the marching units —
 ## a mini 3D battle that exercises the real Tower logic + the 3D stat-driven silhouettes.
