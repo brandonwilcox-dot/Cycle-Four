@@ -14,6 +14,7 @@ const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
 const BASE_SCRIPT      = preload("res://src/entities/Base.gd")
 const COMMANDER_SCRIPT  = preload("res://src/entities/Commander.gd")
 const ENEMY_BASE_SCRIPT = preload("res://src/entities/EnemyBase.gd")
+const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -40,6 +41,7 @@ func _ready() -> void:
 	_spawn_base()
 	_spawn_commander()
 	_spawn_enemy_base()
+	_spawn_walls()
 
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
@@ -128,6 +130,14 @@ func _spawn_enemy_base() -> void:
 	eb.call("setup", &"demo_spawn", "mesh")
 	eb.call("place_at", _cell_center2(Vector2i(6, 17)))
 	add_child(eb)
+
+## Stage 2g: a couple of built walls on the enemy approach — enemies grind them to pass.
+func _spawn_walls() -> void:
+	for cell in [Vector2i(20, 16), Vector2i(20, 18)]:
+		var w : Node = WALL_SCRIPT.new()
+		w.call("place_at", _cell_center2(cell))
+		add_child(w)
+		w.call("mark_built")
 
 func _setup_marker() -> void:
 	_marker = MeshInstance3D.new()
