@@ -5,8 +5,9 @@
 ## proving the 2D⇄3D coordinate mapping. NOT the real battle yet; entities arrive in Stage 2.
 extends Node3D
 
-const WORLD3D   = preload("res://src/core/World3D.gd")
-const CAM_RIG   = preload("res://src/core/CameraRig3D.gd")
+const WORLD3D    = preload("res://src/core/World3D.gd")
+const CAM_RIG    = preload("res://src/core/CameraRig3D.gd")
+const UNIT_SCENE = preload("res://scenes/main/Unit.tscn")
 
 ## Mirror the real grid constants (MapGrid) so the mapping is exercised at production scale.
 const CELL : int = 64
@@ -27,6 +28,8 @@ func _ready() -> void:
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
 	add_child(_rig)
+
+	_spawn_demo_units()
 
 	var title : Label3D = Label3D.new()
 	title.text = "3D MIGRATION — Stage 1 slice: camera + ground + FOB + click-to-ground picking\nWheel = zoom, WASD/arrows or middle-drag = pan, Left-click = drop a cell marker"
@@ -132,5 +135,31 @@ func _pick(screen_pos: Vector2) -> void:
 	print("[Battle3D] picked cell (%d, %d)" % [col, row])
 
 func _cell_center3(cell: Vector2i, height: float) -> Vector3:
-	var center2d : Vector2 = Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
-	return WORLD3D.to3(center2d, height)
+	return WORLD3D.to3(_cell_center2(cell), height)
+
+func _cell_center2(cell: Vector2i) -> Vector2:
+	return Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
+
+## Stage 2 demo: spawn a column of converted enemy Units that march to the FOB in 3D, using the
+## REAL Unit logic (waypoints/movement/visual) — proving the Node3D conversion drives correctly.
+func _spawn_demo_units() -> void:
+	var path : Array[Vector2] = [
+		_cell_center2(Vector2i(2, 17)),
+		_cell_center2(Vector2i(14, 10)),
+		_cell_center2(Vector2i(24, 24)),
+		_cell_center2(BASE_CELL),
+	]
+	for i in 10:
+		var ud : UnitData = UnitData.new()
+		ud.unit_name = "Demo Crawler"
+		ud.faction_id = "mesh"
+		ud.max_health = 60.0
+		ud.move_speed = 95.0
+		ud.color_hint = Color(0.85, 0.45, 0.95)
+		var wp : Array[Vector2] = []
+		## Stagger each unit further back so they stream in as a column.
+		wp.append(path[0] + Vector2(-float(i) * 90.0, float(i % 3 - 1) * 50.0))
+		wp.append_array(path)
+		var u : Node = UNIT_SCENE.instantiate()
+		u.call("setup", ud, wp)
+		add_child(u)

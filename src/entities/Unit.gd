@@ -1,70 +1,69 @@
 ## Unit.gd
-## Enemy unit. Navigates a pre-computed world-space waypoint list from spawn to base.
+## Enemy unit. Navigates a pre-computed waypoint list from spawn to base.
 ## Spawned by WaveSpawner via setup(); reports death/arrival through WaveManager/EventBus.
-## Phase B: uses Node2D + waypoint movement instead of PathFollow2D.
-## Phase F: flanker variant targets CLAIMED territory instead of the base.
-extends Node2D
+##
+## 3D MIGRATION (Stage 2): now `extends Node3D`. Simulation stays on a logical 2D plane —
+## `_p` is the authoritative plane position (pixel units, the old Vector2 world coords); the
+## Node3D transform is driven from it via World3D (`_set_plane`/`_sync_transform`). Cross-entity
+## reads go through `plane_pos()` / `World3D.node_plane()` so 2D and not-yet-converted entities
+## interoperate during the migration. Visual is a MeshInstance3D (was a ColorRect).
+extends Node3D
 
 const Combat = preload("res://src/combat/Combat.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
+const WORLD3D = preload("res://src/core/World3D.gd")
 
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
 
-## Waypoints in world space (cell centres). Index 0 is the spawn position.
+## Logical plane position (pixel units) — the authoritative position; the 3D transform follows it.
+var _p : Vector2 = Vector2.ZERO
+
+## Waypoints on the plane (cell centres). Index 0 is the spawn position.
 ## Movement begins toward index 1; arrival triggers advance to next index.
 var _waypoints     : Array[Vector2] = []
 var _wp_index      : int            = 1
 const ARRIVE_DIST  : float          = 3.0   ## px -- close enough to snap to waypoint
 
 ## C2 — two-way combat. When a friendly army unit blocks our path (within
-## MELEE_ENGAGE_RANGE) we stop advancing and grind it down on MELEE_INTERVAL. Damage uses
-## our faction's signature type vs the friendly's armor (the one triangle). ENEMY_MELEE_DAMAGE
-## is a fallback for roster units whose .tres hasn't authored attack_damage yet.
+## MELEE_ENGAGE_RANGE) we stop advancing and grind it down on MELEE_INTERVAL.
 const MELEE_ENGAGE_RANGE : float = 40.0
 const MELEE_INTERVAL     : float = 1.0
 const ENEMY_MELEE_DAMAGE : float = 8.0
 var _melee_timer : float = 0.0
 
+const BODY_SIZE  : float = 26.0   ## 3D body cube size (was a 24px square)
+const BODY_LIFT  : float = 14.0   ## mesh sits on the ground (half body + a touch)
+
 var _current_health   : float    = 0.0
 var _is_dead          : bool     = false
-var _visual           : ColorRect = null   ## placeholder until sprites exist
-var _speed_multiplier : float    = 1.0    ## set by AbilityController (Suppression Field)
-var _stun_until       : float    = -1.0   ## timestamp; movement skipped while now < _stun_until
-var _pollen_until     : float    = -1.0   ## Phase 4B Bloom pollen: slowed + blinded (can't attack) while active
-var _hijacked_until   : float    = -1.0   ## Phase 4B Mesh hijack: fighting former allies while active
-var _pre_hijack_modulate : Color = Color(1, 1, 1, 1)
+var _mesh             : MeshInstance3D = null
+var _mat              : StandardMaterial3D = null
+var _hp_fill          : MeshInstance3D = null
+var _base_color       : Color    = Color.GRAY   ## faction/flanker colour (health/hijack tint over this)
+var _speed_multiplier : float    = 1.0
+var _stun_until       : float    = -1.0
+var _pollen_until     : float    = -1.0
+var _hijacked_until   : float    = -1.0
+var _hijacked         : bool     = false
 
-## Stealth detection counterplay: recomputed on a throttle; true while this unit is
-## inside an active detector's radius (FOB / Commander / detector tower).
+## Stealth detection counterplay.
 const DETECT_RECOMPUTE_PERIOD : float = 0.15
 var _detect_timer     : float    = 0.0
 var _is_detected      : bool     = false
 
-## Item 4 — tiered reveal for stealth units. Inside a detector's SIGHT radius (get_detector_radius)
-## = FULL (drawn fully, targetable). Inside its larger SENSOR radius (get_sensor_radius, or a default
-## multiple) = BLIP (a dim position marker, health bar hidden, NOT targetable). Outside both = HIDDEN.
-## Non-stealth units ignore this entirely and use plain fog (revealed cell).
 enum RevealTier { HIDDEN, BLIP, FULL }
 var _reveal_tier      : RevealTier = RevealTier.HIDDEN
-## Default sensor (blip) ring = this × a detector's sight radius, for detectors that don't expose their
-## own get_sensor_radius() (towers, garrisons, FOB). The Commander overrides with its drawn sensor ring.
 const SENSOR_RADIUS_MULT : float = 1.6
 
 ## Phase F -- flanker state.
-## Flankers target a CLAIMED cell instead of the base.
-## _target_cell = Vector2i(-1,-1) means "not a flanker / target already gone".
 var _is_flanker    : bool     = false
 var _target_cell   : Vector2i = Vector2i(-1, -1)
 var _map_grid_ref  : Node     = null
-## Must match Commander.RATE_PER_CLAIMED_CELL (0.05). Kept here to avoid coupling.
 const TERRITORY_RATE_PER_CELL : float = 0.05
-const RAID_RESOURCE_PENALTY   : float = 15.0   ## primary resources stolen on a successful raid
+const RAID_RESOURCE_PENALTY   : float = 15.0
 
-## Phase 3 — base defender state (commander-and-faction-systems.md). A defender guards its enemy
-## base instead of marching to the FOB: it chases player targets (commander/friendly) within
-## DEFENDER_AGGRO of the base and never strays past DEFENDER_LEASH from it. Melee uses the same
-## _engaged_friendly path; a defender's death does NOT count against a WaveManager wave.
+## Phase 3 — base defender state.
 const DEFENDER_AGGRO : float    = 220.0
 const DEFENDER_LEASH : float    = 240.0
 var _is_defender     : bool     = false
@@ -76,58 +75,49 @@ func _ready() -> void:
 		push_error("Unit spawned without UnitData -- call setup() before adding to tree.")
 		return
 	_current_health = data.max_health
-	_build_placeholder_visual()
-	## Phase 6/8: cache MapGrid reference so we can hide ourselves in unrevealed cells.
-	## Flankers already have _map_grid_ref set via setup_as_flanker; for normal units
-	## resolve it from the scene tree (UnitLayer/Unit → ../../MapGrid).
+	_build_visual()
+	_sync_transform()
+	## Cache MapGrid (for fog) if a flanker didn't already supply it.
 	if _map_grid_ref == null:
 		_map_grid_ref = get_node_or_null("../../MapGrid")
-	## Phase 9 polish: apply fog visibility immediately at spawn so units don't flash
-	## for one frame before _process runs.
 	_update_fog_visibility()
 
 func _process(delta: float) -> void:
 	if _is_dead:
 		return
 	## Phase 4B Mesh hijack: revert on expiry; while active, fight former allies and skip enemy logic.
-	if _hijacked_until > 0.0 and Time.get_ticks_msec() / 1000.0 >= _hijacked_until:
+	if _hijacked and Time.get_ticks_msec() / 1000.0 >= _hijacked_until:
 		_end_hijack()
-	if _is_hijacked():
+	if _hijacked:
 		_hijack_update(delta)
 		return
 	if _waypoints.is_empty() and not _is_defender:
 		return
-	## Stealth: refresh the live reveal tier on a throttle (scans the detectors group).
+	## Stealth: refresh the live reveal tier on a throttle.
 	if data != null and data.stealth:
 		_detect_timer -= delta
 		if _detect_timer <= 0.0:
 			_detect_timer = DETECT_RECOMPUTE_PERIOD
 			_reveal_tier = _compute_reveal_tier()
 			_is_detected = _reveal_tier == RevealTier.FULL
-	## Phase 6/8: hide while inside unrevealed cells. Enemies emerging from the fog
-	## should only appear once their cell enters the Commander's vision.
 	_update_fog_visibility()
-	## Stun check: freeze movement for the duration. Status-immune units skip this.
+	## Stun: freeze movement for the duration.
 	if _stun_until > 0.0 and Time.get_ticks_msec() / 1000.0 < _stun_until:
 		return
-	## C2: if a friendly army unit is blocking us, stop advancing and fight it. This is what
-	## lets the player's garrisons hold a line instead of being walked past.
-	var foe : Node2D = _engaged_friendly()
+	## C2: a friendly army unit blocking us → stop and fight it.
+	var foe : Node = _engaged_friendly()
 	if foe != null:
 		_melee_timer += delta
 		if _melee_timer >= MELEE_INTERVAL:
 			_melee_timer = 0.0
-			## Phase 4B: blinded (pollened) enemies still block but can't land the hit.
 			if not _pollen_active() and foe.has_method("take_damage"):
 				foe.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))
 		return
-	## Phase 3: base defenders guard their stronghold — chase nearby player targets instead of
-	## marching to the FOB (the melee above applies damage once we close to range).
+	## Phase 3: base defenders guard their stronghold.
 	if _is_defender:
 		_defender_update(delta)
 		return
-	## Flankers: if our target was already raided by another unit, grab the next one.
-	## get_cell() is an O(1) array lookup -- safe to call every frame.
+	## Flankers: re-target if our claimed cell was already raided.
 	if _is_flanker and _target_cell != Vector2i(-1, -1) and _map_grid_ref != null:
 		if _map_grid_ref.get_cell(_target_cell.x, _target_cell.y) != 9:   ## no longer CLAIMED
 			_retarget_flanker()
@@ -137,33 +127,43 @@ func _process(delta: float) -> void:
 		else:
 			_reach_base()
 		return
-	## Move toward the current waypoint
-	var target     : Vector2 = _waypoints[_wp_index]
-	var to_target  : Vector2 = target - global_position
-	var dist       : float   = to_target.length()
-	var step       : float   = data.move_speed * _speed_multiplier * _pollen_slow() * delta
+	## Move toward the current waypoint (all on the logical plane).
+	var target    : Vector2 = _waypoints[_wp_index]
+	var to_target : Vector2 = target - _p
+	var dist      : float   = to_target.length()
+	var step      : float   = data.move_speed * _speed_multiplier * _pollen_slow() * delta
 	if dist <= step or dist <= ARRIVE_DIST:
-		global_position = target
+		_set_plane(target)
 		_wp_index += 1
 	else:
-		global_position += to_target.normalized() * step
+		_set_plane(_p + to_target.normalized() * step)
 
-## Phase 6/8: toggles self.visible based on the cell the unit currently occupies.
-## Revealed → visible. Unrevealed → hidden. Cheap: one cell→idx math + one byte read.
-## Once revealed cells are permanent within a session, this naturally fades units
-## into view as the Commander explores.
+## The cross-entity contract: this unit's logical plane position.
+func plane_pos() -> Vector2:
+	return _p
+
+## Set the plane position, sync the 3D transform, and face the movement direction.
+func _set_plane(p: Vector2) -> void:
+	var delta : Vector2 = p - _p
+	_p = p
+	global_position = WORLD3D.to3(_p, 0.0)
+	if delta.length_squared() > 0.0001:
+		rotation.y = -atan2(delta.y, delta.x)   ## face travel direction (plane Y → 3D Z)
+
+func _sync_transform() -> void:
+	global_position = WORLD3D.to3(_p, 0.0)
+
+## Phase 6/8: toggle visibility based on the occupied cell (fog).
 func _update_fog_visibility() -> void:
 	if _map_grid_ref == null:
 		return
 	var map_data : MapData = _map_grid_ref.get("map_data") as MapData
 	if map_data == null:
 		return
-	var cell : Vector2i = _map_grid_ref.world_to_cell(global_position)
+	var cell : Vector2i = _map_grid_ref.world_to_cell(_p)
 	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
 		return
 	var idx : int = cell.x + cell.y * map_data.dimensions.x
-	## Stealth units use the tiered reveal: FULL = drawn fully, BLIP = dim position marker
-	## (health bar hidden), HIDDEN = invisible. Normal units use sight/fog (revealed cell).
 	if data != null and data.stealth:
 		visible = _reveal_tier != RevealTier.HIDDEN
 		_apply_reveal_visual(_reveal_tier == RevealTier.FULL)
@@ -171,19 +171,13 @@ func _update_fog_visibility() -> void:
 		visible = map_data.get_meta_revealed(idx)
 
 ## Called by WaveSpawner before adding the unit to the scene tree.
-## waypoints[0] is the spawn world position; unit starts there.
 func setup(unit_data: UnitData, waypoints: Array) -> void:
 	data       = unit_data
 	_wp_index  = 1
 	_waypoints.assign(waypoints)
-	## Use position (local), not global_position: node isn't in the tree yet.
-	## UnitLayer sits at (0,0) in world space so local == world here.
 	if not _waypoints.is_empty():
-		position = _waypoints[0]
+		_p = _waypoints[0]
 
-## Variant of setup() for flanker units (Phase F).
-## Waypoints lead to the adjacent PATH cell; the final element is the CLAIMED cell itself.
-## Flankers render with a red tint so the player can tell them apart at a glance.
 func setup_as_flanker(unit_data: UnitData, waypoints: Array,
 		target_cell: Vector2i, map_grid: Node) -> void:
 	setup(unit_data, waypoints)
@@ -191,31 +185,24 @@ func setup_as_flanker(unit_data: UnitData, waypoints: Array,
 	_target_cell  = target_cell
 	_map_grid_ref = map_grid
 
-## Variant of setup() for base defenders (Phase 3). No waypoints — the unit guards home_world,
-## chasing player targets that come near its base instead of marching to the FOB.
 func setup_as_defender(unit_data: UnitData, home_world: Vector2) -> void:
 	data         = unit_data
 	_is_defender = true
 	_guard_home  = home_world
-	position     = home_world
+	_p           = home_world
 
-## Called by WaveSpawner when EventBus.path_changed fires mid-wave.
-## Finds the nearest traversable cell to current position and gets a fresh
-## path to base from there. No-ops if the unit is dead or has no waypoints.
+## Reroute on EventBus.path_changed (mid-wave block).
 func reroute(map_grid: Node) -> void:
 	if _is_dead or _waypoints.is_empty():
 		return
-	var nearest_cell : Vector2i = map_grid.get_nearest_path_cell(global_position)
+	var nearest_cell : Vector2i = map_grid.get_nearest_path_cell(_p)
 	if _is_flanker:
-		## Flankers re-find the nearest accessible claimed cell from their current position.
 		var flank_path : Array = map_grid.call("get_path_to_nearest_claimed", nearest_cell)
 		if not flank_path.is_empty():
 			_waypoints.assign(flank_path)
 			_wp_index    = 1
-			## Update target to the last waypoint (the CLAIMED cell world position)
 			_target_cell = map_grid.call("world_to_cell", _waypoints[_waypoints.size() - 1])
 			return
-		## No accessible claimed cells left -- demote to a base-rusher
 		_is_flanker  = false
 		_target_cell = Vector2i(-1, -1)
 	var new_path : Array = map_grid.get_path_to_base(nearest_cell)
@@ -224,21 +211,17 @@ func reroute(map_grid: Node) -> void:
 	_waypoints.assign(new_path)
 	_wp_index = 1
 
-## Sets a speed multiplier applied by the Suppression Field. Call with 1.0 to clear.
-## Status-immune units ignore the slow but the call is safe to make unconditionally.
 func set_debuff(speed_mult: float) -> void:
 	if data != null and data.status_immune:
 		return
 	_speed_multiplier = speed_mult
 
-## Freezes movement for duration seconds. No-op on status-immune units.
 func apply_stun(duration: float) -> void:
 	if data != null and data.status_immune:
 		return
 	_stun_until = Time.get_ticks_msec() / 1000.0 + duration
 
-## Phase 4B Bloom pollen: while active the unit is slowed (_pollen_slow) and blinded (can't attack).
-## Bloom towers re-apply it each cadence; it lingers BLOOM_POLLEN_DURATION after leaving the cloud.
+## Phase 4B Bloom pollen: slowed + blinded (can't attack) while active.
 func apply_pollen(duration: float) -> void:
 	if data != null and data.status_immune:
 		return
@@ -252,37 +235,37 @@ func _pollen_slow() -> float:
 
 ## -- Phase 4B Mesh hijack --
 
-## Convert this enemy to fight its former allies for `duration`. Swaps groups (units → friendly_units)
-## so the player's towers/Commander ignore it and enemies attack it; reverts (cyan tint cleared) on expiry.
 func apply_hijack(duration: float) -> void:
 	if data != null and data.status_immune:
 		return
-	if not _is_hijacked():
-		_pre_hijack_modulate = modulate
+	if not _hijacked:
+		_hijacked = true
 		remove_from_group("units")
 		add_to_group("friendly_units")
-		modulate = Color(0.35, 0.85, 1.0, 1.0)   ## cyan — converted
+		_set_tint(Color(0.35, 0.85, 1.0, 1.0))   ## cyan — converted
 	_hijacked_until = Time.get_ticks_msec() / 1000.0 + duration
 
 func _is_hijacked() -> bool:
-	return _hijacked_until > 0.0 and Time.get_ticks_msec() / 1000.0 < _hijacked_until
+	return _hijacked
 
 func _end_hijack() -> void:
+	_hijacked = false
 	_hijacked_until = -1.0
 	remove_from_group("friendly_units")
 	add_to_group("units")
-	modulate = _pre_hijack_modulate
+	_update_health_visual()   ## restore the health-based tint
 
-## While hijacked: close on the nearest remaining enemy and grind it (no leash — it roams to fight).
+## While hijacked: close on the nearest remaining enemy and grind it.
 func _hijack_update(delta: float) -> void:
-	var target : Node2D = _nearest_enemy_unit()
+	var target : Node = _nearest_enemy_unit()
 	if target == null:
 		return
-	var d : float = global_position.distance_to(target.global_position)
+	var tpos : Vector2 = WORLD3D.node_plane(target)
+	var d : float = _p.distance_to(tpos)
 	if d > MELEE_ENGAGE_RANGE:
 		var step : float = data.move_speed * _speed_multiplier * delta
-		var dir  : Vector2 = target.global_position - global_position
-		global_position += dir.normalized() * minf(step, dir.length())
+		var dir  : Vector2 = tpos - _p
+		_set_plane(_p + dir.normalized() * minf(step, dir.length()))
 	else:
 		_melee_timer += delta
 		if _melee_timer >= MELEE_INTERVAL:
@@ -290,116 +273,102 @@ func _hijack_update(delta: float) -> void:
 			if target.has_method("take_damage"):
 				target.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))
 
-## Nearest real enemy (hijacked units are removed from "units", so this only finds true enemies).
-func _nearest_enemy_unit() -> Node2D:
-	var best : Node2D = null
+func _nearest_enemy_unit() -> Node:
+	var best : Node = null
 	var best_d : float = 1.0e20
 	for u in get_tree().get_nodes_in_group("units"):
-		if u == self or not is_instance_valid(u) or not (u is Node2D):
+		if u == self or not is_instance_valid(u):
 			continue
-		var d : float = global_position.distance_to((u as Node2D).global_position)
+		var d : float = _p.distance_to(WORLD3D.node_plane(u))
 		if d < best_d:
 			best_d = d
 			best = u
 	return best
 
-## Stealth gating (Pass 2): non-stealth units are always detectable. Stealth units
-## are only visible/targetable while standing in a sensed cell (a sensor sphere).
-## Attackers call this before locking on; AoE abilities ignore it.
 func is_detectable() -> bool:
 	if data == null or not data.stealth:
 		return true
 	return _is_detected
 
-## C2: nearest meleeable friendly within range, or null. Drives blocking + retaliation.
-## Phase 2A: the Commander is meleeable too — sitting in the fray (e.g. assaulting a base amid
-## spawns) is now dangerous, so it can no longer solo with impunity.
-func _engaged_friendly() -> Node2D:
-	var best   : Node2D = null
-	var best_d : float  = MELEE_ENGAGE_RANGE
+## C2: nearest meleeable friendly (or commander/built wall) within range, or null.
+func _engaged_friendly() -> Node:
+	var best   : Node  = null
+	var best_d : float = MELEE_ENGAGE_RANGE
 	for f in get_tree().get_nodes_in_group("friendly_units"):
-		if not is_instance_valid(f) or not (f is Node2D):
+		if not is_instance_valid(f):
 			continue
-		var d : float = global_position.distance_to((f as Node2D).global_position)
+		var d : float = _p.distance_to(WORLD3D.node_plane(f))
 		if d <= best_d:
 			best   = f
 			best_d = d
 	for c in get_tree().get_nodes_in_group("commander"):
-		if not is_instance_valid(c) or not (c is Node2D):
+		if not is_instance_valid(c):
 			continue
-		var d : float = global_position.distance_to((c as Node2D).global_position)
+		var d : float = _p.distance_to(WORLD3D.node_plane(c))
 		if d <= best_d:
 			best   = c
 			best_d = d
-	## Phase 4B: a BUILT Architect wall is a blocker too — enemies stop and grind it down to pass
-	## ("block paths enemies have to unblock"). An unbuilt (ghost) wall doesn't block yet.
 	for w in get_tree().get_nodes_in_group("walls"):
-		if not is_instance_valid(w) or not (w is Node2D):
+		if not is_instance_valid(w):
 			continue
 		if w.has_method("is_built") and not bool(w.call("is_built")):
 			continue
-		var d : float = global_position.distance_to((w as Node2D).global_position)
+		var d : float = _p.distance_to(WORLD3D.node_plane(w))
 		if d <= best_d:
 			best   = w
 			best_d = d
 	return best
 
-## Phase 3 defender movement: close on the nearest player target near our base (the melee path
-## applies the damage once in range), or fall back to holding home. Leashed to the stronghold.
 func _defender_update(delta: float) -> void:
-	var target : Node2D = _nearest_player_target()
+	var target : Node = _nearest_player_target()
 	if target != null:
-		_move_toward_guard(target.global_position, delta)
-	elif global_position.distance_to(_guard_home) > ARRIVE_DIST:
+		_move_toward_guard(WORLD3D.node_plane(target), delta)
+	elif _p.distance_to(_guard_home) > ARRIVE_DIST:
 		_move_toward_guard(_guard_home, delta)
 
-## Nearest commander/friendly within DEFENDER_AGGRO of our BASE (so we defend our patch, not roam).
-func _nearest_player_target() -> Node2D:
-	var best : Node2D = null
+func _nearest_player_target() -> Node:
+	var best : Node = null
 	var best_d : float = 1.0e20
 	for grp in ["commander", "friendly_units"]:
 		for t in get_tree().get_nodes_in_group(grp):
-			if not is_instance_valid(t) or not (t is Node2D):
+			if not is_instance_valid(t):
 				continue
-			var n : Node2D = t as Node2D
-			if n.global_position.distance_to(_guard_home) > DEFENDER_AGGRO:
+			var tpos : Vector2 = WORLD3D.node_plane(t)
+			if tpos.distance_to(_guard_home) > DEFENDER_AGGRO:
 				continue
-			var d : float = global_position.distance_to(n.global_position)
+			var d : float = _p.distance_to(tpos)
 			if d < best_d:
 				best_d = d
-				best = n
+				best = t
 	return best
 
 func _move_toward_guard(point: Vector2, delta: float) -> void:
 	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * delta
-	var dir  : Vector2 = point - global_position
+	var dir  : Vector2 = point - _p
+	var np   : Vector2
 	if dir.length() <= step:
-		global_position = point
+		np = point
 	else:
-		global_position += dir.normalized() * step
-	var from_home : Vector2 = global_position - _guard_home
+		np = _p + dir.normalized() * step
+	var from_home : Vector2 = np - _guard_home
 	if from_home.length() > DEFENDER_LEASH:
-		global_position = _guard_home + from_home.normalized() * DEFENDER_LEASH
+		np = _guard_home + from_home.normalized() * DEFENDER_LEASH
+	_set_plane(np)
 
-## Melee damage we deal to a blocking friendly. Falls back to a constant when the roster
-## resource hasn't authored attack_damage (it's tuned as a marching wave unit).
 func _melee_damage() -> float:
 	return maxf(data.attack_damage, ENEMY_MELEE_DAMAGE)
 
-## Strongest reveal tier any active detector (FOB, Commander, tower, garrison) grants us this scan.
-## Inside a detector's sight radius → FULL; inside its larger sensor radius → BLIP; else HIDDEN.
-## Returns early on the first FULL (the best possible); otherwise tracks the best tier seen.
 func _compute_reveal_tier() -> RevealTier:
 	var best : RevealTier = RevealTier.HIDDEN
 	for d in get_tree().get_nodes_in_group("detectors"):
-		if not (d is Node2D) or not is_instance_valid(d):
+		if not is_instance_valid(d):
 			continue
 		if not d.has_method("get_detector_radius"):
 			continue
 		var sight : float = float(d.call("get_detector_radius"))
 		if sight <= 0.0:
 			continue
-		var dist : float = global_position.distance_to((d as Node2D).global_position)
+		var dist : float = _p.distance_to(WORLD3D.node_plane(d))
 		if dist <= sight:
 			return RevealTier.FULL
 		var sensor : float = float(d.call("get_sensor_radius")) if d.has_method("get_sensor_radius") else sight * SENSOR_RADIUS_MULT
@@ -407,9 +376,7 @@ func _compute_reveal_tier() -> RevealTier:
 			best = RevealTier.BLIP
 	return best
 
-## Apply incoming damage. damage_type (Combat.DamageType, -1 = untyped contact damage)
-## scales the hit against this unit's armor_type before flat armor is subtracted.
-## Returns true if the unit died.
+## Apply incoming damage. Returns true if the unit died.
 func take_damage(amount: float, damage_type: int = -1) -> bool:
 	if _is_dead:
 		return true
@@ -420,7 +387,6 @@ func take_damage(amount: float, damage_type: int = -1) -> bool:
 	if _current_health <= 0.0:
 		_die()
 		return true
-	## Bloom evolution check
 	if data.evolve_threshold > 0.0:
 		var hp_ratio : float = _current_health / data.max_health
 		if hp_ratio <= data.evolve_threshold and data.evolved_unit != null:
@@ -429,20 +395,15 @@ func take_damage(amount: float, damage_type: int = -1) -> bool:
 
 ## -- Internal --
 
-## Called when our target CLAIMED cell was taken by another flanker while en route.
-## Finds the nearest remaining CLAIMED cell and re-routes to it.
-## Falls back to base-rushing if no claimed cells remain.
 func _retarget_flanker() -> void:
-	var nearest_cell : Vector2i = _map_grid_ref.get_nearest_path_cell(global_position)
+	var nearest_cell : Vector2i = _map_grid_ref.get_nearest_path_cell(_p)
 	var flank_path   : Array    = _map_grid_ref.call("get_path_to_nearest_claimed", nearest_cell)
 	if not flank_path.is_empty():
 		_waypoints.assign(flank_path)
 		_wp_index = 1
-		## Derive target cell from the last waypoint (world-space centre of CLAIMED cell).
 		var last_wp  : Vector2  = _waypoints[_waypoints.size() - 1]
-		_target_cell = Vector2i(int(last_wp.x) / 64, int(last_wp.y) / 64)
+		_target_cell = Vector2i(int(last_wp.x / 64.0), int(last_wp.y / 64.0))
 	else:
-		## No claimed territory left -- demote to a base-rusher.
 		_is_flanker  = false
 		_target_cell = Vector2i(-1, -1)
 		var base_path : Array = _map_grid_ref.get_path_to_base(nearest_cell)
@@ -450,20 +411,15 @@ func _retarget_flanker() -> void:
 			_waypoints.assign(base_path)
 			_wp_index = 1
 
-## Flanker arrived at its target CLAIMED cell.
-## Unclaims it, penalises the economy, and counts as cleared for wave tracking.
 func _raid_territory() -> void:
 	_is_dead = true
 	if _map_grid_ref != null and _target_cell != Vector2i(-1, -1):
-		## Guard: another flanker may have raided this cell first (race condition).
 		if _map_grid_ref.get_cell(_target_cell.x, _target_cell.y) == 9:   ## Cell.CLAIMED
 			_map_grid_ref.call("unclaim_cell", _target_cell.x, _target_cell.y)
 			var primary : String = FactionManager.get_primary_resource()
-			## Steal resources and remove this cell's passive income contribution.
 			EconomyManager.add_resource(primary, -RAID_RESOURCE_PENALTY)
 			EconomyManager.add_territory_rate(primary, -TERRITORY_RATE_PER_CELL)
 			EventBus.territory_raided.emit(_target_cell)
-	## Count as cleared so the wave can end normally.
 	WaveManager.report_enemy_killed()
 	queue_free()
 
@@ -471,78 +427,88 @@ func _reach_base() -> void:
 	_is_dead = true
 	WaveManager.report_base_breached()
 	EventBus.base_damaged.emit(data.damage_on_arrival, {"unit": data.unit_name})
-	## Partial reward even on breach
 	EconomyManager.add_resource(FactionManager.get_primary_resource(), data.resource_reward * 0.5)
 	queue_free()
 
 func _die() -> void:
 	_is_dead = true
 	if not _is_defender:
-		WaveManager.report_enemy_killed()   ## defenders aren't part of a wave — don't skew its count
+		WaveManager.report_enemy_killed()
 	EconomyManager.add_resource(FactionManager.get_primary_resource(), data.resource_reward)
 	EventBus.unit_died.emit({"unit": data.unit_name, "faction": data.faction_id})
-	Vfx.death(global_position, Vfx.faction_color(data.faction_id), 22.0)
+	## NOTE: 3D death VFX arrives in migration Stage 4; the 2D Vfx no-ops outside the 2D world.
+	Vfx.death(_p, Vfx.faction_color(data.faction_id), 22.0)
 	queue_free()
 
 func _evolve() -> void:
 	var hp_ratio : float = _current_health / data.max_health
 	data            = data.evolved_unit
 	_current_health = data.max_health * hp_ratio
-	_visual.color   = data.color_hint
+	_base_color     = data.color_hint
 	_update_health_visual()
 
-func _build_placeholder_visual() -> void:
-	## 24×24 square centred on the node.
-	## Flankers get a red-orange tint so the player can read intent at a glance.
-	_visual          = ColorRect.new()
-	_visual.size     = Vector2(24.0, 24.0)
-	_visual.position = Vector2(-12.0, -12.0)
-	_visual.color    = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
-	## Stealth units read as cloaked (translucent cyan shimmer) when a detector reveals them.
-	if data != null and data.stealth:
-		_visual.modulate = Color(0.6, 0.85, 1.0, 0.85)
-	add_child(_visual)
-	## Dark health-bar background (named so the BLIP tier can hide it — item 4)
-	var bar_bg          := ColorRect.new()
-	bar_bg.name         = "HealthBarBG"
-	bar_bg.size         = Vector2(24.0, 3.0)
-	bar_bg.position     = Vector2(-12.0, -18.0)
-	bar_bg.color        = Color(0.2, 0.2, 0.2)
-	add_child(bar_bg)
-	## Foreground fill (tracked by name)
-	var bar_fg          := ColorRect.new()
-	bar_fg.name         = "HealthBar"
-	bar_fg.size         = Vector2(24.0, 3.0)
-	bar_fg.position     = Vector2(-12.0, -18.0)
-	bar_fg.color        = Color(0.2, 0.9, 0.2)
-	add_child(bar_fg)
+## -- Visual (3D) --
 
-	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
-	## would consume LMB before it reaches selection/placement handlers).
-	for child in get_children():
-		if child is Control:
-			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+func _build_visual() -> void:
+	_base_color = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
+
+	_mesh = MeshInstance3D.new()
+	var box : BoxMesh = BoxMesh.new()
+	box.size = Vector3(BODY_SIZE, BODY_SIZE, BODY_SIZE)
+	_mesh.mesh = box
+	_mesh.position = Vector3(0.0, BODY_LIFT, 0.0)
+	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_mat = StandardMaterial3D.new()
+	_mat.albedo_color = _base_color
+	if data != null and data.stealth:
+		_mat.albedo_color.a = 0.85
+		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_mesh.material_override = _mat
+	add_child(_mesh)
+
+	## Billboarded health bar (bg + fill) above the body.
+	var bar_y : float = BODY_LIFT + BODY_SIZE * 0.7
+	_make_hp_quad(Color(0.15, 0.15, 0.15), bar_y, 1.0)          ## background
+	_hp_fill = _make_hp_quad(Color(0.2, 0.9, 0.2), bar_y + 0.1, 1.0)   ## fill (slightly in front)
+
+func _make_hp_quad(col: Color, y: float, frac: float) -> MeshInstance3D:
+	var q : MeshInstance3D = MeshInstance3D.new()
+	var qm : QuadMesh = QuadMesh.new()
+	qm.size = Vector2(BODY_SIZE, 4.0)
+	q.mesh = qm
+	q.position = Vector3(0.0, y, 0.0)
+	q.scale.x = frac
+	var m : StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = col
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	q.material_override = m
+	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(q)
+	return q
 
 func _update_health_visual() -> void:
-	var bar : ColorRect = get_node_or_null("HealthBar")
-	if bar and data:
-		bar.size.x = 24.0 * (_current_health / data.max_health)
+	if data == null:
+		return
+	var frac : float = clampf(_current_health / data.max_health, 0.0, 1.0)
+	if _hp_fill != null:
+		_hp_fill.scale.x = frac
+	## Tint the body toward dark red as health drops (a clear damage read in 3D).
+	if _mat != null and not _hijacked:
+		_mat.albedo_color = _base_color.lerp(Color(0.5, 0.05, 0.05), 1.0 - frac)
 
-## Item 4: applies the reveal visual for a stealth unit. full=true → normal render + health bar;
-## full=false (BLIP) → the node is dimmed and the health bar hidden, so it reads as a position-only
-## marker with no full info. Called every fog update while the unit is a detected stealth unit.
+func _set_tint(c: Color) -> void:
+	if _mat != null:
+		_mat.albedo_color = c
+
 func _apply_reveal_visual(full: bool) -> void:
-	modulate = Color(1.0, 1.0, 1.0, 1.0) if full else Color(1.0, 1.0, 1.0, 0.4)
-	var hb  : CanvasItem = get_node_or_null("HealthBar")   as CanvasItem
-	var hbg : CanvasItem = get_node_or_null("HealthBarBG") as CanvasItem
-	if hb != null:
-		hb.visible = full
-	if hbg != null:
-		hbg.visible = full
+	if _mat != null:
+		_mat.albedo_color.a = 1.0 if full else 0.4
+		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	if _hp_fill != null:
+		_hp_fill.visible = full
 
-## Item 5: how this enemy should appear on the minimap — 0 = off the minimap, 1 = dim blip,
-## 2 = full marker. Stealth units mirror their world reveal tier (so an undetected stealth unit
-## never shows, even in a revealed cell); normal units show only inside a revealed cell.
+## Minimap reveal tier (unchanged logic, plane-based).
 func minimap_reveal() -> int:
 	if data != null and data.stealth:
 		match _reveal_tier:
@@ -557,7 +523,7 @@ func minimap_reveal() -> int:
 	var md : MapData = _map_grid_ref.get("map_data") as MapData
 	if md == null:
 		return 2
-	var cell : Vector2i = _map_grid_ref.world_to_cell(global_position)
+	var cell : Vector2i = _map_grid_ref.world_to_cell(_p)
 	if cell.x < 0 or cell.x >= md.dimensions.x or cell.y < 0 or cell.y >= md.dimensions.y:
 		return 0
 	var idx : int = cell.x + cell.y * md.dimensions.x
