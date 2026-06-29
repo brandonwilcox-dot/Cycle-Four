@@ -13,7 +13,8 @@ class_name TowerData
 
 ## Combat
 @export var damage: float = 10.0       ## damage per attack
-@export var range: float = 150.0       ## attack radius in pixels
+@warning_ignore("shadowed_global_identifier")
+@export var range: float = 150.0       ## attack radius in pixels (name shadows range(); intentional)
 @export var attack_speed: float = 1.0  ## attacks per second
 
 ## Pass 2 combat identity. damage_type feeds the damage triangle (Combat.gd):

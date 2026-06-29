@@ -5,9 +5,17 @@
 ## proving the 2D⇄3D coordinate mapping. NOT the real battle yet; entities arrive in Stage 2.
 extends Node3D
 
-const WORLD3D    = preload("res://src/core/World3D.gd")
-const CAM_RIG    = preload("res://src/core/CameraRig3D.gd")
-const UNIT_SCENE = preload("res://scenes/main/Unit.tscn")
+const WORLD3D     = preload("res://src/core/World3D.gd")
+const CAM_RIG     = preload("res://src/core/CameraRig3D.gd")
+const UNIT_SCENE  = preload("res://scenes/main/Unit.tscn")
+const TOWER_SCENE = preload("res://scenes/main/Tower.tscn")
+## A spread of tiers/branches/roles to show the 3D silhouettes differ.
+const DEMO_TOWERS : Array = [
+	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
+	[preload("res://resources/towers/architects_t2b.tres"), Vector2i(18, 14)],   ## Railgun (1 long barrel)
+	[preload("res://resources/towers/bloom_t3.tres"),       Vector2i(22, 20)],   ## gatling + detector antenna
+	[preload("res://resources/towers/mesh_t2b.tres"),       Vector2i(26, 22)],   ## Relay Pylon (support halo)
+]
 
 ## Mirror the real grid constants (MapGrid) so the mapping is exercised at production scale.
 const CELL : int = 64
@@ -29,6 +37,7 @@ func _ready() -> void:
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
 	add_child(_rig)
 
+	_spawn_demo_towers()
 	_spawn_demo_units()
 
 	var title : Label3D = Label3D.new()
@@ -163,3 +172,12 @@ func _spawn_demo_units() -> void:
 		var u : Node = UNIT_SCENE.instantiate()
 		u.call("setup", ud, wp)
 		add_child(u)
+
+## Stage 2b demo: place converted Towers (built) along the path so they shoot the marching units —
+## a mini 3D battle that exercises the real Tower logic + the 3D stat-driven silhouettes.
+func _spawn_demo_towers() -> void:
+	for entry in DEMO_TOWERS:
+		var t : Node = TOWER_SCENE.instantiate()
+		t.call("setup", entry[0], true)            ## start_built so it attacks immediately
+		t.call("place_at", _cell_center2(entry[1]))
+		add_child(t)

@@ -1,111 +1,115 @@
 ## Tower.gd
-## A placed defense tower. Scans for the nearest unit in range each attack cycle
-## and calls take_damage() on it. No projectiles -- instant hit for MVP.
-## Visual scales with tier: body grows, pip count matches tier number.
-extends Node2D
+## A placed defense tower. Scans for the nearest unit in range each attack cycle and calls
+## take_damage() on it (instant hit; the tracer is cosmetic). Visual encodes tier + stats.
+##
+## 3D MIGRATION (Stage 2b): now `extends Node3D`. The tower is static, so its plane position `_p`
+## is fixed at placement; the 3D transform follows via World3D. Cross-entity reads go through
+## plane_pos()/World3D.node_plane(). The A1 stat-driven silhouette is re-expressed as MeshInstance3D
+## bodies: a tier-sided body (cylinder w/ 4/6/8 segments), stat-driven barrels (count~fire-rate,
+## length~range, thickness~damage) on a turret that yaws to the target, a damage-type-tinted emissive
+## core, and a role emblem (support halo / detector antenna). 2D overlay widgets (XP bar, chevrons)
+## are deferred to a later polish pass — their logic null-guards on the missing nodes.
+extends Node3D
 
-const TowerDataClass    = preload("res://src/entities/TowerData.gd")
-const FACTION_PERKS     = preload("res://src/core/FactionPerks.gd")
-const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
-const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
+const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
+const WORLD3D       = preload("res://src/core/World3D.gd")
 
 ## Targeting priority the player can cycle from the InspectionPanel (TD staple).
-## Order must match TARGET_MODE_NAMES.
 enum TargetMode { CLOSEST, FIRST, LAST, STRONGEST }
 const TARGET_MODE_NAMES : Array = ["Closest", "First", "Last", "Strongest"]
 var target_mode : int = TargetMode.CLOSEST
 
-## Phase 9 progression constants. Step-function scaling per the handoff §8.1.
-const XP_BASE_THRESHOLD   : float = 50.0   ## XP needed for level 1 → 2
-const XP_LEVEL_EXPONENT   : float = 2.0    ## threshold scales as XP_BASE × level^exp
-const DAMAGE_PER_LEVEL    : float = 0.15   ## +15% damage per level (multiplicative)
-## Veterancy cap + sight growth: a tower's sight sphere widens as it racks up kills,
-## one cell every TOWER_SIGHT_PER_STEP levels, up to the bonus max. Level is capped.
+## Phase 9 progression constants.
+const XP_BASE_THRESHOLD   : float = 50.0
+const XP_LEVEL_EXPONENT   : float = 2.0
+const DAMAGE_PER_LEVEL    : float = 0.15
 const TOWER_MAX_LEVEL      : int = 10
 const TOWER_SIGHT_BASE     : int = 3
-const TOWER_SIGHT_PER_STEP : int = 3   ## +1 sight cell every 3 levels
-const TOWER_SIGHT_BONUS_MAX : int = 3  ## sight 3 → 6 at max level
-const TOWER_SENSOR_EXTRA   : int = 2   ## sensor ring reaches sight + this
+const TOWER_SIGHT_PER_STEP : int = 3
+const TOWER_SIGHT_BONUS_MAX : int = 3
+const TOWER_SENSOR_EXTRA   : int = 2
 
-## Pass 3 "Tower Mastery": aura/support, territory empowerment, max-level promotion.
-const BUFF_RECOMPUTE_PERIOD  : float = 0.5    ## seconds between aura/territory recompute (cheap, not per-frame)
-const VETERAN_AURA_RADIUS    : float = 160.0  ## a max-level tower radiates a support aura this wide
-const VETERAN_AURA_BONUS     : float = 0.10   ## +10% damage to friendly towers inside a veteran aura
-const TERRITORY_DAMAGE_BONUS : float = 0.15   ## +15% damage while standing on claimed ground
+## Pass 3 "Tower Mastery".
+const BUFF_RECOMPUTE_PERIOD  : float = 0.5
+const VETERAN_AURA_RADIUS    : float = 160.0
+const VETERAN_AURA_BONUS     : float = 0.10
+const TERRITORY_DAMAGE_BONUS : float = 0.15
 
-## A1 visual identity: the tower body is drawn procedurally in _draw(). Shape encodes
-## TIER (4/6/8-sided plate, size, ring count); BARRELS encode stats (count ~ attack_speed,
-## length ~ range, thickness ~ damage); the CORE gem is tinted by damage type to match the
-## tracer bolt; a ROLE emblem marks support (halo) and detector (antenna) towers.
+## A1 visual identity (re-expressed in 3D). ROLE marks support/detector towers.
 enum { ROLE_DAMAGE, ROLE_SUPPORT, ROLE_DETECTOR }
 const DAMAGE_CORE : Array[Color] = [
 	Color(1.0, 0.92, 0.55),   ## Kinetic   — gold
 	Color(0.50, 0.88, 1.0),   ## Energy    — cyan
 	Color(0.60, 1.0, 0.55),   ## Corrosive — green
 ]
-## Turret aim. _aim_angle is the drawn facing; it lerps toward _aim_target_angle (the current
-## target's bearing, refreshed on a scan cadence) so the barrels visibly TRACK enemies every
-## frame — not only on fire. AIM_TURN_RATE sets how snappy the rotation feels.
+## Turret aim: _aim_angle (plane radians) lerps toward the target bearing; applied as the turret's yaw.
 const AIM_SCAN_PERIOD : float = 0.1
 const AIM_TURN_RATE   : float = 9.0
-var _aim_angle        : float = PI * 0.5
-var _aim_target_angle : float = PI * 0.5
+var _aim_angle        : float = 0.0
+var _aim_target_angle : float = 0.0
 var _aim_scan_timer   : float = 0.0
 
-## Construction (Phase 2B — commander-and-faction-systems.md). A freshly placed tower starts inert
-## at START_HEALTH and only comes online once the Commander builds it up to MAX_HEALTH (the weapon
-## doubles as the engineering tool). A built-but-damaged tower is repaired the same way. Restored
-## towers load already built. While not built the tower does not attack, buff, or tick.
+## Construction (Phase 2B).
 const MAX_HEALTH   : float = 100.0
 const START_HEALTH : float = 10.0
-const BUILD_BAR_W  : float = 40.0
 
 var data: Resource = null   ## TowerData instance
+var _p   : Vector2 = Vector2.ZERO   ## fixed plane position (pixel units)
 var _attack_timer: float = 0.0
 
-## Phase 9: level + XP. Level is earned through kills, independent of tier (which
-## is bought by spending resources). Damage scales multiplicatively per level via
-## _damage_multiplier so the shared TowerData resource is never mutated.
+## Phase 9: level + XP.
 var level              : int   = 1
 var xp                 : float = 0.0
 var xp_to_next         : float = XP_BASE_THRESHOLD
 var _damage_multiplier : float = 1.0
-var _aura_recv_mult    : float = 1.0   ## best damage aura received from nearby towers (1.0 = none)
-var _territory_mult    : float = 1.0   ## territory empowerment multiplier (1.0 = none)
-var _buff_timer        : float = 0.0   ## throttle for _recompute_buffs
-var _xp_bar            : Node2D = null   ## ProgressionBar instance
-var _chevrons          : Node2D = null   ## RankChevrons instance
-var _map_grid          : Node   = null   ## resolved lazily from the "map_grid" group
+var _aura_recv_mult    : float = 1.0
+var _territory_mult    : float = 1.0
+var _buff_timer        : float = 0.0
+var _xp_bar            : Node = null   ## deferred (3D overlay polish); logic null-guards
+var _chevrons          : Node = null   ## deferred
+var _map_grid          : Node = null
 
-## Construction state. _built false = under construction (inert); _health ramps from START_HEALTH
-## to MAX_HEALTH under the Commander's engineering tool, then the tower comes online.
-var _max_health : float     = MAX_HEALTH
-var _health     : float     = MAX_HEALTH
-var _built      : bool      = true   ## setup() flips this false for fresh placements
-var _build_bar  : ColorRect = null
+## Construction state.
+var _max_health : float = MAX_HEALTH
+var _health     : float = MAX_HEALTH
+var _built      : bool  = true
 
-## Phase 4A faction build-prefs: Bloom growth + Mesh chain damage multipliers (1.0 = none).
+## Phase 4A/4B faction perks.
 var _growth_mult   : float = 1.0
 var _growth_stacks : int   = 0
 var _grow_timer    : float = 0.0
 var _chain_mult    : float = 1.0
-var _pollen_timer  : float = 0.0   ## Phase 4B Bloom pollen emit cadence
-var _hijack_timer  : float = 2.0   ## Phase 4B Mesh hijack cooldown (first convert ~2s after active)
+var _pollen_timer  : float = 0.0
+var _hijack_timer  : float = 2.0
 
-## Called by Main before adding to scene tree. start_built=true for save-restore (already built);
-## fresh placements default to false so the Commander must construct them.
+## 3D visual nodes.
+var _turret    : Node3D = null
+var _body_mats : Array[StandardMaterial3D] = []   ## for ghosting (construction)
+var _build_bar : MeshInstance3D = null
+var _base_height : float = 40.0
+
+## Called by the placer before adding to the scene tree. start_built=true for save-restore.
 func setup(tower_data: Resource, start_built: bool = false) -> void:
 	data    = tower_data
-	## Phase 4A: Architects build sturdier structures (faction health multiplier).
 	_max_health = MAX_HEALTH * FACTION_PERKS.health_mult(FactionManager.active_faction)
 	_built  = start_built
 	_health = _max_health if start_built else START_HEALTH
+
+## Fix the tower's plane position (and 3D transform). Call before or after adding to the tree.
+func place_at(p: Vector2) -> void:
+	_p = p
+	position = WORLD3D.to3(_p, 0.0)
+
+## The cross-entity contract: this tower's logical plane position.
+func plane_pos() -> Vector2:
+	return _p
 
 func _ready() -> void:
 	add_to_group("towers")
 	if data == null:
 		push_error("Tower: no TowerData -- call setup() before adding to tree.")
 		return
+	position = WORLD3D.to3(_p, 0.0)
 	_build_visual()
 	_refresh_detector_group()
 
@@ -114,12 +118,9 @@ func _ready() -> void:
 func is_built() -> bool:
 	return _built
 
-## True while the tower still needs the Commander (under construction, or built-but-damaged).
 func needs_engineering() -> bool:
 	return _health < _max_health
 
-## The Commander channels its engineering tool here. Adds build/repair progress; on first reaching
-## full health the tower comes online. Returns true if it changed anything (drives the build beam).
 func receive_engineering(amount: float) -> bool:
 	if _health >= _max_health:
 		return false
@@ -135,44 +136,41 @@ func _process(delta: float) -> void:
 	if data == null:
 		return
 	if not _built:
-		return   ## under construction — inert until the Commander finishes it
+		return   ## under construction — inert
 	_update_aim(delta)
 	_attack_timer += delta
 	if _attack_timer >= 1.0 / data.attack_speed:
 		_attack_timer = 0.0
 		_try_attack()
-	## Pass 3: refresh aura/territory empowerment on a slow cadence (not per-frame).
 	_buff_timer -= delta
 	if _buff_timer <= 0.0:
 		_buff_timer = BUFF_RECOMPUTE_PERIOD
 		_recompute_buffs()
-	## Phase 4A: Bloom towers grow stronger the longer they stand (max health + damage, capped).
 	if _growth_stacks < FACTION_PERKS.BLOOM_GROW_MAX_STACKS and FactionManager.active_faction == "bloom":
 		_grow_timer += delta
 		if _grow_timer >= FACTION_PERKS.BLOOM_GROW_INTERVAL:
 			_grow_timer = 0.0
 			_apply_growth()
-	## Phase 4B: Bloom towers emit a pollen cloud — slow + blind enemies in radius.
 	if FactionManager.active_faction == "bloom":
 		_pollen_timer -= delta
 		if _pollen_timer <= 0.0:
 			_pollen_timer = FACTION_PERKS.BLOOM_POLLEN_REFRESH
 			_emit_pollen()
-	## Phase 4B: Mesh towers periodically hijack a nearby enemy to fight its allies.
 	if FactionManager.active_faction == "mesh":
 		_hijack_timer -= delta
 		if _hijack_timer <= 0.0:
 			_hijack_timer = FACTION_PERKS.MESH_HIJACK_COOLDOWN if _try_hijack() else 0.5
 
 ## Replaces this tower's data with the next tier and rebuilds the visual in place.
-## Called by Main._try_upgrade_tower() after spending the upgrade cost.
 func upgrade(next_data: Resource) -> void:
 	data = next_data
-	## Clear existing child visuals then rebuild.
 	for child in get_children():
 		child.queue_free()
+	_turret = null
+	_body_mats.clear()
+	_build_bar = null
 	_build_visual()
-	_refresh_detector_group()   ## the new tier may gain/lose stealth detection
+	_refresh_detector_group()
 
 ## -- Combat --
 
@@ -181,18 +179,15 @@ func _try_attack() -> void:
 	if target != null and target.has_method("take_damage"):
 		var effective_damage : float = data.damage * _damage_multiplier * _aura_recv_mult * _territory_mult * _growth_mult * _chain_mult
 		var dt : int = int(data.damage_type)
-		## Snap the aim goal to the target on fire; _update_aim() smoothly rotates the barrels to it.
-		_aim_target_angle = (target.global_position - global_position).angle()
-		## Cosmetic only — fire a tracer + muzzle flash; damage is still instant below.
-		Vfx.muzzle(global_position, dt)
-		Vfx.bolt(global_position, target.global_position, dt)
+		var tpos : Vector2 = WORLD3D.node_plane(target)
+		_aim_target_angle = (tpos - _p).angle()
+		## Cosmetic tracer/muzzle (2D Vfx no-ops in the 3D world; 3D VFX arrives in Stage 4).
+		Vfx.muzzle(_p, dt)
+		Vfx.bolt(_p, tpos, dt)
 		var killed : bool = target.take_damage(effective_damage, dt)
 		if killed:
 			_award_xp_for_kill(target)
 
-## Picks the in-range enemy that best matches the current targeting mode:
-## Closest (to tower), First (nearest the base = furthest along), Last (least progress),
-## Strongest (highest current HP). Single pass; higher score wins.
 func _select_target() -> Node:
 	var best       : Node  = null
 	var best_score : float = 0.0
@@ -202,24 +197,22 @@ func _select_target() -> Node:
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		var d : float = global_position.distance_to(unit.global_position)
+		var upos : Vector2 = WORLD3D.node_plane(unit)
+		var d : float = _p.distance_to(upos)
 		if d > data.range:
 			continue
-		## Stealth: can't lock onto an undetected unit (outside any sensor sphere).
 		if unit.has_method("is_detectable") and not unit.call("is_detectable"):
 			continue
-		## DMZ: don't fire on enemies still inside a spawn's no-fire buffer — they need
-		## to clear the spawn mouth and reach the field (fixes spawn-adjacent instakill).
-		if grid != null and grid.call("is_in_spawn_dmz", unit.global_position):
+		if grid != null and grid.call("is_in_spawn_dmz", upos):
 			continue
 		var score : float
 		match target_mode:
 			TargetMode.STRONGEST:
 				score = float(unit.get("_current_health")) if unit.get("_current_health") != null else 0.0
 			TargetMode.FIRST:
-				score = -base_pos.distance_to(unit.global_position)   ## nearest the base
+				score = -base_pos.distance_to(upos)
 			TargetMode.LAST:
-				score = base_pos.distance_to(unit.global_position)    ## farthest from base
+				score = base_pos.distance_to(upos)
 			_:  ## CLOSEST
 				score = -d
 		if not have or score > best_score:
@@ -230,18 +223,14 @@ func _select_target() -> Node:
 
 func _base_pos() -> Vector2:
 	var b : Node = get_tree().get_first_node_in_group("base")
-	return (b as Node2D).global_position if b is Node2D else global_position
+	return WORLD3D.node_plane(b) if b != null else _p
 
-## Cycles to the next targeting mode (called by the InspectionPanel button).
 func cycle_target_mode() -> void:
 	target_mode = (target_mode + 1) % TARGET_MODE_NAMES.size()
 
 func target_mode_name() -> String:
 	return TARGET_MODE_NAMES[target_mode]
 
-## Phase 9: XP attribution. Award XP proportional to the killed unit's max health
-## (proxy for its value). On crossing xp_to_next, level up — applies a multiplicative
-## damage boost and rescales the next threshold by level^XP_LEVEL_EXPONENT.
 func _award_xp_for_kill(killed_unit: Node) -> void:
 	var unit_data = killed_unit.get("data")
 	if unit_data == null:
@@ -254,12 +243,12 @@ func _award_xp_for_kill(killed_unit: Node) -> void:
 		xp -= xp_to_next
 		_level_up()
 	if level >= TOWER_MAX_LEVEL:
-		xp = 0.0   ## maxed — park the XP bar full-empty
+		xp = 0.0
 	_update_xp_bar()
 
 func _update_xp_bar() -> void:
 	if _xp_bar != null and xp_to_next > 0.0:
-		_xp_bar.set_progress(xp / xp_to_next)
+		_xp_bar.call("set_progress", xp / xp_to_next)
 
 func _level_up() -> void:
 	level += 1
@@ -268,11 +257,9 @@ func _level_up() -> void:
 	EventBus.tower_leveled_up.emit(self, level)
 	if _chevrons != null:
 		_chevrons.call("set_rank", level - 1)
-	_apply_sight()       ## leveling widens the tower's sight/sensor sphere
-	_recompute_buffs()   ## hitting max level grants the veteran aura immediately
+	_apply_sight()
+	_recompute_buffs()
 
-## [Persistence Step 4] Restores veterancy level from a save — applies the cumulative effect of
-## _level_up (damage multiplier, XP threshold, sight, chevrons) without replaying kills.
 func restore_level(restored_level: int) -> void:
 	level = clampi(restored_level, 1, TOWER_MAX_LEVEL)
 	_damage_multiplier = pow(1.0 + DAMAGE_PER_LEVEL, float(level - 1))
@@ -284,19 +271,16 @@ func restore_level(restored_level: int) -> void:
 	_recompute_buffs()
 	_update_xp_bar()
 
-## Resolves and caches the MapGrid from its group.
 func _get_map_grid() -> Node:
 	if _map_grid == null or not is_instance_valid(_map_grid):
 		_map_grid = get_tree().get_first_node_in_group("map_grid")
 	return _map_grid
 
-## Reveals/senses this tower's sight sphere. Radius widens with veterancy level, so a
-## battle-hardened tower lights up more of the map around it. Idempotent re-reveal.
 func _apply_sight() -> void:
 	var grid : Node = _get_map_grid()
 	if grid == null:
 		return
-	var cell  : Vector2i = grid.world_to_cell(global_position)
+	var cell  : Vector2i = grid.world_to_cell(_p)
 	@warning_ignore("integer_division")
 	var sight : int = TOWER_SIGHT_BASE + mini(level / TOWER_SIGHT_PER_STEP, TOWER_SIGHT_BONUS_MAX)
 	grid.call("reveal_area", cell, sight)
@@ -304,25 +288,21 @@ func _apply_sight() -> void:
 
 ## -- Pass 3: aura / support / territory --
 
-## True if this tower projects a damage aura (from its data, or as a max-level veteran).
 func provides_aura() -> bool:
 	return get_aura_radius() > 0.0 and get_aura_bonus() > 0.0
 
-## Aura radius in px: the larger of the data-defined aura and (at max level) the veteran aura.
 func get_aura_radius() -> float:
 	var r : float = float(data.aura_radius) if data != null and data.get("aura_radius") != null else 0.0
 	if level >= TOWER_MAX_LEVEL:
 		r = maxf(r, VETERAN_AURA_RADIUS)
 	return r
 
-## Aura damage bonus (fraction): the larger of the data-defined bonus and the veteran bonus.
 func get_aura_bonus() -> float:
 	var b : float = float(data.aura_damage_bonus) if data != null and data.get("aura_damage_bonus") != null else 0.0
 	if level >= TOWER_MAX_LEVEL:
 		b = maxf(b, VETERAN_AURA_BONUS)
 	return b
 
-## Recomputes the aura received from nearby towers and the territory bonus. Throttled.
 func _recompute_buffs() -> void:
 	var best_bonus : float = 0.0
 	for other in get_tree().get_nodes_in_group("towers"):
@@ -333,71 +313,65 @@ func _recompute_buffs() -> void:
 		var radius : float = float(other.call("get_aura_radius"))
 		if radius <= 0.0:
 			continue
-		if global_position.distance_to((other as Node2D).global_position) <= radius:
+		if _p.distance_to(WORLD3D.node_plane(other)) <= radius:
 			best_bonus = maxf(best_bonus, float(other.call("get_aura_bonus")))
 	_aura_recv_mult = 1.0 + best_bonus
 	_territory_mult = 1.0 + (TERRITORY_DAMAGE_BONUS if _on_claimed_ground() else 0.0)
-	## Phase 4A: Mesh connected-tower chains empower their endpoints.
 	_chain_mult = _compute_chain_mult() if FactionManager.active_faction == "mesh" else 1.0
 
-## Phase 4A: Bloom growth — a tick raises this tower's max health (heals to match) + damage, capped,
-## with a subtle scale-up so the growth reads on the board.
 func _apply_growth() -> void:
 	_growth_stacks += 1
 	_growth_mult = pow(1.0 + FACTION_PERKS.BLOOM_GROW_DAMAGE_PCT, float(_growth_stacks))
 	var grow_hp : float = _max_health * FACTION_PERKS.BLOOM_GROW_HEALTH_PCT
 	_max_health += grow_hp
 	_health = minf(_max_health, _health + grow_hp)
-	scale = Vector2.ONE * (1.0 + 0.03 * float(_growth_stacks))
+	scale = Vector3.ONE * (1.0 + 0.03 * float(_growth_stacks))
 
-## Phase 4A: Mesh node-chains — an endpoint tower (linked to ≤1 other built tower) is empowered by the
-## size of the connected chain it terminates; interior relays aren't buffed (the line feeds its ends).
 func _compute_chain_mult() -> float:
 	var towers : Array = get_tree().get_nodes_in_group("towers")
 	var degree : int = 0
 	for t in towers:
 		if t == self or not _is_linkable(t):
 			continue
-		if global_position.distance_to((t as Node2D).global_position) <= FACTION_PERKS.MESH_LINK_RANGE:
+		if _p.distance_to(WORLD3D.node_plane(t)) <= FACTION_PERKS.MESH_LINK_RANGE:
 			degree += 1
 	if degree > 1:
-		return 1.0   ## interior relay — only the ends of the line are empowered
+		return 1.0
 	var comp : int = _chain_component_size(towers)
 	return 1.0 + float(maxi(0, comp - 1)) * FACTION_PERKS.MESH_CHAIN_DAMAGE_PCT
 
 func _is_linkable(t) -> bool:
-	return is_instance_valid(t) and (t is Node2D) and t.has_method("is_built") and bool(t.call("is_built"))
+	return is_instance_valid(t) and t.has_method("is_built") and bool(t.call("is_built"))
 
 func _chain_component_size(towers: Array) -> int:
 	var visited : Dictionary = {}
-	visited[self] = true   ## object key (a bare {self: true} literal would key the string "self")
+	visited[self] = true
 	var stack : Array = [self]
 	while not stack.is_empty():
-		var cur : Node2D = stack.pop_back() as Node2D
+		var cur : Node = stack.pop_back()
+		var cur_p : Vector2 = WORLD3D.node_plane(cur)
 		for t in towers:
 			if visited.has(t) or not _is_linkable(t):
 				continue
-			if cur.global_position.distance_to((t as Node2D).global_position) <= FACTION_PERKS.MESH_LINK_RANGE:
+			if cur_p.distance_to(WORLD3D.node_plane(t)) <= FACTION_PERKS.MESH_LINK_RANGE:
 				visited[t] = true
 				stack.append(t)
 	return visited.size()
 
-## Phase 4B: re-apply pollen to every enemy unit inside this Bloom tower's cloud (slow + blind).
 func _emit_pollen() -> void:
 	for u in get_tree().get_nodes_in_group("units"):
-		if not is_instance_valid(u) or not (u is Node2D) or not u.has_method("apply_pollen"):
+		if not is_instance_valid(u) or not u.has_method("apply_pollen"):
 			continue
-		if global_position.distance_to((u as Node2D).global_position) <= FACTION_PERKS.BLOOM_POLLEN_RADIUS:
+		if _p.distance_to(WORLD3D.node_plane(u)) <= FACTION_PERKS.BLOOM_POLLEN_RADIUS:
 			u.call("apply_pollen", FACTION_PERKS.BLOOM_POLLEN_DURATION)
 
-## Phase 4B: convert the nearest enemy in range to fight its allies. Returns true if one was hijacked.
 func _try_hijack() -> bool:
-	var best : Node2D = null
+	var best : Node = null
 	var best_d : float = FACTION_PERKS.MESH_HIJACK_RADIUS
 	for u in get_tree().get_nodes_in_group("units"):
-		if not is_instance_valid(u) or not (u is Node2D) or not u.has_method("apply_hijack"):
+		if not is_instance_valid(u) or not u.has_method("apply_hijack"):
 			continue
-		var d : float = global_position.distance_to((u as Node2D).global_position)
+		var d : float = _p.distance_to(WORLD3D.node_plane(u))
 		if d <= best_d:
 			best_d = d
 			best = u
@@ -406,82 +380,20 @@ func _try_hijack() -> bool:
 	best.call("apply_hijack", FACTION_PERKS.MESH_HIJACK_DURATION)
 	return true
 
-## Phase 4B: draw the Bloom pollen cloud so its reach reads on the board (built Bloom towers only).
-## A1: render the whole tower body procedurally so each tier/branch is visually distinct.
-func _draw() -> void:
-	if data == null:
-		return
-	var tier   : int   = int(data.get("tier")) if data.get("tier") else 1
-	var col    : Color = data.color_hint
-	var body_r : float = 12.0 + tier * 4.0           ## 16 / 20 / 24 px by tier
-	var sides  : int   = _tier_sides(tier)
-	var rot    : float = _tier_rot(tier)
-	var role   : int   = _role()
-
-	## Barrels (drawn first, under the body plate) aimed at the current target.
-	## count ~ attack_speed (gatling vs cannon), length ~ range, thickness ~ damage.
-	var count  : int   = clampi(int(round(float(data.attack_speed))), 1, 4)
-	var blen   : float = clampf(remap(float(data.range), 150.0, 320.0, 12.0, 32.0), 12.0, 32.0)
-	var bwid   : float = clampf(remap(float(data.damage), 10.0, 70.0, 3.5, 11.0), 3.5, 11.0)
-	var spread : float = 0.0 if count == 1 else 0.30
-	for i in count:
-		var off : float = 0.0 if count == 1 else lerpf(-spread, spread, float(i) / float(count - 1))
-		var ang : float = _aim_angle + off
-		draw_colored_polygon(_barrel_poly(ang, blen, bwid, body_r * 0.45), col.darkened(0.4))
-		var tip : Vector2 = Vector2(cos(ang), sin(ang)) * (body_r * 0.45 + blen)
-		draw_circle(tip, bwid * 0.5, col.lightened(0.25))
-
-	## Base plate: shadow, body, and (tier >= 2) a rotated inner accent.
-	draw_colored_polygon(_regular_poly(sides, body_r + 3.0, rot), col.darkened(0.6))
-	draw_colored_polygon(_regular_poly(sides, body_r, rot), col.darkened(0.1))
-	if tier >= 2:
-		draw_colored_polygon(_regular_poly(sides, body_r * 0.6, rot + 0.4), col.lightened(0.18))
-
-	## Tier rings — one faint ring per tier.
-	for i in tier:
-		var rr : float = body_r + 4.0 + float(i) * 3.0
-		draw_arc(Vector2.ZERO, rr, 0.0, TAU, 28, Color(col.r, col.g, col.b, 0.28), 1.5, true)
-
-	## Core gem — tinted by damage type (matches the tracer bolt).
-	var core : Color = DAMAGE_CORE[clampi(int(data.damage_type), 0, DAMAGE_CORE.size() - 1)]
-	draw_circle(Vector2.ZERO, body_r * 0.36, Color(core.r, core.g, core.b, 0.92))
-	draw_circle(Vector2.ZERO, body_r * 0.20, Color(1, 1, 1, 0.85))
-
-	## Role emblem: support = gold halo, detector = antenna.
-	if role == ROLE_SUPPORT:
-		draw_arc(Vector2.ZERO, body_r + 8.0, 0.0, TAU, 32, Color(1.0, 0.95, 0.6, 0.55), 2.0, true)
-	elif role == ROLE_DETECTOR:
-		var top : Vector2 = Vector2(0.0, -(body_r + 11.0))
-		draw_line(Vector2(0.0, -body_r), top, Color(0.7, 0.95, 1.0, 0.8), 1.5)
-		draw_circle(top, 3.5, Color(0.75, 0.97, 1.0, 0.95))
-
-	## Bloom pollen aura (unchanged behaviour) — only while built.
-	if _built and FactionManager.active_faction == "bloom":
-		var pr : float = FACTION_PERKS.BLOOM_POLLEN_RADIUS
-		draw_circle(Vector2.ZERO, pr, Color(0.35, 0.75, 0.30, 0.08))
-		draw_arc(Vector2.ZERO, pr, 0.0, TAU, 40, Color(0.45, 0.85, 0.40, 0.40), 1.5, true)
-
-## -- Visual helpers (A1) --
-
-## Continuously rotate the turret toward the current target so the barrels track enemies every
-## frame (not only on fire). Re-scans the best target on a cadence; lerps the drawn angle to it.
+## Continuously rotate the turret toward the current target (yaw), tracking every frame.
 func _update_aim(delta: float) -> void:
 	_aim_scan_timer -= delta
 	if _aim_scan_timer <= 0.0:
 		_aim_scan_timer = AIM_SCAN_PERIOD
 		var tgt : Node = _select_target()
-		if tgt != null and tgt is Node2D:
-			_aim_target_angle = ((tgt as Node2D).global_position - global_position).angle()
-	var prev : float = _aim_angle
+		if tgt != null:
+			_aim_target_angle = (WORLD3D.node_plane(tgt) - _p).angle()
 	_aim_angle = lerp_angle(_aim_angle, _aim_target_angle, minf(1.0, AIM_TURN_RATE * delta))
-	if absf(angle_difference(prev, _aim_angle)) > 0.001:
-		queue_redraw()
+	if _turret != null:
+		_turret.rotation.y = -_aim_angle   ## plane angle → 3D yaw (barrels built along +X)
 
 func _tier_sides(t: int) -> int:
 	return [4, 6, 8][clampi(t - 1, 0, 2)]
-
-func _tier_rot(t: int) -> float:
-	return PI * 0.25 if t == 1 else 0.0
 
 func _role() -> int:
 	if data == null:
@@ -494,22 +406,7 @@ func _role() -> int:
 		return ROLE_DETECTOR
 	return ROLE_DAMAGE
 
-func _regular_poly(sides: int, radius: float, rot: float) -> PackedVector2Array:
-	var pts := PackedVector2Array()
-	for i in sides:
-		var a : float = rot + TAU * float(i) / float(sides)
-		pts.append(Vector2(cos(a), sin(a)) * radius)
-	return pts
-
-func _barrel_poly(angle: float, length: float, width: float, start: float) -> PackedVector2Array:
-	var dir  : Vector2 = Vector2(cos(angle), sin(angle))
-	var perp : Vector2 = Vector2(-dir.y, dir.x) * (width * 0.5)
-	var base : Vector2 = dir * start
-	var tip  : Vector2 = dir * (start + length)
-	return PackedVector2Array([base - perp, tip - perp, tip + perp, base + perp])
-
-## Item 3: every tower reveals hidden units. Base reveal = its attack range (it sees what it can
-## engage); dedicated detector towers (detector_radius set) reveal farther. Returns the larger.
+## Item 3: detection radius.
 func get_detector_radius() -> float:
 	if data == null:
 		return 0.0
@@ -520,7 +417,6 @@ func get_detector_radius() -> float:
 func provides_detection() -> bool:
 	return get_detector_radius() > 0.0
 
-## Joins/leaves the "detectors" group based on the current data's detector_radius.
 func _refresh_detector_group() -> void:
 	if provides_detection():
 		if not is_in_group("detectors"):
@@ -528,56 +424,140 @@ func _refresh_detector_group() -> void:
 	elif is_in_group("detectors"):
 		remove_from_group("detectors")
 
-## True when the tower's own cell is claimed friendly territory.
 func _on_claimed_ground() -> bool:
 	var grid : Node = _get_map_grid()
 	if grid == null:
 		return false
-	var cell : Vector2i = grid.world_to_cell(global_position)
+	var cell : Vector2i = grid.world_to_cell(_p)
 	return bool(grid.call("is_claimed", cell.x, cell.y))
 
-## -- Visual --
+## -- Visual (3D) — re-expresses the A1 stat-driven silhouette as meshes --
 
 func _build_visual() -> void:
-	var tier : int   = int(data.get("tier")) if data.get("tier") else 1
-	## Body radius is drawn in _draw(); `half` here only positions the overlay widgets.
-	var half : float = (12.0 + tier * 4.0) + 8.0
+	_body_mats.clear()
+	var tier   : int   = int(data.get("tier")) if data.get("tier") else 1
+	var col    : Color = data.color_hint
+	var body_r : float = 18.0 + tier * 6.0          ## 24 / 30 / 36
+	_base_height       = 30.0 + tier * 10.0          ## 40 / 50 / 60 — taller than units, shorter than FOB
+	var sides  : int   = _tier_sides(tier)
 
-	## The tower body/barrels/core are rendered procedurally in _draw() (A1). Here we only
-	## build the overlay widgets that sit above/below the body.
+	## Body — a tier-sided frustum.
+	var body : MeshInstance3D = MeshInstance3D.new()
+	var cyl : CylinderMesh = CylinderMesh.new()
+	cyl.top_radius = body_r * 0.7
+	cyl.bottom_radius = body_r
+	cyl.height = _base_height
+	cyl.radial_segments = sides
+	body.mesh = cyl
+	body.position = Vector3(0.0, _base_height * 0.5, 0.0)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	body.material_override = _mat(col.darkened(0.1))
+	add_child(body)
 
-	## Phase 9: XP progression bar above the tower body.
-	_xp_bar = ProgressionBarScript.new()
-	_xp_bar.position = Vector2(0.0, -half - 10.0)
-	add_child(_xp_bar)
-	_update_xp_bar()
-	## Veterancy chevrons above the XP bar (one per level earned beyond the first).
-	_chevrons = RankChevronsScript.new()
-	_chevrons.position = Vector2(0.0, -half - 16.0)
-	add_child(_chevrons)
-	_chevrons.call("set_rank", level - 1)
+	## Tier rings around the base (one per tier) — quick tier read.
+	for i in tier:
+		var ring : MeshInstance3D = MeshInstance3D.new()
+		var tm : TorusMesh = TorusMesh.new()
+		tm.inner_radius = body_r + 2.0 + float(i) * 4.0
+		tm.outer_radius = tm.inner_radius + 2.5
+		ring.mesh = tm
+		ring.position = Vector3(0.0, 2.0 + float(i) * 2.0, 0.0)
+		ring.material_override = _mat(col.lightened(0.15))
+		add_child(ring)
 
-	## Construction / repair bar — below the body; shown only while building or damaged.
-	_build_bar = ColorRect.new()
-	_build_bar.size     = Vector2(BUILD_BAR_W, 4.0)
-	_build_bar.position = Vector2(-BUILD_BAR_W * 0.5, half + 4.0)
-	_build_bar.color    = Color(0.45, 1.0, 0.7, 0.95)   ## engineering green
+	## Turret + barrels (built along +X; yawed to the target in _update_aim).
+	_turret = Node3D.new()
+	_turret.position = Vector3(0.0, _base_height, 0.0)
+	add_child(_turret)
+	var count  : int   = clampi(int(round(float(data.attack_speed))), 1, 4)
+	var blen   : float = clampf(remap(float(data.range), 150.0, 320.0, 18.0, 46.0), 18.0, 46.0)
+	var bwid   : float = clampf(remap(float(data.damage), 10.0, 70.0, 5.0, 14.0), 5.0, 14.0)
+	var spread : float = 0.0 if count == 1 else 10.0   ## px lateral offset between barrels
+	for i in count:
+		var barrel : MeshInstance3D = MeshInstance3D.new()
+		var bx : BoxMesh = BoxMesh.new()
+		bx.size = Vector3(blen, bwid, bwid)
+		barrel.mesh = bx
+		var off : float = 0.0 if count == 1 else lerpf(-spread, spread, float(i) / float(count - 1))
+		barrel.position = Vector3(body_r * 0.5 + blen * 0.5, 0.0, off)   ## +X, base near body
+		barrel.material_override = _mat(col.darkened(0.35))
+		_turret.add_child(barrel)
+
+	## Core gem — damage-type tinted, emissive (matches the tracer).
+	var core : MeshInstance3D = MeshInstance3D.new()
+	var sp : SphereMesh = SphereMesh.new()
+	sp.radius = body_r * 0.34
+	sp.height = body_r * 0.68
+	core.mesh = sp
+	core.position = Vector3(0.0, _base_height + body_r * 0.2, 0.0)
+	var ccol : Color = DAMAGE_CORE[clampi(int(data.damage_type), 0, DAMAGE_CORE.size() - 1)]
+	var cmat : StandardMaterial3D = _mat(ccol)
+	cmat.emission_enabled = true
+	cmat.emission = ccol
+	cmat.emission_energy_multiplier = 1.6
+	core.material_override = cmat
+	add_child(core)
+
+	## Role emblem: support = gold halo torus; detector = antenna mast + tip.
+	var role : int = _role()
+	if role == ROLE_SUPPORT:
+		var halo : MeshInstance3D = MeshInstance3D.new()
+		var ht : TorusMesh = TorusMesh.new()
+		ht.inner_radius = body_r + 8.0
+		ht.outer_radius = body_r + 11.0
+		halo.mesh = ht
+		halo.position = Vector3(0.0, _base_height + 14.0, 0.0)
+		halo.material_override = _mat(Color(1.0, 0.95, 0.6))
+		add_child(halo)
+	elif role == ROLE_DETECTOR:
+		var mast : MeshInstance3D = MeshInstance3D.new()
+		var mb : BoxMesh = BoxMesh.new()
+		mb.size = Vector3(2.5, 22.0, 2.5)
+		mast.mesh = mb
+		mast.position = Vector3(0.0, _base_height + 18.0, 0.0)
+		mast.material_override = _mat(Color(0.7, 0.95, 1.0))
+		add_child(mast)
+		var tip : MeshInstance3D = MeshInstance3D.new()
+		var ts : SphereMesh = SphereMesh.new()
+		ts.radius = 4.0
+		ts.height = 8.0
+		tip.mesh = ts
+		tip.position = Vector3(0.0, _base_height + 30.0, 0.0)
+		tip.material_override = _mat(Color(0.8, 0.97, 1.0))
+		add_child(tip)
+
+	## Construction/repair bar — billboarded above the tower; shown while building/damaged.
+	_build_bar = MeshInstance3D.new()
+	var qm : QuadMesh = QuadMesh.new()
+	qm.size = Vector2(body_r * 1.6, 5.0)
+	_build_bar.mesh = qm
+	_build_bar.position = Vector3(0.0, _base_height + body_r + 6.0, 0.0)
+	var bmat : StandardMaterial3D = StandardMaterial3D.new()
+	bmat.albedo_color = Color(0.45, 1.0, 0.7)
+	bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_build_bar.material_override = bmat
+	_build_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_build_bar)
 
-	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
-	## would consume LMB before it reaches selection/placement handlers).
-	for child in get_children():
-		if child is Control:
-			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	queue_redraw()
 	_refresh_build_visual()
 
-## Updates the build/repair bar and ghosts the tower while it is under construction.
+## Builds a StandardMaterial3D, tracking it so ghosting can fade the whole tower while unbuilt.
+func _mat(col: Color) -> StandardMaterial3D:
+	var m : StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = col
+	_body_mats.append(m)
+	return m
+
+## Ghosts the tower (alpha) while under construction and drives the build bar.
 func _refresh_build_visual() -> void:
 	var frac : float = clampf(_health / _max_health, 0.0, 1.0)
 	if _build_bar != null:
-		_build_bar.visible = _health < _max_health   ## show while building or damaged
-		_build_bar.size.x  = BUILD_BAR_W * frac
-	modulate = Color(1, 1, 1, 1) if _built else Color(0.6, 0.85, 1.0, 0.5)
-	queue_redraw()   ## refresh the Bloom pollen aura (drawn in _draw) when build state changes
+		_build_bar.visible = _health < _max_health
+		_build_bar.scale.x = frac
+	var a : float = 1.0 if _built else 0.5
+	for m in _body_mats:
+		if m == null:
+			continue
+		m.albedo_color.a = a
+		m.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if _built else BaseMaterial3D.TRANSPARENCY_ALPHA
