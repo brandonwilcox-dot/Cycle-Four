@@ -11,6 +11,7 @@ const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
 const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
 const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
+const BASE_SCRIPT    = preload("res://src/entities/Base.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -32,8 +33,8 @@ func _ready() -> void:
 	_setup_environment()
 	_setup_ground()
 	_setup_grid_overlay()
-	_setup_base()
 	_setup_marker()
+	_spawn_base()
 
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
@@ -100,20 +101,12 @@ func _setup_grid_overlay() -> void:
 	mi.mesh = im
 	add_child(mi)
 
-func _setup_base() -> void:
-	var fob : MeshInstance3D = MeshInstance3D.new()
-	var cyl : CylinderMesh = CylinderMesh.new()
-	cyl.top_radius = 70.0
-	cyl.bottom_radius = 88.0
-	cyl.height = 120.0
-	cyl.radial_segments = 8
-	fob.mesh = cyl
-	fob.position = _cell_center3(BASE_CELL, 60.0)
-	fob.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	var mat : StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.85, 0.75, 0.35)
-	fob.material_override = mat
-	add_child(fob)
+## Stage 2d: the real Base (FOB) entity at the base cell — 3D bunker, HP bar, turret that
+## shoots units in range and takes breach damage when units arrive.
+func _spawn_base() -> void:
+	var b : Node = BASE_SCRIPT.new()
+	b.call("place_at", _cell_center2(BASE_CELL))
+	add_child(b)
 
 func _setup_marker() -> void:
 	_marker = MeshInstance3D.new()
