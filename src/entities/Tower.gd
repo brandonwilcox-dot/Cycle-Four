@@ -33,6 +33,25 @@ const VETERAN_AURA_RADIUS    : float = 160.0  ## a max-level tower radiates a su
 const VETERAN_AURA_BONUS     : float = 0.10   ## +10% damage to friendly towers inside a veteran aura
 const TERRITORY_DAMAGE_BONUS : float = 0.15   ## +15% damage while standing on claimed ground
 
+## A1 visual identity: the tower body is drawn procedurally in _draw(). Shape encodes
+## TIER (4/6/8-sided plate, size, ring count); BARRELS encode stats (count ~ attack_speed,
+## length ~ range, thickness ~ damage); the CORE gem is tinted by damage type to match the
+## tracer bolt; a ROLE emblem marks support (halo) and detector (antenna) towers.
+enum { ROLE_DAMAGE, ROLE_SUPPORT, ROLE_DETECTOR }
+const DAMAGE_CORE : Array[Color] = [
+	Color(1.0, 0.92, 0.55),   ## Kinetic   — gold
+	Color(0.50, 0.88, 1.0),   ## Energy    — cyan
+	Color(0.60, 1.0, 0.55),   ## Corrosive — green
+]
+## Turret aim. _aim_angle is the drawn facing; it lerps toward _aim_target_angle (the current
+## target's bearing, refreshed on a scan cadence) so the barrels visibly TRACK enemies every
+## frame — not only on fire. AIM_TURN_RATE sets how snappy the rotation feels.
+const AIM_SCAN_PERIOD : float = 0.1
+const AIM_TURN_RATE   : float = 9.0
+var _aim_angle        : float = PI * 0.5
+var _aim_target_angle : float = PI * 0.5
+var _aim_scan_timer   : float = 0.0
+
 ## Construction (Phase 2B — commander-and-faction-systems.md). A freshly placed tower starts inert
 ## at START_HEALTH and only comes online once the Commander builds it up to MAX_HEALTH (the weapon
 ## doubles as the engineering tool). A built-but-damaged tower is repaired the same way. Restored
@@ -117,6 +136,7 @@ func _process(delta: float) -> void:
 		return
 	if not _built:
 		return   ## under construction — inert until the Commander finishes it
+	_update_aim(delta)
 	_attack_timer += delta
 	if _attack_timer >= 1.0 / data.attack_speed:
 		_attack_timer = 0.0
@@ -160,7 +180,13 @@ func _try_attack() -> void:
 	var target : Node = _select_target()
 	if target != null and target.has_method("take_damage"):
 		var effective_damage : float = data.damage * _damage_multiplier * _aura_recv_mult * _territory_mult * _growth_mult * _chain_mult
-		var killed : bool = target.take_damage(effective_damage, int(data.damage_type))
+		var dt : int = int(data.damage_type)
+		## Snap the aim goal to the target on fire; _update_aim() smoothly rotates the barrels to it.
+		_aim_target_angle = (target.global_position - global_position).angle()
+		## Cosmetic only — fire a tracer + muzzle flash; damage is still instant below.
+		Vfx.muzzle(global_position, dt)
+		Vfx.bolt(global_position, target.global_position, dt)
+		var killed : bool = target.take_damage(effective_damage, dt)
 		if killed:
 			_award_xp_for_kill(target)
 
@@ -381,12 +407,106 @@ func _try_hijack() -> bool:
 	return true
 
 ## Phase 4B: draw the Bloom pollen cloud so its reach reads on the board (built Bloom towers only).
+## A1: render the whole tower body procedurally so each tier/branch is visually distinct.
 func _draw() -> void:
-	if not (_built and FactionManager.active_faction == "bloom"):
+	if data == null:
 		return
-	var r : float = FACTION_PERKS.BLOOM_POLLEN_RADIUS
-	draw_circle(Vector2.ZERO, r, Color(0.35, 0.75, 0.30, 0.10))
-	draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(0.45, 0.85, 0.40, 0.45), 1.5, true)
+	var tier   : int   = int(data.get("tier")) if data.get("tier") else 1
+	var col    : Color = data.color_hint
+	var body_r : float = 12.0 + tier * 4.0           ## 16 / 20 / 24 px by tier
+	var sides  : int   = _tier_sides(tier)
+	var rot    : float = _tier_rot(tier)
+	var role   : int   = _role()
+
+	## Barrels (drawn first, under the body plate) aimed at the current target.
+	## count ~ attack_speed (gatling vs cannon), length ~ range, thickness ~ damage.
+	var count  : int   = clampi(int(round(float(data.attack_speed))), 1, 4)
+	var blen   : float = clampf(remap(float(data.range), 150.0, 320.0, 12.0, 32.0), 12.0, 32.0)
+	var bwid   : float = clampf(remap(float(data.damage), 10.0, 70.0, 3.5, 11.0), 3.5, 11.0)
+	var spread : float = 0.0 if count == 1 else 0.30
+	for i in count:
+		var off : float = 0.0 if count == 1 else lerpf(-spread, spread, float(i) / float(count - 1))
+		var ang : float = _aim_angle + off
+		draw_colored_polygon(_barrel_poly(ang, blen, bwid, body_r * 0.45), col.darkened(0.4))
+		var tip : Vector2 = Vector2(cos(ang), sin(ang)) * (body_r * 0.45 + blen)
+		draw_circle(tip, bwid * 0.5, col.lightened(0.25))
+
+	## Base plate: shadow, body, and (tier >= 2) a rotated inner accent.
+	draw_colored_polygon(_regular_poly(sides, body_r + 3.0, rot), col.darkened(0.6))
+	draw_colored_polygon(_regular_poly(sides, body_r, rot), col.darkened(0.1))
+	if tier >= 2:
+		draw_colored_polygon(_regular_poly(sides, body_r * 0.6, rot + 0.4), col.lightened(0.18))
+
+	## Tier rings — one faint ring per tier.
+	for i in tier:
+		var rr : float = body_r + 4.0 + float(i) * 3.0
+		draw_arc(Vector2.ZERO, rr, 0.0, TAU, 28, Color(col.r, col.g, col.b, 0.28), 1.5, true)
+
+	## Core gem — tinted by damage type (matches the tracer bolt).
+	var core : Color = DAMAGE_CORE[clampi(int(data.damage_type), 0, DAMAGE_CORE.size() - 1)]
+	draw_circle(Vector2.ZERO, body_r * 0.36, Color(core.r, core.g, core.b, 0.92))
+	draw_circle(Vector2.ZERO, body_r * 0.20, Color(1, 1, 1, 0.85))
+
+	## Role emblem: support = gold halo, detector = antenna.
+	if role == ROLE_SUPPORT:
+		draw_arc(Vector2.ZERO, body_r + 8.0, 0.0, TAU, 32, Color(1.0, 0.95, 0.6, 0.55), 2.0, true)
+	elif role == ROLE_DETECTOR:
+		var top : Vector2 = Vector2(0.0, -(body_r + 11.0))
+		draw_line(Vector2(0.0, -body_r), top, Color(0.7, 0.95, 1.0, 0.8), 1.5)
+		draw_circle(top, 3.5, Color(0.75, 0.97, 1.0, 0.95))
+
+	## Bloom pollen aura (unchanged behaviour) — only while built.
+	if _built and FactionManager.active_faction == "bloom":
+		var pr : float = FACTION_PERKS.BLOOM_POLLEN_RADIUS
+		draw_circle(Vector2.ZERO, pr, Color(0.35, 0.75, 0.30, 0.08))
+		draw_arc(Vector2.ZERO, pr, 0.0, TAU, 40, Color(0.45, 0.85, 0.40, 0.40), 1.5, true)
+
+## -- Visual helpers (A1) --
+
+## Continuously rotate the turret toward the current target so the barrels track enemies every
+## frame (not only on fire). Re-scans the best target on a cadence; lerps the drawn angle to it.
+func _update_aim(delta: float) -> void:
+	_aim_scan_timer -= delta
+	if _aim_scan_timer <= 0.0:
+		_aim_scan_timer = AIM_SCAN_PERIOD
+		var tgt : Node = _select_target()
+		if tgt != null and tgt is Node2D:
+			_aim_target_angle = ((tgt as Node2D).global_position - global_position).angle()
+	var prev : float = _aim_angle
+	_aim_angle = lerp_angle(_aim_angle, _aim_target_angle, minf(1.0, AIM_TURN_RATE * delta))
+	if absf(angle_difference(prev, _aim_angle)) > 0.001:
+		queue_redraw()
+
+func _tier_sides(t: int) -> int:
+	return [4, 6, 8][clampi(t - 1, 0, 2)]
+
+func _tier_rot(t: int) -> float:
+	return PI * 0.25 if t == 1 else 0.0
+
+func _role() -> int:
+	if data == null:
+		return ROLE_DAMAGE
+	var aura : float = float(data.get("aura_radius")) if data.get("aura_radius") != null else 0.0
+	if aura > 0.0:
+		return ROLE_SUPPORT
+	var det : float = float(data.get("detector_radius")) if data.get("detector_radius") != null else 0.0
+	if det > 0.0:
+		return ROLE_DETECTOR
+	return ROLE_DAMAGE
+
+func _regular_poly(sides: int, radius: float, rot: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in sides:
+		var a : float = rot + TAU * float(i) / float(sides)
+		pts.append(Vector2(cos(a), sin(a)) * radius)
+	return pts
+
+func _barrel_poly(angle: float, length: float, width: float, start: float) -> PackedVector2Array:
+	var dir  : Vector2 = Vector2(cos(angle), sin(angle))
+	var perp : Vector2 = Vector2(-dir.y, dir.x) * (width * 0.5)
+	var base : Vector2 = dir * start
+	var tip  : Vector2 = dir * (start + length)
+	return PackedVector2Array([base - perp, tip - perp, tip + perp, base + perp])
 
 ## Item 3: every tower reveals hidden units. Base reveal = its attack range (it sees what it can
 ## engage); dedicated detector towers (detector_radius set) reveal farther. Returns the larger.
@@ -419,40 +539,12 @@ func _on_claimed_ground() -> bool:
 ## -- Visual --
 
 func _build_visual() -> void:
-	var col      : Color = data.color_hint
-	var tier     : int   = int(data.get("tier")) if data.get("tier") else 1
-	## Body grows 4 px per tier: T1=48, T2=52, T3=56
-	var body_sz  : float = 44.0 + tier * 4.0
-	var half     : float = body_sz * 0.5
-	var border_sz: float = body_sz + 4.0
-	var b_half   : float = border_sz * 0.5
+	var tier : int   = int(data.get("tier")) if data.get("tier") else 1
+	## Body radius is drawn in _draw(); `half` here only positions the overlay widgets.
+	var half : float = (12.0 + tier * 4.0) + 8.0
 
-	## Darker border -- reads as distinct from units
-	var border := ColorRect.new()
-	border.size     = Vector2(border_sz, border_sz)
-	border.position = Vector2(-b_half, -b_half)
-	border.color    = col.darkened(0.5)
-	add_child(border)
-
-	## Main body -- brighter at higher tiers
-	var body := ColorRect.new()
-	body.size     = Vector2(body_sz, body_sz)
-	body.position = Vector2(-half, -half)
-	body.color    = col.lightened((tier - 1) * 0.12)
-	add_child(body)
-
-	## Tier pips: one small square per tier, centred horizontally.
-	## T1 = 1 pip (single centre), T2 = 2 pips, T3 = 3 pips.
-	var pip_sz    : float = 8.0
-	var gap       : float = 3.0
-	var total_w   : float = tier * pip_sz + (tier - 1) * gap
-	var start_x   : float = -total_w * 0.5
-	for i in tier:
-		var pip := ColorRect.new()
-		pip.size     = Vector2(pip_sz, pip_sz)
-		pip.position = Vector2(start_x + i * (pip_sz + gap), -pip_sz * 0.5)
-		pip.color    = col.darkened(0.60)
-		add_child(pip)
+	## The tower body/barrels/core are rendered procedurally in _draw() (A1). Here we only
+	## build the overlay widgets that sit above/below the body.
 
 	## Phase 9: XP progression bar above the tower body.
 	_xp_bar = ProgressionBarScript.new()
@@ -478,6 +570,7 @@ func _build_visual() -> void:
 		if child is Control:
 			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	queue_redraw()
 	_refresh_build_visual()
 
 ## Updates the build/repair bar and ghosts the tower while it is under construction.

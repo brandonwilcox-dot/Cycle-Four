@@ -30,6 +30,7 @@ ObjectiveManager="*res://src/autoloads/ObjectiveManager.gd"
 ConvoyManager="*res://src/autoloads/ConvoyManager.gd"
 MilestoneManager="*res://src/autoloads/MilestoneManager.gd"
 SceneManager="*res://src/autoloads/SceneManager.gd"
+Vfx="*res://src/vfx/Vfx.gd"
 
 [display]
 

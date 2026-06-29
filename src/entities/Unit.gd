@@ -481,6 +481,7 @@ func _die() -> void:
 		WaveManager.report_enemy_killed()   ## defenders aren't part of a wave — don't skew its count
 	EconomyManager.add_resource(FactionManager.get_primary_resource(), data.resource_reward)
 	EventBus.unit_died.emit({"unit": data.unit_name, "faction": data.faction_id})
+	Vfx.death(global_position, Vfx.faction_color(data.faction_id), 22.0)
 	queue_free()
 
 func _evolve() -> void:

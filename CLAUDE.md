@@ -34,6 +34,119 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-28 (3) — MAJOR DECISION: commit to full 3D + staged migration plan
+
+After comparing two throwaway spikes — `scenes/test/Spike25D.tscn` (faked-height 2.5D, pure 2D
+`_draw`) vs. `scenes/test/Spike3D.tscn` (true 3D: `Camera3D` ~45°, `DirectionalLight3D` shadows,
+mesh tower/units, turret yaw) — **the user chose full 3D.** This is the largest change the project
+has taken: Godot can't mix `Node2D`/`Node3D` in one viewport, so entities, camera, map, fog, VFX,
+selection, and galaxy view all move to 3D; HUD stays a 2D `CanvasLayer`.
+
+**Plan written: `planning/3d-migration-plan.md`** — staged + MCP-verified, on a dedicated branch
+(`main` keeps the working 2D build until parity). Conventions: keep pixel units (CELL_SIZE 64), map
+2D→3D as `Vector3(x, height, y)` (old Y→Z), new `src/core/World3D.gd` helper for to3/to2/ground-ray
+picking, `Camera3D` rig at ~50° pitch. Stages: 0 conventions+helper → 1 camera+ground+Base slice →
+2 entities to Node3D one-by-one → 3 terrain/fog → 4 VFX → 5 galaxy view → 6 controls/parity, then
+switch `main_scene`. **Preserved:** all design/corpus, autoloads/EventBus/economy/waves/objectives,
+`.tres` data, HUD, galaxy logic; the A1 tower identity + VFX design carry over as meshes/particles.
+
+**Spikes kept** for reference. **Recommended next step:** commit current 2D work (VFX + A1) to `main`
+as a checkpoint, branch `feat/3d`, start Stage 1. Awaiting go-ahead on committing/branching.
+
+---
+
+## Session 2026-06-28 (2) — A1: distinct per-tier/branch tower visuals — PLAYTEST VERIFIED (+ aim fix)
+
+**Playtest 2026-06-28:** tiers 1→3 + both tier-2 branches now visually distinct (confirmed all
+factions); antenna/detector + support halo confirmed; Bloom growth + tier changes read well.
+**In-session fix:** the turret barrel appeared "locked" (only re-aimed on fire, so it froze on
+cooldown / when not firing). Replaced with **continuous aim tracking** — `Tower._update_aim(delta)`
+re-scans the best target on a 0.1s cadence and lerps `_aim_angle` toward it every frame
+(`AIM_TURN_RATE` 9.0), so barrels visibly track enemies. `_try_attack` now sets `_aim_target_angle`
+(goal) instead of snapping `_aim_angle`. Compile-clean via MCP, debug exe re-exported + relaunched.
+
+**Backlog from this playtest (captured, NOT scheduled — see `planning/playtest-backlog-2026-06-28.md`
+addendum H1–H6):** H1 Bloom corrosive feel early-game; **H2 tower won't fire on point-blank enemy
+(spawn-DMZ/detection, pre-existing, not A1)**; H3 Mesh hijack too strong (tone down); H4 power curve
+too steep (wave-5 all-maxed, one T3 holds the line); H5 faction-distinct tower silhouettes (A1
+follow-on); **H6 [MAJOR] 3D/2.5D rendering w/ ~45° camera — strategic decision pending.**
+
+---
+
+## Session 2026-06-28 (2 archived note) — A1 original compile entry
+
+First item off the playtest backlog (`planning/playtest-backlog-2026-06-28.md` A1): upgraded towers
+used to look near-identical (old `_build_visual` only scaled the body 4px/tier + tiny pips). Now the
+whole tower body is **drawn procedurally in `Tower._draw()`**, with a stat-driven, readable identity:
+- **Tier → body plate:** 4/6/8-sided polygon (diamond → hexagon → octagon), radius 16/20/24, ring count
+  = tier, plus a rotated inner accent at tier ≥ 2.
+- **Stats → barrels:** count = round(attack_speed) clamped 1–4 (gatling vs single cannon), length ∝ range,
+  thickness ∝ damage. So e.g. Architect Railgun (slow/long/high-dmg) = one long thick barrel; Bloom Toxic
+  Spore (fast) = a 3-barrel spread — distinguishing the two tier-2 branches that share the DAMAGE role.
+- **Core gem** tinted by damage type (gold/cyan/green) — **matches the tracer bolt color** from session 1.
+- **Role emblem:** support/aura towers get a gold halo ring; detector towers get an antenna. Role derived
+  from `aura_radius`/`detector_radius` (`Tower._role()`).
+- **Turret aims at its target:** `_aim_angle` snaps toward the current target in `_try_attack` (+`queue_redraw`),
+  so the barrels point where the tracer flies.
+
+`_build_visual` now only builds the overlay widgets (XP bar, chevrons, construction bar) — body/border/pips
+ColorRects removed; body is `_draw`-rendered. Lifecycle unchanged: `upgrade()` rebuilds + redraws (new tier
+shape in place); `_refresh_build_visual()` still ghosts via `modulate` (works on `_draw` output) and drives
+`queue_redraw`. No external refs to the removed child nodes (placement preview is its own ColorRect).
+New helpers: `_tier_sides`/`_tier_rot`/`_role`/`_regular_poly`/`_barrel_poly`; const `DAMAGE_CORE`.
+
+**Compile:** booted clean via MCP (zero new errors; only the standing benign EventBus warnings). Debug exe
+re-exported + launched 2026-06-28. **Runtime: needs playtest** — F1 → place/build T1 → upgrade through
+T2 (try both branches) → T3; confirm each tier/branch looks distinct, barrels aim at targets, core color
+matches the tracer, support/detector emblems show. Tune body radii, barrel remap ranges, `DAMAGE_CORE`.
+
+---
+
+## Session 2026-06-28 — VISUAL TRACK BEGINS: combat juice/VFX pass 1 — PLAYTEST VERIFIED
+
+New direction (user, back after a gap): gameplay is feature-complete enough — pivot to **visual
+enhancements**. Chosen approach: **procedural "juice" in pure GDScript, NOT a sprite-art pipeline**
+(everything was `ColorRect`/`Label`/`_draw()` primitives; `assets/` held only `icon.svg`; the local
+vision model is text-only so an art pipeline is a slow bottleneck). All effects are **cosmetic only** —
+they never touch damage/gameplay, so balance can't regress.
+
+**New `Vfx` autoload + `src/vfx/` (3 files):**
+- `src/vfx/Vfx.gd` (autoload `Vfx`) — factory: `bolt(from,to,damage_type)`, `muzzle(at,dt)`,
+  `death(at,faction_col,radius)`, `spark_burst(at,color,amount,speed)`, + `damage_color(dt)` /
+  `faction_color(fid)`. Spawns effects into a lazily-created world-space `VfxLayer` under `WorldMap`
+  (resolved via `main_controller` group → `WorldMap`; **no-ops safely if the world isn't present** —
+  headless/offline). Generates a 6px white spark texture in code so `CPUParticles2D` is visible with
+  no asset. Damage tints: Kinetic=pale gold, Energy=cyan, Corrosive=acid green. Faction death tints:
+  architects=blue, bloom=green, mesh=purple.
+- `src/vfx/VfxBolt.gd` — traveling tracer (head + tapering trail) from tower to target over a
+  distance-scaled lifetime (SPEED 1400 px/s, clamped 0.04–0.18s); spawns an impact spark burst on
+  arrival, then frees itself. Damage is still dealt instantly by the tower — the bolt is pure decoration.
+- `src/vfx/VfxPulse.gd` — expanding/fading ring (+ optional filled core) for muzzle flashes + death poofs.
+
+**Wired (3 call sites):** `Tower._try_attack` → `Vfx.muzzle` + `Vfx.bolt` (before the existing instant
+`take_damage`); `Unit._die` → `Vfx.death` (faction-tinted poof + sparks) before `queue_free`.
+**Deliberately skipped** a modulate-based hit-flash this pass — `modulate` is already used by hijack
+(cyan tint) / pollen / spawn-flash, so overwriting it would fight those; the impact burst at the target
+serves as hit feedback. Revisit with a shape-conforming overlay later.
+
+**Compile:** booted clean via MCP (`Vfx` autoload + all 3 scripts + Tower/Unit reload; zero new errors,
+only the standing benign EventBus "signal never used" warnings). **PLAYTEST VERIFIED 2026-06-28** (debug
+exe): tower fire bloom, tracer bolt + trail, impact sparks, and enemy death poof all confirmed working;
+bolt speed + colors confirmed good. Tunables if needed: `VfxBolt.SPEED`, spark `amount`/`speed`,
+`Vfx.DAMAGE_COLORS`/`FACTION_COLORS`. Debug exe re-exported 2026-06-28; release export still pending.
+
+**Playtest surfaced a large design backlog — captured, NOT scheduled.** See
+`planning/playtest-backlog-2026-06-28.md` (assault phases + boss, garrison/enemy formations, terrain,
+dynamic enemy paths, convoy pathing, **A1: upgraded towers need distinct per-tier/branch visuals**).
+Do not implement any of it without picking the item with the user.
+
+**Next juice candidates:** **A1 tower-tier visuals** (pure-visual, direct follow-on), environment pass
+(starfield/nebula backdrop, terrain texture, prettier territory fills/fog — overlaps backlog F1),
+Commander/FOB firing VFX (Commander attacks + base defenders reuse the same `Vfx` calls), screen shake on
+base breach, then optionally the sprite-art track.
+
+---
+
 ## Session 2026-06-24 (7) — Persistence: conquest state survives Continue/return — COMPILE VERIFIED
 
 Closes the [BUG][P2] persistence gap for the live game. The per-territory `development` snapshot now
