@@ -34,6 +34,26 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-06-28 (4) — 3D migration Stages 0/1/2a — on branch feat/3d
+
+Branch `feat/3d` (main = 2D checkpoint `69f3694`). Per `planning/3d-migration-plan.md`:
+- **Stage 0** (`6b37883`) — `src/core/World3D.gd`: 2D⇄3D mapping (old Y→Z, +Y up, pixel units) +
+  ground-ray picking + `node_plane()` bridge for mixed 2D/3D reads.
+- **Stage 1** (`6b37883`) — `src/core/CameraRig3D.gd` (RTS rig ~52° pitch, wheel zoom, WASD/middle
+  pan) + `scenes/test/Battle3D.tscn` slice: 3D ground at real grid (60×34×64), grid overlay, FOB
+  mesh, light/shadows, click→cell picking marker. MCP + playtest verified.
+- **Stage 2a** (`ac4fd10`) — **enemy `Unit` → `Node3D` (model/view).** Sim stays on a logical plane
+  (`_p`); transform driven via `World3D` (`_set_plane` + faces travel dir); cross-entity reads via
+  `plane_pos()`/`World3D.node_plane()`. Visual = `MeshInstance3D` (+ billboard HP bar, damage tint)
+  replacing the ColorRect; hijack/pollen/reveal adapted to material tinting. `Unit.tscn` root retyped
+  Node3D. Battle3D demo spawns a marching column. MCP-verified clean.
+
+**Carry-overs noted:** 3D death VFX deferred to Stage 4 (the 2D `Vfx` no-ops in the 3D world);
+proper 3D HP bar polish later. **Next:** Stage 2b — `Tower` → `Node3D` (re-express the A1 stat-driven
+silhouette as meshes), then Building/Base/Commander/EnemyBase/Wall/FriendlyUnit/Convoy/AncientWatcher.
+
+---
+
 ## Session 2026-06-28 (3) — MAJOR DECISION: commit to full 3D + staged migration plan
 
 After comparing two throwaway spikes — `scenes/test/Spike25D.tscn` (faked-height 2.5D, pure 2D

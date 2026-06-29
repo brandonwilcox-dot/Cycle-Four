@@ -32,7 +32,7 @@ func _ready() -> void:
 	_spawn_demo_units()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stage 1 slice: camera + ground + FOB + click-to-ground picking\nWheel = zoom, WASD/arrows or middle-drag = pan, Left-click = drop a cell marker"
+	title.text = "3D MIGRATION — Stage 2a: enemy units marching in 3D\nWheel = zoom | WASD/arrows = pan | hold MIDDLE+drag = rotate | MIDDLE+wheel = angle | Delete = reset view | Insert = lock view | Left-click = cell marker"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
