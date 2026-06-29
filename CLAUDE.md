@@ -67,10 +67,22 @@ Branch `feat/3d` (main = 2D checkpoint `69f3694`). Per `planning/3d-migration-pl
   deferred. Battle3D spawns the real Base (shoots units, takes breach damage). `WorldMap.tscn` (2D world,
   abandoned) left untouched per plan.
 
-**Stage 2 entities done: Unit, Tower, Building, Base (4/10).** Battle3D is now a real 3D mini-battle
-(towers + FOB shooting marching units, garrison present). **Carry-overs:** 3D death VFX → Stage 4 (2D
-`Vfx` no-ops in 3D); 3D XP/rank bars + chevrons polish later; defender production lights up after
-FriendlyUnit. **Next:** Commander → EnemyBase → Wall → FriendlyUnit → Convoy → AncientWatcher, then 3–6.
+**STAGE 2 COMPLETE — all 10 entities are Node3D** (`2a`–`2j`): Unit, Tower, Building, Base, Commander,
+EnemyBase, Wall, FriendlyUnit, Convoy, AncientWatcher. Pattern throughout: logic on a logical plane
+(`_p`), 3D transform via `World3D`, cross-entity reads via `plane_pos()`/`World3D.node_plane()`, visuals
+as `MeshInstance3D` (+ billboard bars). Battle3D is a full 3D mini-battle: FOB + towers + Commander
+shooting a marching enemy column, an enemy base fielding defenders, walls on the approach, a garrison.
+
+**Carry-overs / follow-ups before Stage 6 parity:**
+- **AbilityController** (`src/abilities/AbilityController.gd`, a `Node` child of Commander) still mixes
+  `Vector2` field/hazard centers with (now `Vector3`) unit positions — needs a plane-coordinate pass.
+  No-ops without a controller; not exercised in Battle3D. **Do before abilities work in the 3D game.**
+- 3D VFX (tracers/muzzle/impact/death/shot-flash/engineer-beam) → Stage 4 (2D `Vfx` no-ops in 3D).
+- Deferred 3D overlays: tower/commander/base/convoy XP/rank bars + chevrons, Commander LoS/sensor/
+  move-path/ability rings. Defender production needs a live faction + 3D unit layer.
+
+**Next:** Stage 3 — 3D terrain/map + fog (replace `MapGrid._draw`); sets up backlog F1 (real terrain).
+Then 4 (VFX), 5 (galaxy view), 6 (controls + full parity → switch `main_scene`, merge `feat/3d`).
 
 ---
 

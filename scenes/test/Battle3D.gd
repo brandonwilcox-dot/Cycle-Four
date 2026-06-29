@@ -15,6 +15,7 @@ const BASE_SCRIPT      = preload("res://src/entities/Base.gd")
 const COMMANDER_SCRIPT  = preload("res://src/entities/Commander.gd")
 const ENEMY_BASE_SCRIPT = preload("res://src/entities/EnemyBase.gd")
 const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
+const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -35,8 +36,7 @@ var _commander : Node = null
 
 func _ready() -> void:
 	_setup_environment()
-	_setup_ground()
-	_setup_grid_overlay()
+	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
 	_spawn_base()
 	_spawn_commander()
@@ -75,38 +75,13 @@ func _setup_environment() -> void:
 	we.environment = env
 	add_child(we)
 
-func _setup_ground() -> void:
-	var ground : MeshInstance3D = MeshInstance3D.new()
-	var pm : PlaneMesh = PlaneMesh.new()
-	pm.size = Vector2(COLS * CELL, ROWS * CELL)
-	ground.mesh = pm
-	## PlaneMesh is centred on its origin → place its centre at the map centre.
-	ground.position = Vector3(COLS * CELL * 0.5, 0.0, ROWS * CELL * 0.5)
-	var mat : StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.16, 0.26, 0.20)
-	ground.material_override = mat
-	add_child(ground)
-
-func _setup_grid_overlay() -> void:
-	var im : ImmediateMesh = ImmediateMesh.new()
-	var mat : StandardMaterial3D = StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(0.30, 0.45, 0.35, 0.5)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	im.surface_begin(Mesh.PRIMITIVE_LINES, mat)
-	var y : float = 1.0   ## lift slightly to avoid z-fighting with the ground
-	for c in range(COLS + 1):
-		var x : float = float(c * CELL)
-		im.surface_add_vertex(Vector3(x, y, 0.0))
-		im.surface_add_vertex(Vector3(x, y, float(ROWS * CELL)))
-	for r in range(ROWS + 1):
-		var z : float = float(r * CELL)
-		im.surface_add_vertex(Vector3(0.0, y, z))
-		im.surface_add_vertex(Vector3(float(COLS * CELL), y, z))
-	im.surface_end()
-	var mi : MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = im
-	add_child(mi)
+## Stage 3: instantiate the real MapGrid — it generates a map, renders the 3D terrain (MultiMesh
+## tiles colored by cell type + fog), joins the "map_grid" group, and drives claim/reveal/sight for
+## the entities. Replaces the old flat placeholder ground + grid overlay.
+func _spawn_map_grid() -> void:
+	var mg : Node = MAP_GRID_SCRIPT.new()
+	mg.name = "MapGrid"
+	add_child(mg)
 
 ## Stage 2d: the real Base (FOB) entity at the base cell — 3D bunker, HP bar, turret that
 ## shoots units in range and takes breach damage when units arrive.

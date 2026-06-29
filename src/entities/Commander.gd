@@ -82,6 +82,8 @@ func _ready() -> void:
 	add_to_group("detectors")
 	position = WORLD3D.to3(_p, 0.0)
 	_map_grid = get_node_or_null("../../MapGrid")
+	if _map_grid == null:
+		_map_grid = get_tree().get_first_node_in_group("map_grid")   ## robust fallback (3D world layout)
 	_build_visual()
 	_ability_controller = get_node_or_null("AbilityController")
 	_claim_around()

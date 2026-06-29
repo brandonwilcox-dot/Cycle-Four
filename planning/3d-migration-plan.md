@@ -73,6 +73,19 @@ Each stage compiles clean via MCP before the next; the bulk (Stage 2) is per-ent
   (Academy → faction → waves → conquest → galaxy → persistence). Switch `main_scene` to 3D
   once at parity; merge the branch.
 
+## Follow-ups logged during Stage 2 (do before Stage 6 parity)
+
+- **AbilityController plane-coordinate pass.** `src/abilities/AbilityController.gd` (a `Node` child of
+  the Commander) still stores `field_center`/`hazard_center`/`bulwark` as `Vector2` and compares them to
+  unit `global_position` (now `Vector3`). With a controller present and an ability cast, that mixes
+  Vector2/Vector3 → runtime error. It no-ops without a controller and isn't used in Battle3D, but must be
+  converted (route reads through `World3D.node_plane`, keep centers as plane `Vector2`) before abilities
+  work in the 3D game.
+- **Deferred visuals** to rebuild in 3D: per-entity XP/rank progression bars + veterancy chevrons
+  (Tower/Base/Commander/Convoy used the 2D `ProgressionBar`/`RankChevrons`); Commander LoS/sensor rings,
+  move-path preview, ability field/hazard rings, engineer beam, shot flash (were 2D `_draw`/`Line2D`).
+- **3D VFX** (Stage 4): tracers, muzzle, impact, death poofs — the 2D `Vfx` autoload no-ops in 3D.
+
 ## Risks / notes
 
 - **Scope:** multi-session (weeks of evenings). Expect the game to be non-playable on the
