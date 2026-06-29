@@ -1,71 +1,57 @@
 ## Convoy.gd
-## Phase 8 — a persistent logistics convoy that ferries back and forth between
-## a depot and the FOB along the discovered ancient path.
+## Phase 8 — a persistent logistics convoy ferrying between a depot and the FOB along the discovered
+## ancient path. Spawned once per depot by ConvoyManager; loops depot↔FOB, crediting cargo on arrival.
 ##
-## Lifecycle: spawned ONCE per discovered depot by ConvoyManager. Loops forever:
-##   depot -> FOB (loaded with cargo)
-##   pause at FOB to unload (fires convoy_arrived, cargo credited)
-##   FOB -> depot (returning empty)
-##   pause at depot to load
-##   repeat
-##
-## Phase 8b will add HP / destruction by flankers. For Phase 8 stub, convoys are
-## invulnerable and never queue_free — they ferry indefinitely.
+## 3D MIGRATION (Stage 2i): now `extends Node3D` (model/view). Logical plane pos `_p` drives the
+## transform via World3D; route_world stays plane-space waypoints. Visual is a small 3D box (blue
+## loaded / grey empty); 2D rank bar/chevrons deferred (null-guarded).
 class_name Convoy
-extends Node2D
+extends Node3D
 
-const ProgressionBarScript = preload("res://src/ui/ProgressionBar.gd")
-const RankChevronsScript   = preload("res://src/ui/RankChevrons.gd")
+const WORLD3D = preload("res://src/core/World3D.gd")
 
-const CONVOY_BASE_SPEED    : float = 90.0    ## px/s base, scales with rank
-const SPEED_PER_RANK       : float = 0.05    ## +5% per rank, matches Commander
-const LOAD_UNLOAD_TIME     : float = 1.5     ## seconds paused at each endpoint
-const VISUAL_SIZE          : float = 18.0
-const VISUAL_COLOR_HINT    : Color = Color(0.30, 0.65, 0.95, 1.0)  ## light blue — distinct from gold commander
-const VISUAL_COLOR_EMPTY   : Color = Color(0.55, 0.55, 0.60, 0.85) ## grey while returning empty
-const VISUAL_OUTLINE_COLOR : Color = Color(0.05, 0.20, 0.40, 1.0)
+const CONVOY_BASE_SPEED    : float = 90.0
+const SPEED_PER_RANK       : float = 0.05
+const LOAD_UNLOAD_TIME     : float = 1.5
+const VISUAL_SIZE          : float = 20.0
+const VISUAL_COLOR_HINT    : Color = Color(0.30, 0.65, 0.95, 1.0)
+const VISUAL_COLOR_EMPTY   : Color = Color(0.55, 0.55, 0.60, 0.85)
 const DEFAULT_CARGO_AMOUNT : float = 1.0
 
-## Phase 9: proficiency. Continuous multiplier on output, grows logarithmically per
-## delivery — diminishing returns mean the first ~30 deliveries matter most. Death
-## resets to 1.0 per handoff §8.2 ("death is a setback"); Phase 8b will wire the
-## actual reset when flanker damage lands.
 const PROFICIENCY_BASE     : float = 1.0
-const PROFICIENCY_GROWTH   : float = 0.5     ## controls curve steepness
-const DELIVERIES_PER_RANK  : int   = 10      ## rank up display milestone (visual only)
+const PROFICIENCY_GROWTH   : float = 0.5
+const DELIVERIES_PER_RANK  : int   = 10
 
-## Veterancy cap + scout sight. A convoy reveals a small sphere as it travels, so
-## supply lines double as scouts; the radius grows with rank up to the bonus max.
-## (Set CONVOY_SIGHT_BASE/bonus to 0 to restore "hidden in fog" logistics.)
 const CONVOY_MAX_RANK        : int = 6
 const CONVOY_SIGHT_BASE      : int = 2
-const CONVOY_SIGHT_PER_STEP  : int = 2   ## +1 sight cell every 2 ranks
-const CONVOY_SIGHT_BONUS_MAX : int = 3   ## sight 2 → 5 at max rank
+const CONVOY_SIGHT_PER_STEP  : int = 2
+const CONVOY_SIGHT_BONUS_MAX : int = 3
 
 @export var convoy_id    : StringName = &""
-@export var from_node_id : StringName = &""   ## the depot (loop endpoint A)
-@export var to_node_id   : StringName = &""   ## the FOB (loop endpoint B)
+@export var from_node_id : StringName = &""
+@export var to_node_id   : StringName = &""
 @export var cargo_amount : float      = DEFAULT_CARGO_AMOUNT
 
-## World-space waypoints from depot (index 0) to FOB (last index). Set by ConvoyManager.
 var route_world : Array[Vector2] = []
+var _p          : Vector2 = Vector2.ZERO
 
-## State machine. +1 = depot→FOB (loaded), -1 = FOB→depot (empty).
-## When _pause_timer > 0 the convoy is unloading (at FOB) or loading (at depot).
 var _waypoint_index : int   = 0
 var _direction      : int   = 1
 var _pause_timer    : float = 0.0
 
-## Phase 9 progression.
 var proficiency      : float = PROFICIENCY_BASE
 var _deliveries_made : int   = 0
 var _current_speed   : float = CONVOY_BASE_SPEED
 
-var _visual     : ColorRect = null
-var _rank_bar   : Node2D    = null   ## ProgressionBar instance
-var _rank_chevrons : Node2D = null   ## RankChevrons instance
-var _convoy_rank : int      = 0
-var _map_grid   : Node      = null   ## cached parent; used for fog visibility lookups
+var _mesh       : MeshInstance3D = null
+var _mat        : StandardMaterial3D = null
+var _rank_bar   : Node = null   ## deferred; null-guarded
+var _rank_chevrons : Node = null
+var _convoy_rank : int  = 0
+var _map_grid   : Node  = null
+
+func plane_pos() -> Vector2:
+	return _p
 
 func _ready() -> void:
 	add_to_group("convoys")
@@ -74,63 +60,56 @@ func _ready() -> void:
 		push_error("Convoy: route too short (%d waypoints) — destroying." % route_world.size())
 		queue_free()
 		return
-	## Convoy is parented to MapGrid; route_world is in MapGrid's local space.
 	_map_grid = get_parent()
-	position = route_world[0]
-	_waypoint_index = 1   ## first target
-	## Phase 9 polish: apply fog visibility immediately at spawn — depots live in fog,
-	## so without this the convoy flashes for one frame before _process hides it.
+	_p = route_world[0]
+	position = WORLD3D.to3(_p, 0.0)
+	_waypoint_index = 1
 	_update_fog_visibility()
 
 func _process(delta: float) -> void:
-	_apply_sight()   ## reveal a small sphere around the convoy as it travels
+	_apply_sight()
 	if _pause_timer > 0.0:
 		_pause_timer -= delta
-		_update_fog_visibility()   ## still respect fog while idling at endpoints
+		_update_fog_visibility()
 		return
 	var target : Vector2 = route_world[_waypoint_index]
-	var to_target : Vector2 = target - position
+	var to_target : Vector2 = target - _p
 	var dist : float = to_target.length()
 	var step : float = _current_speed * delta
 	if dist <= step:
-		position = target
+		_set_plane(target)
 		_on_waypoint_reached()
 	else:
-		position += to_target.normalized() * step
+		_set_plane(_p + to_target.normalized() * step)
 	_update_fog_visibility()
 
-## Reveals a small scout sphere around the convoy's current cell, widening with rank.
+func _set_plane(p: Vector2) -> void:
+	_p = p
+	position = WORLD3D.to3(_p, 0.0)
+
 func _apply_sight() -> void:
-	if _map_grid == null or CONVOY_SIGHT_BASE <= 0:
+	if _map_grid == null or CONVOY_SIGHT_BASE <= 0 or not _map_grid.has_method("world_to_cell"):
 		return
-	var cell : Vector2i = _map_grid.world_to_cell(position)
+	var cell : Vector2i = _map_grid.world_to_cell(_p)
 	@warning_ignore("integer_division")
 	var sight : int = CONVOY_SIGHT_BASE + mini(_convoy_rank / CONVOY_SIGHT_PER_STEP, CONVOY_SIGHT_BONUS_MAX)
 	_map_grid.call("reveal_area", cell, sight)
 
-## Phase 6/8: convoys obey the same fog rule as enemy units — visible only in
-## revealed cells. Without this the convoy looks like it "leaves the map" when it
-## returns to its depot in unexplored territory.
 func _update_fog_visibility() -> void:
-	if _map_grid == null:
+	if _map_grid == null or not _map_grid.has_method("world_to_cell"):
 		return
 	var map_data : MapData = _map_grid.get("map_data") as MapData
 	if map_data == null:
 		return
-	var cell : Vector2i = _map_grid.world_to_cell(position)
+	var cell : Vector2i = _map_grid.world_to_cell(_p)
 	if cell.x < 0 or cell.x >= map_data.dimensions.x or cell.y < 0 or cell.y >= map_data.dimensions.y:
 		return
 	var idx : int = cell.x + cell.y * map_data.dimensions.x
 	visible = map_data.get_meta_revealed(idx)
 
-## Called when we arrive at the cell at route_world[_waypoint_index].
-## Decides whether to advance, reverse (at an endpoint), or pause.
 func _on_waypoint_reached() -> void:
 	var last_idx : int = route_world.size() - 1
 	if _direction == 1 and _waypoint_index == last_idx:
-		## Arrived at FOB loaded — deliver cargo (scaled by proficiency), pause,
-		## then head back. Phase 9: proficiency grows logarithmically per delivery
-		## with diminishing returns.
 		var delivered : float = cargo_amount * proficiency
 		EventBus.convoy_arrived.emit(convoy_id, to_node_id, delivered)
 		_deliveries_made += 1
@@ -153,7 +132,6 @@ func _on_waypoint_reached() -> void:
 		_waypoint_index = last_idx - 1
 		_set_visual_color(VISUAL_COLOR_EMPTY)
 	elif _direction == -1 and _waypoint_index == 0:
-		## Arrived back at depot empty — pause to load, then head forward again.
 		_pause_timer    = LOAD_UNLOAD_TIME
 		_direction      = 1
 		_waypoint_index = 1
@@ -161,51 +139,24 @@ func _on_waypoint_reached() -> void:
 	else:
 		_waypoint_index += _direction
 
-## -- Visual --
-
-## Phase 9: bar fills 0–100% per DELIVERIES_PER_RANK deliveries, then resets when
-## the rank advances. Visual signal of accumulated proficiency.
 func _update_rank_bar() -> void:
 	if _rank_bar == null:
 		return
 	var into_rank : int = _deliveries_made % DELIVERIES_PER_RANK
-	_rank_bar.set_progress(float(into_rank) / float(DELIVERIES_PER_RANK))
+	_rank_bar.call("set_progress", float(into_rank) / float(DELIVERIES_PER_RANK))
 
 func _build_visual() -> void:
-	## A small blue square (loaded) / grey (empty) with darker outline. Distinct
-	## from gold Commander and grey/faction enemies so glance-reading the world
-	## tells the player which entity is which.
-	_visual          = ColorRect.new()
-	_visual.size     = Vector2(VISUAL_SIZE, VISUAL_SIZE)
-	_visual.position = Vector2(-VISUAL_SIZE * 0.5, -VISUAL_SIZE * 0.5)
-	_visual.color    = VISUAL_COLOR_HINT
-	add_child(_visual)
-	var outline_top := ColorRect.new()
-	outline_top.size     = Vector2(VISUAL_SIZE, 1.5)
-	outline_top.position = Vector2(-VISUAL_SIZE * 0.5, -VISUAL_SIZE * 0.5)
-	outline_top.color    = VISUAL_OUTLINE_COLOR
-	add_child(outline_top)
-	var outline_bottom := ColorRect.new()
-	outline_bottom.size     = Vector2(VISUAL_SIZE, 1.5)
-	outline_bottom.position = Vector2(-VISUAL_SIZE * 0.5,  VISUAL_SIZE * 0.5 - 1.5)
-	outline_bottom.color    = VISUAL_OUTLINE_COLOR
-	add_child(outline_bottom)
-	## Phase 9: rank progression bar above the convoy.
-	_rank_bar = ProgressionBarScript.new()
-	_rank_bar.position = Vector2(0.0, -VISUAL_SIZE * 0.5 - 8.0)
-	add_child(_rank_bar)
-	_update_rank_bar()
-	## Veterancy chevrons above the rank bar (one per delivery rank).
-	_rank_chevrons = RankChevronsScript.new()
-	_rank_chevrons.position = Vector2(0.0, -VISUAL_SIZE * 0.5 - 14.0)
-	add_child(_rank_chevrons)
-
-	## Decorative Controls must not eat world clicks (default MOUSE_FILTER_STOP
-	## would consume LMB before it reaches selection/placement handlers).
-	for child in get_children():
-		if child is Control:
-			(child as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mesh = MeshInstance3D.new()
+	var bx : BoxMesh = BoxMesh.new()
+	bx.size = Vector3(VISUAL_SIZE, VISUAL_SIZE * 0.8, VISUAL_SIZE)
+	_mesh.mesh = bx
+	_mesh.position = Vector3(0.0, VISUAL_SIZE * 0.4, 0.0)
+	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_mat = StandardMaterial3D.new()
+	_mat.albedo_color = VISUAL_COLOR_HINT
+	_mesh.material_override = _mat
+	add_child(_mesh)
 
 func _set_visual_color(c: Color) -> void:
-	if _visual != null:
-		_visual.color = c
+	if _mat != null:
+		_mat.albedo_color = c
