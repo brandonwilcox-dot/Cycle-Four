@@ -12,7 +12,8 @@ const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
 const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
 const BASE_SCRIPT      = preload("res://src/entities/Base.gd")
-const COMMANDER_SCRIPT = preload("res://src/entities/Commander.gd")
+const COMMANDER_SCRIPT  = preload("res://src/entities/Commander.gd")
+const ENEMY_BASE_SCRIPT = preload("res://src/entities/EnemyBase.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -38,6 +39,7 @@ func _ready() -> void:
 	_setup_marker()
 	_spawn_base()
 	_spawn_commander()
+	_spawn_enemy_base()
 
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
@@ -118,6 +120,14 @@ func _spawn_commander() -> void:
 	_commander.call("place_at", _cell_center2(Vector2i(28, 17)))
 	add_child(_commander)
 	_commander.call("set_selected", true)
+
+## Stage 2f: a destructible enemy base near the west spawn — fields mesh-faction defenders (real 3D
+## Units) that guard it; the Commander/FOB/towers can grind it down.
+func _spawn_enemy_base() -> void:
+	var eb : Node = ENEMY_BASE_SCRIPT.new()
+	eb.call("setup", &"demo_spawn", "mesh")
+	eb.call("place_at", _cell_center2(Vector2i(6, 17)))
+	add_child(eb)
 
 func _setup_marker() -> void:
 	_marker = MeshInstance3D.new()
