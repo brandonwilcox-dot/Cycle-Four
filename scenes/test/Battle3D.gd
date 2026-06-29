@@ -11,7 +11,8 @@ const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
 const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
 const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
-const BASE_SCRIPT    = preload("res://src/entities/Base.gd")
+const BASE_SCRIPT      = preload("res://src/entities/Base.gd")
+const COMMANDER_SCRIPT = preload("res://src/entities/Commander.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -26,8 +27,9 @@ const COLS : int = 60
 const ROWS : int = 34
 const BASE_CELL : Vector2i = Vector2i(30, 17)
 
-var _rig    : Node3D = null
-var _marker : MeshInstance3D = null
+var _rig       : Node3D = null
+var _marker    : MeshInstance3D = null
+var _commander : Node = null
 
 func _ready() -> void:
 	_setup_environment()
@@ -35,6 +37,7 @@ func _ready() -> void:
 	_setup_grid_overlay()
 	_setup_marker()
 	_spawn_base()
+	_spawn_commander()
 
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
@@ -108,6 +111,14 @@ func _spawn_base() -> void:
 	b.call("place_at", _cell_center2(BASE_CELL))
 	add_child(b)
 
+## Stage 2e: the player Commander (instantiated script-only → no AbilityController, so abilities
+## no-op). Auto-attacks enemies, selectable (ground ring), and left-click issues a move order.
+func _spawn_commander() -> void:
+	_commander = COMMANDER_SCRIPT.new()
+	_commander.call("place_at", _cell_center2(Vector2i(28, 17)))
+	add_child(_commander)
+	_commander.call("set_selected", true)
+
 func _setup_marker() -> void:
 	_marker = MeshInstance3D.new()
 	var bx : BoxMesh = BoxMesh.new()
@@ -137,6 +148,9 @@ func _pick(screen_pos: Vector2) -> void:
 	var row : int = int(clampf(floor(ground2d.y / CELL), 0, ROWS - 1))
 	_marker.position = _cell_center3(Vector2i(col, row), CELL * 0.4)
 	_marker.visible = true
+	## Stage 2e: left-click also issues a move order to the demo Commander (proves 3D movement).
+	if is_instance_valid(_commander):
+		_commander.call("move_command", _cell_center2(Vector2i(col, row)), false)
 	print("[Battle3D] picked cell (%d, %d)" % [col, row])
 
 func _cell_center3(cell: Vector2i, height: float) -> Vector3:
