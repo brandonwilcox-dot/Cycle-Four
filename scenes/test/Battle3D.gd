@@ -36,6 +36,7 @@ const BASE_CELL : Vector2i = Vector2i(30, 17)
 
 var _rig       : Node3D = null
 var _marker    : MeshInstance3D = null
+var _marker_target : Vector2 = Vector2.ZERO   ## plane pos of the active move order; marker hides on arrival
 var _commander : Node = null
 
 ## Stage 6 controls.
@@ -49,7 +50,8 @@ var _selected_tower : Node = null   ## built tower selected for upgrade (U)
 var _last_upgrade_t  : float = -1.0   ## debounce: rapid upgrades thrash the free/rebuild cycle
 const UPGRADE_COOLDOWN : float = 0.35
 var _placing        : bool = false
-var _place_building : bool = false   ## false = tower, true = building/garrison
+var _place_building : bool = false   ## true = building/garrison (vs tower)
+var _place_wall     : bool = false   ## true = Architect wall (overrides _place_building)
 var _preview        : MeshInstance3D = null
 var _preview_mat    : StandardMaterial3D = null
 
@@ -62,12 +64,18 @@ const FACTION_CHOICES : Array = [
 var _battle_started : bool = false
 var _faction_layer  : CanvasLayer = null
 
-## Stage 6b waves.
-const SPAWN_INTERVAL : float = 1.6
+## Stage 6b waves — paced, finite waves with a grace period and rests (not an unending stream).
+const SPAWN_INTERVAL : float = 1.6    ## seconds between units within a wave
+const WAVE_GRACE     : float = 8.0    ## quiet time before the first wave (build a defense)
+const WAVE_REST      : float = 14.0   ## quiet time between waves
+const WAVE_SIZE_BASE : int   = 5      ## wave 1 size; +2 each subsequent wave
 var _unit_layer  : Node3D = null
 var _spawn_cells : Array[Vector2i] = []
 var _spawn_idx   : int   = 0
-var _spawn_timer : float = 2.0
+var _wave_num    : int   = 0
+var _wave_left   : int   = 0          ## units still to spawn this wave
+var _resting     : bool  = true       ## true during grace / between-wave rests
+var _wave_timer  : float = WAVE_GRACE
 
 func _ready() -> void:
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
@@ -177,13 +185,23 @@ func _setup_marker() -> void:
 func _process(delta: float) -> void:
 	if _placing:
 		_update_preview()
-	## Stage 6b: trickle enemy waves from the map's spawn points along their real A* paths.
+	## Stage 6b: paced waves down the map's real A* paths — grace, then bursts separated by rests.
 	if not _battle_started:
 		return   ## wait for faction-select to build the world
-	_spawn_timer -= delta
-	if _spawn_timer <= 0.0:
-		_spawn_timer = SPAWN_INTERVAL
+	_update_marker_fade()
+	_wave_timer -= delta
+	if _resting:
+		if _wave_timer <= 0.0:
+			_start_next_wave()
+		return
+	if _wave_left <= 0:
+		_resting = true                  ## wave done — rest before the next
+		_wave_timer = WAVE_REST
+		return
+	if _wave_timer <= 0.0:
+		_wave_timer = SPAWN_INTERVAL
 		_spawn_one_enemy()
+		_wave_left -= 1
 
 ## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
 ## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
@@ -215,16 +233,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var k : InputEventKey = event
 		if k.keycode == KEY_B:
-			if _placing and not _place_building:
+			if _placing and not _place_building and not _place_wall:
 				_set_placing(false)
 			else:
 				_place_building = false
+				_place_wall = false
 				_set_placing(true)
 		elif k.keycode == KEY_G:
 			if _placing and _place_building:
 				_set_placing(false)
 			else:
 				_place_building = true
+				_place_wall = false
 				_set_placing(true)
 		elif k.keycode == KEY_U:
 			_try_upgrade_selected_tower()
@@ -324,7 +344,11 @@ func _try_place(cell: Vector2i) -> void:
 		return
 	if not bool(_map_grid.call("can_place_at", cell.x, cell.y)):
 		return
-	if _place_building:
+	if _place_wall:
+		var w : Node = WALL_SCRIPT.new()
+		w.call("place_at", _cell_center2(cell))   ## inert — the Commander raises it (engineering)
+		add_child(w)
+	elif _place_building:
 		var bd : BuildingData = BUILDING_DATA.new()
 		bd.building_name = "Garrison"
 		bd.color_hint = Color(0.55, 0.75, 0.95)
@@ -443,12 +467,17 @@ func _setup_hud() -> void:
 	add_child(cl)
 	_hud = HUD_SCENE.instantiate()
 	cl.add_child(_hud)
-	## HUD build buttons → 3D placement mode (tower vs garrison).
+	## HUD build buttons → 3D placement mode (tower / garrison / Architect wall).
 	EventBus.tower_placement_requested.connect(func(_td: Resource) -> void:
 		_place_building = false
+		_place_wall = false
 		_set_placing(true))
 	EventBus.building_placement_requested.connect(func(_bd: Resource) -> void:
 		_place_building = true
+		_place_wall = false
+		_set_placing(true))
+	EventBus.wall_placement_requested.connect(func() -> void:
+		_place_wall = true
 		_set_placing(true))
 	## Game-over overlay — self-wires to base_destroyed, shows itself, Try Again / Menu reload the scene.
 	cl.add_child(GAME_OVER_SCENE.instantiate())
@@ -472,6 +501,14 @@ func _flash_marker(world2: Vector2) -> void:
 		return
 	_marker.position = WORLD3D.to3(world2, CELL * 0.3)
 	_marker.visible = true
+	_marker_target = world2
+
+## Hide the move-order marker once the Commander has reached (or nearly reached) the target.
+func _update_marker_fade() -> void:
+	if _marker == null or not _marker.visible or not is_instance_valid(_commander):
+		return
+	if _commander.call("plane_pos").distance_to(_marker_target) <= CELL * 0.6:
+		_marker.visible = false
 
 func _cell_center3(cell: Vector2i, height: float) -> Vector3:
 	return WORLD3D.to3(_cell_center2(cell), height)
@@ -487,6 +524,7 @@ func _setup_waves() -> void:
 func _collect_spawns() -> void:
 	_spawn_cells.clear()
 	_spawn_idx = 0
+	_reset_waves()   ## restart the wave cadence (grace period) for the new map
 	var md : MapData = _map_grid.map_data if _map_grid != null else null
 	if md != null:
 		for sp in md.spawn_points:
@@ -533,7 +571,8 @@ func _reset_battlefield() -> void:
 			if is_instance_valid(n):
 				n.queue_free()
 	_selected_tower = null
-	_spawn_timer = 2.0
+	if _marker != null:
+		_marker.visible = false
 	if is_instance_valid(_commander):
 		var start2 : Vector2 = _cell_center2(Vector2i(28, 17))
 		_commander.call("place_at", start2)
@@ -550,6 +589,21 @@ func _on_enemy_base_destroyed(_spawn_id: StringName) -> void:
 	if _galaxy_view != null and _galaxy_view.has_method("queue_redraw"):
 		_galaxy_view.call("queue_redraw")
 	EventBus.notification_pushed.emit("Territory %s captured!" % node_id, "positive")
+
+## Begin the next wave: size grows each wave; announce it.
+func _start_next_wave() -> void:
+	_wave_num += 1
+	_wave_left = WAVE_SIZE_BASE + (_wave_num - 1) * 2
+	_resting = false
+	_wave_timer = 0.0   ## first unit of the wave spawns right away
+	EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles." % [_wave_num, _wave_left], "warning")
+
+## Reset the wave cadence (fresh battle / after a galaxy deploy): grace period, wave 1 next.
+func _reset_waves() -> void:
+	_wave_num   = 0
+	_wave_left  = 0
+	_resting    = true
+	_wave_timer = WAVE_GRACE
 
 func _spawn_one_enemy() -> void:
 	if _spawn_cells.is_empty() or _map_grid == null:

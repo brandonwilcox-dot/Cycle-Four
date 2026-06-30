@@ -147,10 +147,15 @@ a `VfxLayer` under the MapGrid; no-op without a map.
 12. ✅ **Commander LoS/sensor range rings** (`c50e87b`) — flat ground TorusMesh rings (vision green /
     sensor blue) shown when selected, sized to rank-scaled radii. (3D HP bars already done on units +
     Commander; enemy units already have HP bar + damage tint.)
-13. TO-DO (the heavy remaining items): **save/load** (note the persistence gap — buildings/claims/
-    per-territory state aren't serialized yet, so this is an arc, not a quick item); **Academy intro**;
-    AbilityController plane-coord pass + remaining ability/move-path overlays; revert `main_scene`
-    hack; merge `feat/3d` → main.
+13. ✅ **Faction-select screen** (`9413e0a`) — replaced hardcoded architects with a choose-your-faction
+    CanvasLayer chooser (Architects/Bloom/Mesh + Academy-default sub-paths); picking one selects the
+    faction, seeds demo resources, and `_start_battle()` builds the faction-dependent world. World
+    spawn + waves + gameplay input gated on `_battle_started`. (User scope: faction-select only.)
+14. TO-DO (the heavy remaining items): **save/load** (persistence gap — buildings/claims/per-territory
+    state aren't serialized yet, so it's an arc, not a quick item); **full scripted Academy tutorial**
+    (2D-coupled to the battle world → belongs with the scene-promotion arc, not the throwaway test
+    scene); AbilityController plane-coord pass + remaining ability/move-path overlays; **promote
+    Battle3D → a real Battle scene, revert `main_scene` hack, merge `feat/3d` → main**.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
