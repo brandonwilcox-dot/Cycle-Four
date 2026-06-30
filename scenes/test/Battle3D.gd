@@ -18,6 +18,7 @@ const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
 const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
 const GALAXY_VIEW       = preload("res://src/ui/GalaxyView.gd")
 const HUD_SCENE         = preload("res://scenes/ui/HUD.tscn")
+const GAME_OVER_SCENE   = preload("res://scenes/ui/GameOverScreen.tscn")
 const MAP_GENERATOR     = preload("res://src/core/map/MapGenerator.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
@@ -387,6 +388,8 @@ func _setup_hud() -> void:
 	EventBus.building_placement_requested.connect(func(_bd: Resource) -> void:
 		_place_building = true
 		_set_placing(true))
+	## Game-over overlay — self-wires to base_destroyed, shows itself, Try Again / Menu reload the scene.
+	cl.add_child(GAME_OVER_SCENE.instantiate())
 
 func _setup_preview() -> void:
 	_preview = MeshInstance3D.new()
