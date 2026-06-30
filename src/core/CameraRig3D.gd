@@ -1,6 +1,7 @@
 ## 3D migration Stage 1: an RTS camera rig. The rig node is the pivot (a point on the ground the
 ## camera looks at); a Camera3D child orbits it. Controls:
 ##   WASD / arrows ............. pan the pivot (world NSEW)
+##   Q / R ..................... rotate (yaw) left / right
 ##   wheel ..................... zoom (pivot distance)
 ##   hold MIDDLE + drag ........ rotate — horizontal = yaw, vertical = pitch (angle)
 ##   hold MIDDLE + wheel ....... adjust pitch (angle), finer than dragging
@@ -17,6 +18,7 @@ const DIST_MAX          : float = 14000.0   ## allows zooming out into galaxy ra
 const GALAXY_ZOOM_DIST  : float = 5000.0    ## past this, the galaxy view shows (board shrinks away)
 const ZOOM_STEP         : float = 1.12
 const PAN_SPEED         : float = 1500.0   ## px/s at keyboard pan
+const YAW_KEY_SPEED     : float = 1.4      ## rad/s of yaw while holding Q / R
 const YAW_DRAG_SENS     : float = 0.006    ## rad per pixel of horizontal drag
 const PITCH_DRAG_SENS   : float = 0.20     ## deg per pixel of vertical drag
 const PITCH_WHEEL_STEP  : float = 4.0      ## deg per wheel notch while rotating
@@ -79,6 +81,16 @@ func _process(delta: float) -> void:
 	if pan != Vector3.ZERO:
 		## World-axis NSEW pan, scaled by zoom so it feels constant on screen.
 		position += pan.normalized() * PAN_SPEED * delta * (_dist / 1600.0)
+
+	## Q / R — hold to rotate (yaw) the view left / right.
+	var yaw_in : float = 0.0
+	if Input.is_key_pressed(KEY_Q):
+		yaw_in += 1.0
+	if Input.is_key_pressed(KEY_R):
+		yaw_in -= 1.0
+	if yaw_in != 0.0:
+		_yaw += yaw_in * YAW_KEY_SPEED * delta
+		_update_camera()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

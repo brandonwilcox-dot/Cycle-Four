@@ -133,8 +133,15 @@ a `VfxLayer` under the MapGrid; no-op without a map.
 7. ✅ **Galaxy deploy** (`1bea2f0`) — zoomed-out LEFT-click a frontier node → `node_at` → load that
    territory's seeded map (`MapGenerator.generate(seed)`), recolor terrain, recenter graph, re-collect
    spawns, snap camera back to the battlefield. The tactical→galactic→deploy loop in 3D.
-8. TO-DO: capture-on-win + reset/persist forces on deploy; save/load; Academy; GameOver; deferred
-   ability/LoS rings + 3D XP/HP bars + AbilityController plane pass; revert `main_scene` hack; merge.
+8. ✅ **Commander move clamp** (`90ae399`) — `_clamp_to_map` keeps move orders inside the play area
+   (the ground ray hits the infinite Y=0 plane, so off-board right-clicks used to send it wandering).
+9. ✅ **Deploy = clean transition + capture-on-clear** (`2562343`) — deploy resets the battlefield
+   (`_reset_battlefield`: free towers/buildings/units/walls/enemy bases via destroy() for income
+   unwind, Commander back to base), spawns a fresh `EnemyBase` (territory's owner faction) at the new
+   map's first spawn cell; destroying it → `enemy_base_destroyed` → `GalaxyManager.capture_system`
+   flips the node + expands the frontier. The full tactical→deploy→clear→capture loop runs in 3D.
+10. TO-DO: save/load; Academy intro; GameOver; deferred ability/LoS rings + 3D XP/HP bars +
+    AbilityController plane pass; revert `main_scene` hack; merge `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
