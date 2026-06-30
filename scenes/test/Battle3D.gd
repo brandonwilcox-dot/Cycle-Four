@@ -83,7 +83,7 @@ func _ready() -> void:
 	_setup_waves()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stage 6c\nLEFT select Commander / tower | U upgrade selected tower | RIGHT move (Shift chain) | B tower | G garrison | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/R rotate | MIDDLE+drag rotate | Del/Ins view"
+	title.text = "3D MIGRATION — Stage 6c\nLEFT select Commander / tower | U upgrade selected tower | RIGHT move (Shift chain) | B tower | G garrison | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
