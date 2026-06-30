@@ -151,11 +151,18 @@ a `VfxLayer` under the MapGrid; no-op without a map.
     CanvasLayer chooser (Architects/Bloom/Mesh + Academy-default sub-paths); picking one selects the
     faction, seeds demo resources, and `_start_battle()` builds the faction-dependent world. World
     spawn + waves + gameplay input gated on `_battle_started`. (User scope: faction-select only.)
-14. TO-DO (the heavy remaining items): **save/load** (persistence gap — buildings/claims/per-territory
-    state aren't serialized yet, so it's an arc, not a quick item); **full scripted Academy tutorial**
-    (2D-coupled to the battle world → belongs with the scene-promotion arc, not the throwaway test
-    scene); AbilityController plane-coord pass + remaining ability/move-path overlays; **promote
-    Battle3D → a real Battle scene, revert `main_scene` hack, merge `feat/3d` → main**.
+14. ✅ **Bug sweep** (`8dcfed4`) — paced finite waves (8s grace + rests, no immediate unending stream);
+    move-marker fades on Commander arrival; Architect walls now build (wired `wall_placement_requested`
+    → wall placement; Commander raises them).
+15. ✅ **SCENE PROMOTED** (`039215a`) — Battle3D moved scenes/test → scenes/main; `main_scene` restored
+    to `Root.tscn`; `TitleScreen.BATTLE_SCENE` → Battle3D. Real flow now: **Root → Title → SceneManager
+    → 3D Battle**. 2D `Battle.tscn` kept as fallback.
+16. 🔶 **save/load — IN PROGRESS (1/3)** (`15f596c`): SaveManager already auto-persists faction/economy/
+    galaxy(+dev). ✅ (1) Continue-aware boot — `_continue_game()` restores faction + active-node map,
+    skips faction-select. TODO (2) capture 3D development on `game_saving`; (3) restore towers/
+    buildings/walls/claims/FOB rank on Continue/return (port the proven 2D Battle.gd helpers).
+17. TO-DO: full scripted Academy tutorial (with scene-promotion arc); AbilityController plane pass +
+    ability/move-path overlays; merge `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.

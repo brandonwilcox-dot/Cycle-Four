@@ -69,6 +69,7 @@ const SPAWN_INTERVAL : float = 1.6    ## seconds between units within a wave
 const WAVE_GRACE     : float = 8.0    ## quiet time before the first wave (build a defense)
 const WAVE_REST      : float = 14.0   ## quiet time between waves
 const WAVE_SIZE_BASE : int   = 5      ## wave 1 size; +2 each subsequent wave
+const MAX_LIVE_ENEMIES : int = 24     ## hard cap on concurrent hostiles — never let the field flood
 var _unit_layer  : Node3D = null
 var _spawn_cells : Array[Vector2i] = []
 var _spawn_idx   : int   = 0
@@ -202,6 +203,10 @@ func _process(delta: float) -> void:
 		_wave_timer = WAVE_REST
 		return
 	if _wave_timer <= 0.0:
+		## Hard anti-flood cap: if the field is already full of hostiles, hold this spawn (don't
+		## consume the wave) until some die. Prevents any runaway/endless on-screen stream.
+		if get_tree().get_nodes_in_group("units").size() >= MAX_LIVE_ENEMIES:
+			return
 		_wave_timer = SPAWN_INTERVAL
 		_spawn_one_enemy()
 		_wave_left -= 1
