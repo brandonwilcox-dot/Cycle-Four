@@ -90,6 +90,36 @@ var _wave_timer  : float = WAVE_GRACE
 func _ready() -> void:
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
 	EventBus.game_saving.connect(_capture_territory_development)      ## snapshot dev into the active node before each save
+
+## EventBus is an autoload that outlives this scene; Load/Continue free + recreate Battle3D, so we MUST
+## disconnect here or dead instances accumulate stale connections ("Lambda capture freed" errors + double
+## captures across reload cycles).
+func _exit_tree() -> void:
+	if Engine.time_scale != 1.0:
+		Engine.time_scale = 1.0   ## never leave the engine frozen if we're torn down with the menu open
+	for sig_cb in [
+		[EventBus.enemy_base_destroyed, _on_enemy_base_destroyed],
+		[EventBus.game_saving, _capture_territory_development],
+		[EventBus.tower_placement_requested, _on_tower_req],
+		[EventBus.building_placement_requested, _on_build_req],
+		[EventBus.wall_placement_requested, _on_wall_req],
+	]:
+		if (sig_cb[0] as Signal).is_connected(sig_cb[1]):
+			(sig_cb[0] as Signal).disconnect(sig_cb[1])
+
+func _on_tower_req(_td: Resource = null) -> void:
+	_place_building = false
+	_place_wall = false
+	_set_placing(true)
+
+func _on_build_req(_bd: Resource = null) -> void:
+	_place_building = true
+	_place_wall = false
+	_set_placing(true)
+
+func _on_wall_req() -> void:
+	_place_wall = true
+	_set_placing(true)
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -658,17 +688,9 @@ func _setup_hud() -> void:
 	_hud = HUD_SCENE.instantiate()
 	cl.add_child(_hud)
 	## HUD build buttons → 3D placement mode (tower / garrison / Architect wall).
-	EventBus.tower_placement_requested.connect(func(_td: Resource) -> void:
-		_place_building = false
-		_place_wall = false
-		_set_placing(true))
-	EventBus.building_placement_requested.connect(func(_bd: Resource) -> void:
-		_place_building = true
-		_place_wall = false
-		_set_placing(true))
-	EventBus.wall_placement_requested.connect(func() -> void:
-		_place_wall = true
-		_set_placing(true))
+	EventBus.tower_placement_requested.connect(_on_tower_req)
+	EventBus.building_placement_requested.connect(_on_build_req)
+	EventBus.wall_placement_requested.connect(_on_wall_req)
 	## Game-over overlay — self-wires to base_destroyed, shows itself, Try Again / Menu reload the scene.
 	cl.add_child(GAME_OVER_SCENE.instantiate())
 
@@ -843,6 +865,9 @@ func _capture_fob() -> Dictionary:
 ## Re-apply a territory's saved development onto the freshly-loaded map. Towers/garrisons/walls come
 ## back already BUILT (the Commander already raised them in the saved session).
 func _restore_territory_development(dev: Dictionary) -> void:
+	var n_towers : int = 0
+	var n_builds : int = 0
+	var n_walls  : int = 0
 	var claims : Array = dev.get("claimed", [])
 	if not claims.is_empty():
 		_map_grid.call("apply_claimed_indices", claims)
@@ -861,6 +886,7 @@ func _restore_territory_development(dev: Dictionary) -> void:
 			_tower_cells[cell] = t
 			if int(trec.get("level", 1)) > 1:
 				t.call("restore_level", int(trec.get("level", 1)))
+			n_towers += 1
 	for brec in dev.get("buildings", []):
 		if typeof(brec) != TYPE_DICTIONARY:
 			continue
@@ -875,6 +901,7 @@ func _restore_territory_development(dev: Dictionary) -> void:
 			if int(brec.get("level", 1)) > 1:
 				b.set("_level", int(brec.get("level", 1)))
 			_building_cells[cell] = b
+			n_builds += 1
 	for wrec in dev.get("walls", []):
 		if typeof(wrec) != TYPE_ARRAY or (wrec as Array).size() != 2:
 			continue
@@ -884,11 +911,16 @@ func _restore_territory_development(dev: Dictionary) -> void:
 		add_child(w)
 		w.call("mark_built")
 		_wall_cells[wcell] = w
+		n_walls += 1
 	var fob : Dictionary = dev.get("fob", {})
 	if int(fob.get("rank", 0)) > 0:
 		var base : Node = get_tree().get_first_node_in_group("base")
 		if base != null and base.has_method("restore_rank"):
 			base.call("restore_rank", int(fob.get("rank", 0)))
+	_map_grid.call("queue_redraw")   ## recolor terrain so restored CLAIMED cells show
+	EventBus.notification_pushed.emit(
+		"Restored: %d towers, %d garrisons, %d walls, %d claimed cells." % [n_towers, n_builds, n_walls, claims.size()],
+		"positive")
 
 ## Begin the next wave: size grows each wave; announce it.
 func _start_next_wave() -> void:
