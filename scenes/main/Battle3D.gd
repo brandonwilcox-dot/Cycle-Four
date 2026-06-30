@@ -90,6 +90,31 @@ var _wave_timer  : float = WAVE_GRACE
 func _ready() -> void:
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
 	EventBus.game_saving.connect(_capture_territory_development)      ## snapshot dev into the active node before each save
+	_setup_environment()
+	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
+	_setup_marker()
+	_setup_preview()
+	_setup_hud()
+	_spawn_galaxy()
+
+	_rig = CAM_RIG.new()
+	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
+	add_child(_rig)
+
+	## Continue (a save was loaded → GameState has a faction) restores straight into the battle;
+	## New Game shows the faction-select screen. The world is built in _start_battle() either way.
+	if not GameState.current_faction.is_empty():
+		_continue_game()
+	else:
+		_show_faction_select()
+
+	var title : Label3D = Label3D.new()
+	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view | ESC menu"
+	title.position = _cell_center3(BASE_CELL, 420.0)
+	title.pixel_size = 0.9
+	title.modulate = Color(0.8, 0.9, 1.0)
+	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	add_child(title)
 
 ## EventBus is an autoload that outlives this scene; Load/Continue free + recreate Battle3D, so we MUST
 ## disconnect here or dead instances accumulate stale connections ("Lambda capture freed" errors + double
@@ -120,31 +145,6 @@ func _on_build_req(_bd: Resource = null) -> void:
 func _on_wall_req() -> void:
 	_place_wall = true
 	_set_placing(true)
-	_setup_environment()
-	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
-	_setup_marker()
-	_setup_preview()
-	_setup_hud()
-	_spawn_galaxy()
-
-	_rig = CAM_RIG.new()
-	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
-	add_child(_rig)
-
-	## Continue (a save was loaded → GameState has a faction) restores straight into the battle;
-	## New Game shows the faction-select screen. The world is built in _start_battle() either way.
-	if not GameState.current_faction.is_empty():
-		_continue_game()
-	else:
-		_show_faction_select()
-
-	var title : Label3D = Label3D.new()
-	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view | ESC menu"
-	title.position = _cell_center3(BASE_CELL, 420.0)
-	title.pixel_size = 0.9
-	title.modulate = Color(0.8, 0.9, 1.0)
-	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	add_child(title)
 
 func _setup_environment() -> void:
 	var light : DirectionalLight3D = DirectionalLight3D.new()
