@@ -70,6 +70,8 @@ const FACTION_CHOICES : Array = [
 var _battle_started : bool = false
 var _faction_layer  : CanvasLayer = null
 var _pause_layer    : CanvasLayer = null   ## ESC game menu (Save/Load/Settings/Main Menu)
+var _menu_open      : bool = false         ## gates gameplay input; freeze via Engine.time_scale (NOT tree pause, which blocks the menu buttons)
+var _pause_status   : Label = null         ## in-menu confirmation line (e.g. "Game saved.")
 
 ## Stage 6b waves — paced, finite waves with a grace period and rests (not an unending stream).
 const SPAWN_INTERVAL : float = 1.6    ## seconds between units within a wave
@@ -86,7 +88,6 @@ var _resting     : bool  = true       ## true during grace / between-wave rests
 var _wave_timer  : float = WAVE_GRACE
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS   ## so ESC still toggles the pause menu while the tree is paused
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
 	EventBus.game_saving.connect(_capture_territory_development)      ## snapshot dev into the active node before each save
 	_setup_environment()
@@ -197,8 +198,8 @@ func _setup_marker() -> void:
 	add_child(_marker)
 
 func _process(delta: float) -> void:
-	if get_tree().paused:
-		return   ## pause menu open — freeze the battle (this node stays ALWAYS only to catch ESC)
+	if _menu_open:
+		return   ## game menu open — Engine.time_scale=0 already froze movement; skip gameplay logic
 	if _placing:
 		_update_preview()
 	## Stage 6b: paced waves down the map's real A* paths — grace, then bursts separated by rests.
@@ -235,7 +236,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_toggle_pause_menu()
 		return
-	if get_tree().paused:
+	if _menu_open:
 		return   ## menu open — swallow all other gameplay input
 	if event is InputEventMouseButton:
 		var mb : InputEventMouseButton = event
@@ -493,10 +494,10 @@ func _toggle_pause_menu() -> void:
 		_open_pause_menu()
 
 func _open_pause_menu() -> void:
-	get_tree().paused = true
+	_menu_open = true
+	Engine.time_scale = 0.0   ## freeze all delta-based motion; input/GUI is unaffected, so buttons work
 	_pause_layer = CanvasLayer.new()
 	_pause_layer.layer = 50
-	_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS   ## buttons must work while the tree is paused
 	add_child(_pause_layer)
 	var bg : ColorRect = ColorRect.new()
 	bg.color = Color(0.02, 0.04, 0.07, 0.86)
@@ -506,7 +507,8 @@ func _open_pause_menu() -> void:
 	_build_pause_main()
 
 func _close_pause_menu() -> void:
-	get_tree().paused = false
+	_menu_open = false
+	Engine.time_scale = 1.0
 	if is_instance_valid(_pause_layer):
 		_pause_layer.queue_free()
 	_pause_layer = null
@@ -540,6 +542,10 @@ func _menu_button(text: String, cb: Callable) -> Button:
 
 func _build_pause_main() -> void:
 	var col : VBoxContainer = _pause_column("PAUSED")
+	_pause_status = Label.new()
+	_pause_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pause_status.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
+	col.add_child(_pause_status)
 	col.add_child(_menu_button("Resume", _close_pause_menu))
 	col.add_child(_menu_button("Save Game", _pause_save))
 	col.add_child(_menu_button("Load Game", _pause_load))
@@ -571,18 +577,21 @@ func _build_pause_settings() -> void:
 
 func _pause_save() -> void:
 	SaveManager.save_game()
-	EventBus.notification_pushed.emit("Game saved.", "positive")
+	if _pause_status != null:
+		_pause_status.text = "Game saved."
 
 func _pause_load() -> void:
 	if not SaveManager.has_save():
 		EventBus.notification_pushed.emit("No save to load.", "warning")
 		return
-	get_tree().paused = false
+	_menu_open = false
+	Engine.time_scale = 1.0
 	SaveManager.load_game()
 	get_tree().reload_current_scene()   ## re-runs _ready → _continue_game restores faction + dev
 
 func _pause_main_menu() -> void:
-	get_tree().paused = false
+	_menu_open = false
+	Engine.time_scale = 1.0
 	SceneManager.change_to(TITLE_SCENE)
 
 func _on_pause_volume_changed(value: float) -> void:
