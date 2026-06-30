@@ -98,10 +98,14 @@ a `VfxLayer` under the MapGrid; no-op without a map.
 `is_galaxy_zoom()`. CameraRig3D zoom range extended to galaxy distance + `is_galaxy_zoom()`; rig in group
 `camera_rig`. Zoom out → board shrinks → 3D galaxy. `node_at()` pick kept for deploy.
 
-**STAGE 6a COMPLETE** (`f35f294`) — RTS controls in 3D on Battle3D: LEFT select Commander / RIGHT move
-(shift-chain) / B tower-build mode w/ live green-red placement preview, all via 3D ground raycast;
-placement wired to `MapGrid.can_place_at`/`mark_tower_placed` + Commander engineering. The 3D build is now
-*controllable*, not just a demo.
+**STAGE 6a+6b COMPLETE — the 3D build is a PLAYABLE TD round.**
+- 6a (`f35f294`) — RTS controls via 3D ground raycast: LEFT select Commander / RIGHT move (shift-chain) /
+  B tower-build mode w/ live green-red placement preview; wired to `MapGrid.can_place_at`/`mark_tower_placed`
+  + Commander engineering.
+- 6b (`3d9f2f7`) — real waves: enemies trickle from the map's spawn cells down their `get_path_to_base`
+  A* routes into a UnitLayer; FOB/towers/Commander defend with 3D tracers. Fog reveals as you explore.
+- Playtest build (`eda2fcb`) — `run/main_scene` → `Battle3D.tscn` (BRANCH-ONLY, temporary) so the exported
+  debug exe boots straight into the playable 3D battle. **Revert this before merge.**
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.

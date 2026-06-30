@@ -37,6 +37,7 @@ const BUILD_RATE          : float = 50.0
 
 const MAX_HEALTH       : float = 300.0
 const HEALTH_BAR_W     : float = 40.0
+const ENGINEER_LINE_COLOR : Color = Color(0.40, 1.00, 0.70, 0.90)   ## engineering beam tint
 const CELL_SIZE_PX     : float = 64.0
 const BODY_LIFT        : float = 16.0
 const SELECT_RING_COLOR : Color = Color(0.40, 1.00, 0.55, 0.90)
@@ -55,6 +56,8 @@ var _body        : MeshInstance3D = null
 var _hp_fill     : MeshInstance3D = null
 var _hp_mat      : StandardMaterial3D = null
 var _select_ring : MeshInstance3D = null
+var _beam        : MeshInstance3D = null   ## 3D engineering beam (Commander → structure under build)
+var _beam_mat    : StandardMaterial3D = null
 
 var _sensed_cell_set    : Dictionary = {}
 
@@ -85,6 +88,7 @@ func _ready() -> void:
 	if _map_grid == null:
 		_map_grid = get_tree().get_first_node_in_group("map_grid")   ## robust fallback (3D world layout)
 	_build_visual()
+	_ensure_beam()
 	_ability_controller = get_node_or_null("AbilityController")
 	_claim_around()
 	_reveal_around()
@@ -299,6 +303,48 @@ func _try_engineering(delta: float) -> void:
 		var rate : float = BUILD_RATE * FACTION_PERKS.build_rate_mult(FactionManager.active_faction)
 		if not bool(_engineer_target.call("receive_engineering", rate * delta)):
 			_engineer_target = null
+	_update_beam()
+
+## 3D engineering beam — a thin emissive bar from the Commander to the structure it's building/repairing.
+## Lives in the world (parent), updated each frame; hidden when idle.
+func _ensure_beam() -> void:
+	if _beam != null:
+		return
+	_beam = MeshInstance3D.new()
+	var bx := BoxMesh.new()
+	bx.size = Vector3(5.0, 5.0, 1.0)   ## unit length along Z; scaled to the target distance
+	_beam.mesh = bx
+	_beam_mat = StandardMaterial3D.new()
+	_beam_mat.albedo_color = ENGINEER_LINE_COLOR
+	_beam_mat.emission_enabled = true
+	_beam_mat.emission = ENGINEER_LINE_COLOR
+	_beam_mat.emission_energy_multiplier = 3.0
+	_beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_beam.material_override = _beam_mat
+	_beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_beam.visible = false
+	var parent : Node = get_parent()
+	if parent != null:
+		parent.add_child(_beam)
+
+func _update_beam() -> void:
+	if _beam == null:
+		return
+	if _engineer_target == null or not is_instance_valid(_engineer_target):
+		_beam.visible = false
+		return
+	var from3 : Vector3 = WORLD3D.to3(_p, 20.0)
+	var to3   : Vector3 = WORLD3D.to3(WORLD3D.node_plane(_engineer_target), 28.0)
+	var dist  : float   = from3.distance_to(to3)
+	_beam.global_position = (from3 + to3) * 0.5
+	if dist > 0.01:
+		_beam.look_at(to3, Vector3.UP)
+	_beam.scale = Vector3(1.0, 1.0, dist)
+	_beam.visible = true
+
+func _exit_tree() -> void:
+	if is_instance_valid(_beam):
+		_beam.queue_free()
 
 func _find_structure_needing_work() -> Node:
 	var best : Node = null
