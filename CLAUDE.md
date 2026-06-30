@@ -110,8 +110,19 @@ a `VfxLayer` under the MapGrid; no-op without a map.
 - HUD overlay (`c171287`, **6c partial**) — the real `HUD.tscn` (Control) overlays the 3D battle on a
   CanvasLayer; EventBus-driven so resources/waves/notifications/objectives display live. Build button wired
   to 3D placement (works once faction-select lands); B-key meanwhile.
+- Camera snaps (`a6c7cbc`) — PgUp birds-eye (top-down, map-centered), PgDn focus Commander (~sensor
+  range), Insert/Delete custom lock/reset; G garrison placement. Playtest-confirmed working.
 - **Playtest-confirmed 2026-06-29:** movement, build (now w/ beam), tower aim/response, enemy damage +
-  death poof all good; "mechanics feel solid."
+  death poof, camera angles, B/G placement all good; "mechanics feel solid."
+
+**Stage 6c TO-DO (start here next):**
+1. **Faction-select flow** — the keystone: emit/select a faction so `active_faction` is set. This lights up
+   (a) the HUD's faction resources + build buttons + tower upgrades, AND (b) **garrison unit production**
+   (FriendlyRoster.garrison_unit returns null with no faction; also needs a real 3D unit layer the garrison
+   can resolve — Building uses `../../UnitLayer`). **Playtest: garrison currently spawns no units** for these
+   two reasons.
+2. Then: tower upgrade UI (tower selection/inspection), Academy, GameOver, save/load, galaxy deploy/capture,
+   deferred ability/LoS rings + 3D XP/health bars, revert the `main_scene` hack, merge `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.

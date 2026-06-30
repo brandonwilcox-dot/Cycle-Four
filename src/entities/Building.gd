@@ -131,6 +131,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not _built:
 		return
+	## Resolve the friendly-unit layer lazily: the hardcoded ../../UnitLayer path doesn't hold in the
+	## 3D scene layout, so fall back to the "unit_layer" group once it exists.
+	if _unit_layer == null:
+		_unit_layer = get_node_or_null("../../UnitLayer")
+		if _unit_layer == null:
+			_unit_layer = get_tree().get_first_node_in_group("unit_layer")
 	if _garrison_unit == null or _unit_layer == null:
 		return
 	_produce_timer -= delta

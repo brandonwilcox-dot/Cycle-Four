@@ -58,6 +58,8 @@ func _ready() -> void:
 	_setup_marker()
 	_setup_preview()
 	_setup_hud()
+	_select_faction()      ## Stage 6c: set active_faction → HUD resources/buttons + garrison production
+	_setup_unit_layer()    ## must exist before garrisons _ready (their friendly units spawn here)
 	_spawn_base()
 	_spawn_commander()
 	_spawn_enemy_base()
@@ -276,6 +278,20 @@ func _update_preview() -> void:
 	var ok : bool = _map_grid != null and bool(_map_grid.call("can_place_at", cell.x, cell.y))
 	_preview_mat.albedo_color = Color(0.3, 1.0, 0.4, 0.5) if ok else Color(1.0, 0.3, 0.25, 0.5)
 
+## Stage 6c: pick a faction so active_faction is set — lights up the HUD's faction resources +
+## build buttons + tower upgrades AND lets garrisons resolve their roster unit. (architects/standard;
+## the real game routes this through the FactionSelect screen — wired here so the battle plays.)
+func _select_faction() -> void:
+	FactionManager.select_faction("architects", "standard")
+
+## Friendly units (garrison defenders) live here; tagged "unit_layer" so a Building can resolve it
+## by group (its hardcoded ../../UnitLayer path doesn't hold in the 3D scene layout).
+func _setup_unit_layer() -> void:
+	_unit_layer = Node3D.new()
+	_unit_layer.name = "UnitLayer"
+	_unit_layer.add_to_group("unit_layer")
+	add_child(_unit_layer)
+
 ## Stage 6c: overlay the real HUD (a Control) on a CanvasLayer above the 3D viewport. It's
 ## EventBus-driven (resources / waves / notifications / objectives), so it displays live with no
 ## controller wiring. The build button needs the faction-select flow (deeper 6c); meanwhile we connect
@@ -317,9 +333,6 @@ func _cell_center2(cell: Vector2i) -> Vector2:
 
 ## Stage 6b: real waves — collect the map's spawn cells and trickle enemies down their A* paths.
 func _setup_waves() -> void:
-	_unit_layer = Node3D.new()
-	_unit_layer.name = "UnitLayer"
-	add_child(_unit_layer)
 	var md : MapData = _map_grid.map_data if _map_grid != null else null
 	if md != null:
 		for sp in md.spawn_points:
