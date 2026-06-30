@@ -43,6 +43,7 @@ const SELECT_RADIUS : float = 52.0
 var _map_grid    : Node = null
 var _hud         : Control = null
 var _galaxy_view : Node = null
+var _deployed_node : String = ""    ## galaxy node currently being fought ("" = home); capture-on-clear target
 var _selected_tower : Node = null   ## built tower selected for upgrade (U)
 var _last_upgrade_t  : float = -1.0   ## debounce: rapid upgrades thrash the free/rebuild cycle
 const UPGRADE_COOLDOWN : float = 0.35
@@ -59,6 +60,7 @@ var _spawn_idx   : int   = 0
 var _spawn_timer : float = 2.0
 
 func _ready() -> void:
+	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -131,9 +133,12 @@ func _spawn_commander() -> void:
 ## Stage 2f: a destructible enemy base near the west spawn — fields mesh-faction defenders (real 3D
 ## Units) that guard it; the Commander/FOB/towers can grind it down.
 func _spawn_enemy_base() -> void:
+	_spawn_enemy_base_at(Vector2i(6, 17), "mesh", &"demo_spawn")
+
+func _spawn_enemy_base_at(cell: Vector2i, faction: String, spawn_id: StringName) -> void:
 	var eb : Node = ENEMY_BASE_SCRIPT.new()
-	eb.call("setup", &"demo_spawn", "mesh")
-	eb.call("place_at", _cell_center2(Vector2i(6, 17)))
+	eb.call("setup", spawn_id, faction)
+	eb.call("place_at", _cell_center2(cell))
 	add_child(eb)
 
 ## Stage 5: populate a galaxy + add the 3D GalaxyView. Zoom the camera OUT past the galaxy
@@ -439,10 +444,47 @@ func _try_deploy(world2: Vector2) -> void:
 	_map_grid.call("queue_redraw")          ## recolor the 3D terrain from the new map
 	GalaxyManager.active_node = id
 	_collect_spawns()                        ## new map → new spawn cells for the wave driver
+	_reset_battlefield()                     ## fresh territory: clear forces, reset Commander to base
+	_deployed_node = id
+	## A fresh enemy base to destroy = the capture condition for this territory.
+	if not _spawn_cells.is_empty():
+		var owner_fac : String = str(GalaxyManager.star_systems[id].get("owner", "mesh"))
+		_spawn_enemy_base_at(_spawn_cells[0], owner_fac, StringName("deploy_%s" % id))
 	if _galaxy_view.has_method("queue_redraw"):
 		_galaxy_view.call("queue_redraw")    ## recenter the graph on the new active node
 	_rig.call("snap_focus", Vector3(COLS * CELL * 0.5, 0.0, ROWS * CELL * 0.5), 1600.0)
-	EventBus.notification_pushed.emit("Deploying to territory %s." % id, "positive")
+	EventBus.notification_pushed.emit("Deployed to territory %s — destroy its base to capture it." % id, "positive")
+
+## Clears all transient combat entities and returns the Commander to base — a clean fight per territory.
+func _reset_battlefield() -> void:
+	for n in get_tree().get_nodes_in_group("buildings"):
+		if is_instance_valid(n):
+			if n.has_method("destroy"):
+				n.call("destroy")   ## reverses territory income before freeing
+			else:
+				n.queue_free()
+	for grp in ["towers", "friendly_units", "units", "walls", "enemy_bases"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			if is_instance_valid(n):
+				n.queue_free()
+	_selected_tower = null
+	_spawn_timer = 2.0
+	if is_instance_valid(_commander):
+		var start2 : Vector2 = _cell_center2(Vector2i(28, 17))
+		_commander.call("place_at", start2)
+		_commander.call("move_command", start2, false)   ## clear queued orders / stop here
+		_commander.call("set_selected", true)
+
+## Capture-on-clear: destroying the deployed territory's enemy base flips it to the player.
+func _on_enemy_base_destroyed(_spawn_id: StringName) -> void:
+	if _deployed_node == "":
+		return   ## home/demo base — not a deploy target
+	var node_id : String = _deployed_node
+	_deployed_node = ""
+	GalaxyManager.capture_system(node_id, FactionManager.active_faction)
+	if _galaxy_view != null and _galaxy_view.has_method("queue_redraw"):
+		_galaxy_view.call("queue_redraw")
+	EventBus.notification_pushed.emit("Territory %s captured!" % node_id, "positive")
 
 func _spawn_one_enemy() -> void:
 	if _spawn_cells.is_empty() or _map_grid == null:
