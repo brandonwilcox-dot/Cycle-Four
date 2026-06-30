@@ -196,6 +196,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif is_instance_valid(_commander) and bool(_commander.call("is_selected")):
 				var g : Vector2 = _mouse_ground()
 				if WORLD3D.is_valid(g):
+					g = _clamp_to_map(g)   ## keep move orders inside the play area (ray hits the infinite plane)
 					_commander.call("move_command", g, Input.is_key_pressed(KEY_SHIFT))
 					_flash_marker(g)
 	elif event is InputEventKey and event.pressed and not event.echo:
@@ -233,6 +234,14 @@ func _unhandled_input(event: InputEvent) -> void:
 func _mouse_ground() -> Vector2:
 	var cam : Camera3D = _rig.call("get_camera")
 	return WORLD3D.ground_point(cam, get_viewport().get_mouse_position(), 0.0)
+
+## Clamp a plane point to the playfield (with a half-cell inset) so the ray-vs-infinite-plane pick
+## can't send the Commander off the board.
+func _clamp_to_map(v2: Vector2) -> Vector2:
+	var lo : float = CELL * 0.5
+	return Vector2(
+		clampf(v2.x, lo, COLS * CELL - lo),
+		clampf(v2.y, lo, ROWS * CELL - lo))
 
 func _hovered_cell() -> Vector2i:
 	var g : Vector2 = _mouse_ground()

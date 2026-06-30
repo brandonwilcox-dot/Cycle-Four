@@ -126,8 +126,15 @@ a `VfxLayer` under the MapGrid; no-op without a map.
    via `Tower.upgrade()`. Demo: free (real game charges + offers the A/B branch).
 4. **Backlog I1 (deep, → C2/D1):** friendly-unit movement/formations — patrol clips through buildings;
    units should form up outside the garrison perimeter, move only when needed. In playtest-backlog doc.
-5. TO-DO: Academy, GameOver, save/load, galaxy deploy/capture, deferred ability/LoS rings + 3D XP/HP
-   bars + AbilityController plane pass, revert the `main_scene` hack, merge `feat/3d` → main.
+5. ✅ **HUD build buttons** (`9ec526c`) — unlock on placement end (Battle3D calls `HUD.end_placement_mode()`,
+   which now resets the building button too); garrison button wired (`building_placement_requested`).
+6. ✅ **Rapid-upgrade crash fix** (`f3d97a0`) — 0.35s upgrade debounce (the free-all+rebuild churn in
+   `Tower.upgrade` thrashed under rapid U → crash; the known [P1][MONITOR] rapid-interaction class).
+7. ✅ **Galaxy deploy** (`1bea2f0`) — zoomed-out LEFT-click a frontier node → `node_at` → load that
+   territory's seeded map (`MapGenerator.generate(seed)`), recolor terrain, recenter graph, re-collect
+   spawns, snap camera back to the battlefield. The tactical→galactic→deploy loop in 3D.
+8. TO-DO: capture-on-win + reset/persist forces on deploy; save/load; Academy; GameOver; deferred
+   ability/LoS rings + 3D XP/HP bars + AbilityController plane pass; revert `main_scene` hack; merge.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
