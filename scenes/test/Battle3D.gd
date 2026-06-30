@@ -40,6 +40,7 @@ var _commander : Node = null
 const TOWER_DATA = preload("res://resources/towers/architects_t1.tres")
 const SELECT_RADIUS : float = 52.0
 var _map_grid    : Node = null
+var _selected_tower : Node = null   ## built tower selected for upgrade (U)
 var _placing        : bool = false
 var _place_building : bool = false   ## false = tower, true = building/garrison
 var _preview        : MeshInstance3D = null
@@ -75,7 +76,7 @@ func _ready() -> void:
 	_setup_waves()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stage 6\nLEFT select | RIGHT move (Shift chain) | B build tower | G build garrison | PgUp birds-eye | PgDn focus Commander | wheel zoom (out far = galaxy) | WASD pan | MIDDLE+drag rotate | Delete/Insert reset/lock view"
+	title.text = "3D MIGRATION — Stage 6c\nLEFT select Commander / tower | U upgrade selected tower | RIGHT move (Shift chain) | B tower | G garrison | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | MIDDLE+drag rotate | Del/Ins view"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
@@ -181,7 +182,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				if not Input.is_key_pressed(KEY_SHIFT):
 					_set_placing(false)
 			else:
-				_select_at(_mouse_ground())
+				_left_click(_mouse_ground())
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
 			if _placing:
 				_set_placing(false)
@@ -204,6 +205,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				_place_building = true
 				_set_placing(true)
+		elif k.keycode == KEY_U:
+			_try_upgrade_selected_tower()
 		elif k.keycode == KEY_PAGEUP:
 			## Birds-eye centered on the map.
 			_rig.call("snap_birdseye", Vector3(COLS * CELL * 0.5, 0.0, ROWS * CELL * 0.5), float(COLS * CELL) * 0.9)
@@ -229,6 +232,49 @@ func _hovered_cell() -> Vector2i:
 	if not WORLD3D.is_valid(g):
 		return Vector2i(-1, -1)
 	return Vector2i(int(clampf(floor(g.x / CELL), 0, COLS - 1)), int(clampf(floor(g.y / CELL), 0, ROWS - 1)))
+
+## LEFT-click dispatch: a built tower under the cursor selects it (for upgrade); otherwise fall through
+## to Commander select/deselect.
+func _left_click(world2: Vector2) -> void:
+	var t : Node = _tower_at(world2)
+	if t != null:
+		_selected_tower = t
+		if is_instance_valid(_commander):
+			_commander.call("set_selected", false)
+		EventBus.notification_pushed.emit("Tower selected — press U to upgrade.", "normal")
+		return
+	_selected_tower = null
+	_select_at(world2)
+
+## Nearest built tower within a small radius of a plane point, or null.
+func _tower_at(world2: Vector2) -> Node:
+	if not WORLD3D.is_valid(world2):
+		return null
+	var best   : Node  = null
+	var best_d : float = 36.0
+	for t in get_tree().get_nodes_in_group("towers"):
+		if not is_instance_valid(t) or not bool(t.call("is_built")):
+			continue
+		var d : float = world2.distance_to(t.call("plane_pos"))
+		if d <= best_d:
+			best_d = d
+			best   = t
+	return best
+
+## Upgrade the selected tower to its next tier (branch A) if it has one. Demo: free (real game charges).
+func _try_upgrade_selected_tower() -> void:
+	if not is_instance_valid(_selected_tower):
+		return
+	if not bool(_selected_tower.call("is_built")):
+		EventBus.notification_pushed.emit("Finish building the tower first.", "warning")
+		return
+	var d : Resource = _selected_tower.get("data")
+	var nxt : Resource = d.get("upgrade_to") if d != null else null
+	if nxt == null:
+		EventBus.notification_pushed.emit("Tower is at its max tier.", "warning")
+		return
+	_selected_tower.call("upgrade", nxt)
+	EventBus.notification_pushed.emit("Tower upgraded to %s." % str(nxt.get("tower_name")), "positive")
 
 ## Select the Commander if the click landed within SELECT_RADIUS of it, else deselect.
 func _select_at(world2: Vector2) -> void:
@@ -283,6 +329,10 @@ func _update_preview() -> void:
 ## the real game routes this through the FactionSelect screen — wired here so the battle plays.)
 func _select_faction() -> void:
 	FactionManager.select_faction("architects", "standard")
+	## Demo convenience: seed resources so the HUD build button is affordable immediately (the real
+	## game earns these by claiming territory through the Academy ramp). Without this, can_afford gates
+	## the HUD button at battle start — which is why it "did nothing" while the B-key (free) worked.
+	EconomyManager.add_resource(FactionManager.get_primary_resource(), 400.0)
 
 ## Friendly units (garrison defenders) live here; tagged "unit_layer" so a Building can resolve it
 ## by group (its hardcoded ../../UnitLayer path doesn't hold in the 3D scene layout).

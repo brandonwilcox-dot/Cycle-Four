@@ -108,6 +108,17 @@ only on fire). New items surfaced:
   This is a large strategic pivot, not a quick item — needs an explicit decision and scoping (true 3D
   rewrite vs. a 2.5D presentation layer over the existing 2D logic). See the 3D-decision note.
 
+---
+
+# Addendum — 2026-06-29 (3D Stage 6c playtest)
+
+- **I1 — Friendly-unit movement / formations (DEEP, merges with C2/D1).** Garrison patrol units move
+  directly with no collision or pathing, so they **clip through buildings/structures**. Desired (user):
+  friendly units should **form up in a formation just OUTSIDE the garrison's perimeter and only move when
+  necessary** (defend / raid), rather than constantly roaming a circular patrol. This is the
+  formation + collision-aware movement system already captured as **C2** (and couples with **D1** enemy
+  columns) — a real subsystem, not a tweak. Scope it with C2/D1 when the formations track is picked.
+
 ## Cross-links (for whoever schedules these)
 
 - **F1/F2 enable G1/G2** — organic, terrain-following paths are the substrate dynamic

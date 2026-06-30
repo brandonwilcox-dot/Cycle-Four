@@ -115,14 +115,14 @@ a `VfxLayer` under the MapGrid; no-op without a map.
 - **Playtest-confirmed 2026-06-29:** movement, build (now w/ beam), tower aim/response, enemy damage +
   death poof, camera angles, B/G placement all good; "mechanics feel solid."
 
-**Stage 6c TO-DO (start here next):**
-1. **Faction-select flow** — the keystone: emit/select a faction so `active_faction` is set. This lights up
-   (a) the HUD's faction resources + build buttons + tower upgrades, AND (b) **garrison unit production**
-   (FriendlyRoster.garrison_unit returns null with no faction; also needs a real 3D unit layer the garrison
-   can resolve — Building uses `../../UnitLayer`). **Playtest: garrison currently spawns no units** for these
-   two reasons.
-2. Then: tower upgrade UI (tower selection/inspection), Academy, GameOver, save/load, galaxy deploy/capture,
-   deferred ability/LoS rings + 3D XP/health bars, revert the `main_scene` hack, merge `feat/3d` → main.
+**Stage 6c progress:**
+1. ✅ **Faction-select flow** (`e6c6f0d`) — Battle3D selects architects/standard at startup (after the HUD
+   is listening). HUD now shows faction resources + build buttons + starter tower; garrison produces
+   friendly units (gets roster unit + resolves unit layer via new "unit_layer" group; Building lazy-resolves
+   it). Fixed the "garrison no units" + "HUD only energy" playtest issues.
+2. TO-DO: tower upgrade UI (needs tower selection/inspection), Academy, GameOver, save/load, galaxy
+   deploy/capture, deferred ability/LoS rings + 3D XP/health bars, revert the `main_scene` hack, merge
+   `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
