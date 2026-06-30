@@ -5,9 +5,9 @@
 ##
 ## 3D MIGRATION (Stage 2e): now `extends Node3D` (model/view). Logical plane position `_p` drives the
 ## 3D transform via World3D; cross-entity reads via plane_pos()/World3D.node_plane(). Body is a 3D mesh
-## (+ billboard health bar + a flat ground selection ring). The 2D `_draw` overlays (LoS/sensor rings,
-## move-path preview, ability field/hazard rings, engineer beam, shot flash) are DEFERRED to the Stage-4
-## VFX pass — the Commander still moves/attacks/claims/builds/dies. AbilityController is a coupled
+## (+ billboard health bar + flat ground selection ring + LoS/sensor range rings). Remaining deferred
+## 2D `_draw` overlays (move-path preview, ability field/hazard rings, shot flash) await the polish
+## pass — the Commander still moves/attacks/claims/builds/dies. AbilityController is a coupled
 ## follow-up (it still mixes Vector2 field centers with unit positions); it no-ops without a controller.
 extends Node3D
 
@@ -56,8 +56,13 @@ var _body        : MeshInstance3D = null
 var _hp_fill     : MeshInstance3D = null
 var _hp_mat      : StandardMaterial3D = null
 var _select_ring : MeshInstance3D = null
+var _los_ring    : MeshInstance3D = null   ## flat ground ring at vision (claim) radius — shown when selected
+var _sensor_ring : MeshInstance3D = null   ## flat ground ring at sensor radius
 var _beam        : MeshInstance3D = null   ## 3D engineering beam (Commander → structure under build)
 var _beam_mat    : StandardMaterial3D = null
+
+const LOS_RING_COLOR    : Color = Color(0.45, 0.95, 0.60, 0.32)
+const SENSOR_RING_COLOR : Color = Color(0.40, 0.70, 1.00, 0.22)
 
 var _sensed_cell_set    : Dictionary = {}
 
@@ -152,6 +157,12 @@ func set_selected(value: bool) -> void:
 	_selected = value
 	if _select_ring != null:
 		_select_ring.visible = _selected
+	if _los_ring != null:
+		_los_ring.visible = _selected
+	if _sensor_ring != null:
+		_sensor_ring.visible = _selected
+	if _selected:
+		_refresh_range_rings()   ## sized to current rank-scaled radii
 
 func is_selected() -> bool:
 	return _selected
@@ -179,6 +190,7 @@ func _claim_around() -> void:
 	_commander_rank = mini(_claimed_count / CELLS_PER_RANK, RANK_CAP)
 	if _commander_rank > prev_rank:
 		_recompute_rank_stats()
+		_refresh_range_rings()   ## rank can grow LoS/sensor radius
 		if _rank_chevrons != null:
 			_rank_chevrons.call("set_rank", _commander_rank)
 	_update_rank_bar()
@@ -427,12 +439,41 @@ func _build_visual() -> void:
 	_select_ring.visible = false
 	add_child(_select_ring)
 
+	## Flat ground range rings — vision (claim) + sensor radius, shown only while selected.
+	_sensor_ring = _make_ground_ring(SENSOR_RING_COLOR)
+	_los_ring    = _make_ground_ring(LOS_RING_COLOR)
+	_refresh_range_rings()
+
 	## Billboard health bar above the body.
 	var bar_y : float = BODY_LIFT + 40.0
 	_make_bar(Color(0.12, 0.12, 0.12), bar_y, HEALTH_BAR_W)
 	_hp_fill = _make_bar(Color(0.30, 0.95, 0.40), bar_y + 0.1, HEALTH_BAR_W)
 	_hp_mat = _hp_fill.material_override as StandardMaterial3D
 	_update_health_visual()
+
+## A thin flat ground ring (TorusMesh laid in the XZ plane). Radius set later by _refresh_range_rings.
+func _make_ground_ring(col: Color) -> MeshInstance3D:
+	var r : MeshInstance3D = MeshInstance3D.new()
+	r.mesh = TorusMesh.new()
+	r.position = Vector3(0.0, 1.0, 0.0)
+	r.material_override = _unlit(col)
+	r.visible = false
+	r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(r)
+	return r
+
+## Size the range rings to the current rank-scaled vision/sensor radii (in pixels).
+func _refresh_range_rings() -> void:
+	_set_ring_radius(_los_ring,    float(_los_radius())    * CELL_SIZE_PX)
+	_set_ring_radius(_sensor_ring, float(_sensor_radius()) * CELL_SIZE_PX)
+
+func _set_ring_radius(ring: MeshInstance3D, radius_px: float) -> void:
+	if ring == null:
+		return
+	var tm : TorusMesh = ring.mesh as TorusMesh
+	if tm != null:
+		tm.outer_radius = radius_px
+		tm.inner_radius = maxf(0.0, radius_px - 5.0)
 
 func _unlit(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
