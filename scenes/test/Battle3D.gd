@@ -42,6 +42,8 @@ const SELECT_RADIUS : float = 52.0
 var _map_grid    : Node = null
 var _hud         : Control = null
 var _selected_tower : Node = null   ## built tower selected for upgrade (U)
+var _last_upgrade_t  : float = -1.0   ## debounce: rapid upgrades thrash the free/rebuild cycle
+const UPGRADE_COOLDOWN : float = 0.35
 var _placing        : bool = false
 var _place_building : bool = false   ## false = tower, true = building/garrison
 var _preview        : MeshInstance3D = null
@@ -266,6 +268,11 @@ func _tower_at(world2: Vector2) -> Node:
 func _try_upgrade_selected_tower() -> void:
 	if not is_instance_valid(_selected_tower):
 		return
+	## Debounce: upgrade() frees + rebuilds the whole tower visual; rapid repeats thrash that cycle
+	## (the known rapid-interaction hang). Ignore presses inside the cooldown.
+	var now : float = Time.get_ticks_msec() / 1000.0
+	if now - _last_upgrade_t < UPGRADE_COOLDOWN:
+		return
 	if not bool(_selected_tower.call("is_built")):
 		EventBus.notification_pushed.emit("Finish building the tower first.", "warning")
 		return
@@ -274,6 +281,7 @@ func _try_upgrade_selected_tower() -> void:
 	if nxt == null:
 		EventBus.notification_pushed.emit("Tower is at its max tier.", "warning")
 		return
+	_last_upgrade_t = now
 	_selected_tower.call("upgrade", nxt)
 	EventBus.notification_pushed.emit("Tower upgraded to %s." % str(nxt.get("tower_name")), "positive")
 
