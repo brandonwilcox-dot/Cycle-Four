@@ -19,6 +19,8 @@ const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
 const GALAXY_VIEW       = preload("res://src/ui/GalaxyView.gd")
 const HUD_SCENE         = preload("res://scenes/ui/HUD.tscn")
 const GAME_OVER_SCENE   = preload("res://scenes/ui/GameOverScreen.tscn")
+const TITLE_SCENE       = "res://scenes/ui/TitleScreen.tscn"
+const SETTINGS_PATH     = "user://settings.cfg"
 const MAP_GENERATOR     = preload("res://src/core/map/MapGenerator.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
@@ -67,6 +69,7 @@ const FACTION_CHOICES : Array = [
 ]
 var _battle_started : bool = false
 var _faction_layer  : CanvasLayer = null
+var _pause_layer    : CanvasLayer = null   ## ESC game menu (Save/Load/Settings/Main Menu)
 
 ## Stage 6b waves — paced, finite waves with a grace period and rests (not an unending stream).
 const SPAWN_INTERVAL : float = 1.6    ## seconds between units within a wave
@@ -83,6 +86,7 @@ var _resting     : bool  = true       ## true during grace / between-wave rests
 var _wave_timer  : float = WAVE_GRACE
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS   ## so ESC still toggles the pause menu while the tree is paused
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
 	EventBus.game_saving.connect(_capture_territory_development)      ## snapshot dev into the active node before each save
 	_setup_environment()
@@ -104,7 +108,7 @@ func _ready() -> void:
 		_show_faction_select()
 
 	var title : Label3D = Label3D.new()
-	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view"
+	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view | ESC menu"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
@@ -193,6 +197,8 @@ func _setup_marker() -> void:
 	add_child(_marker)
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return   ## pause menu open — freeze the battle (this node stays ALWAYS only to catch ESC)
 	if _placing:
 		_update_preview()
 	## Stage 6b: paced waves down the map's real A* paths — grace, then bursts separated by rests.
@@ -222,6 +228,15 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _battle_started:
 		return   ## faction-select still up — no gameplay input yet (camera rig handles its own input)
+	## ESC: cancel placement first, else toggle the pause/game menu (works while paused — node is ALWAYS).
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		if _placing:
+			_set_placing(false)
+		else:
+			_toggle_pause_menu()
+		return
+	if get_tree().paused:
+		return   ## menu open — swallow all other gameplay input
 	if event is InputEventMouseButton:
 		var mb : InputEventMouseButton = event
 		if not mb.pressed:
@@ -271,10 +286,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				var sr : float = float(_commander.call("get_sensor_radius"))
 				_rig.call("snap_focus", WORLD3D.to3(_commander.call("plane_pos"), 0.0), sr * 2.0)
 		elif k.keycode == KEY_ESCAPE:
-			if _placing:
-				_set_placing(false)
-			elif is_instance_valid(_commander):
-				_commander.call("set_selected", false)
+			pass   ## ESC handled at the top of _unhandled_input (pause menu)
 
 ## -- RTS control helpers (Stage 6) --
 
@@ -471,6 +483,131 @@ func _continue_game() -> void:
 	if node_id != "" and GalaxyManager.star_systems.has(node_id):
 		_restore_territory_development(GalaxyManager.star_systems[node_id].get("development", {}))
 	EventBus.notification_pushed.emit("Game restored.", "positive")
+
+## -- ESC pause / game menu (Save / Load / Settings / Main Menu) --
+
+func _toggle_pause_menu() -> void:
+	if _pause_layer != null:
+		_close_pause_menu()
+	else:
+		_open_pause_menu()
+
+func _open_pause_menu() -> void:
+	get_tree().paused = true
+	_pause_layer = CanvasLayer.new()
+	_pause_layer.layer = 50
+	_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS   ## buttons must work while the tree is paused
+	add_child(_pause_layer)
+	var bg : ColorRect = ColorRect.new()
+	bg.color = Color(0.02, 0.04, 0.07, 0.86)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_layer.add_child(bg)
+	_build_pause_main()
+
+func _close_pause_menu() -> void:
+	get_tree().paused = false
+	if is_instance_valid(_pause_layer):
+		_pause_layer.queue_free()
+	_pause_layer = null
+
+## Frees the current menu column (keeps the dim background) so we can swap main ⇄ settings.
+func _pause_column(title_text: String) -> VBoxContainer:
+	for c in _pause_layer.get_children():
+		if c is VBoxContainer:
+			c.free()
+	var col : VBoxContainer = VBoxContainer.new()
+	col.set_anchors_preset(Control.PRESET_CENTER)
+	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	col.grow_vertical = Control.GROW_DIRECTION_BOTH
+	col.add_theme_constant_override("separation", 14)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	_pause_layer.add_child(col)
+	var title : Label = Label.new()
+	title.text = title_text
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 40)
+	col.add_child(title)
+	return col
+
+func _menu_button(text: String, cb: Callable) -> Button:
+	var b : Button = Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(300.0, 46.0)
+	b.add_theme_font_size_override("font_size", 20)
+	b.pressed.connect(cb)
+	return b
+
+func _build_pause_main() -> void:
+	var col : VBoxContainer = _pause_column("PAUSED")
+	col.add_child(_menu_button("Resume", _close_pause_menu))
+	col.add_child(_menu_button("Save Game", _pause_save))
+	col.add_child(_menu_button("Load Game", _pause_load))
+	col.add_child(_menu_button("Settings", _build_pause_settings))
+	col.add_child(_menu_button("Return to Main Menu", _pause_main_menu))
+
+func _build_pause_settings() -> void:
+	var col : VBoxContainer = _pause_column("SETTINGS")
+	var vlabel : Label = Label.new()
+	vlabel.text = "Master Volume"
+	vlabel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(vlabel)
+	var vol : HSlider = HSlider.new()
+	vol.min_value = 0.0
+	vol.max_value = 1.0
+	vol.step = 0.01
+	vol.custom_minimum_size = Vector2(300.0, 24.0)
+	var bus : int = AudioServer.get_bus_index("Master")
+	vol.value = db_to_linear(AudioServer.get_bus_volume_db(bus)) if bus >= 0 and not AudioServer.is_bus_mute(bus) else (1.0 if bus >= 0 else 1.0)
+	vol.value_changed.connect(_on_pause_volume_changed)
+	col.add_child(vol)
+	var fs : CheckButton = CheckButton.new()
+	fs.text = "Fullscreen"
+	var mode : int = DisplayServer.window_get_mode()
+	fs.button_pressed = (mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	fs.toggled.connect(_on_pause_fullscreen_toggled)
+	col.add_child(fs)
+	col.add_child(_menu_button("Back", _build_pause_main))
+
+func _pause_save() -> void:
+	SaveManager.save_game()
+	EventBus.notification_pushed.emit("Game saved.", "positive")
+
+func _pause_load() -> void:
+	if not SaveManager.has_save():
+		EventBus.notification_pushed.emit("No save to load.", "warning")
+		return
+	get_tree().paused = false
+	SaveManager.load_game()
+	get_tree().reload_current_scene()   ## re-runs _ready → _continue_game restores faction + dev
+
+func _pause_main_menu() -> void:
+	get_tree().paused = false
+	SceneManager.change_to(TITLE_SCENE)
+
+func _on_pause_volume_changed(value: float) -> void:
+	var bus : int = AudioServer.get_bus_index("Master")
+	if bus >= 0:
+		AudioServer.set_bus_volume_db(bus, linear_to_db(clampf(value, 0.0001, 1.0)))
+		AudioServer.set_bus_mute(bus, value <= 0.0001)
+	_save_pause_settings()
+
+func _on_pause_fullscreen_toggled(on: bool) -> void:
+	DisplayServer.window_set_mode(
+		DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_MAXIMIZED)
+	_save_pause_settings()
+
+## Persist to the same user://settings.cfg the TitleScreen reads (audio/master_volume, display/fullscreen).
+func _save_pause_settings() -> void:
+	var cfg : ConfigFile = ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	var bus : int = AudioServer.get_bus_index("Master")
+	if bus >= 0:
+		var lin : float = 0.0 if AudioServer.is_bus_mute(bus) else db_to_linear(AudioServer.get_bus_volume_db(bus))
+		cfg.set_value("audio", "master_volume", lin)
+	var mode : int = DisplayServer.window_get_mode()
+	cfg.set_value("display", "fullscreen", mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	cfg.save(SETTINGS_PATH)
 
 ## Build the faction-dependent world (units/base/commander/enemy/waves). On a fresh start it also
 ## drops the demo towers/garrison; a restored game skips those (saved development restores instead).

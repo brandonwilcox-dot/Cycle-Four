@@ -45,6 +45,15 @@ func ensure_galaxy(player_faction: String) -> void:
 		return
 	generate_galaxy(player_faction)
 
+## Wipe all galaxy state so the next ensure_galaxy() builds a fresh one. Called by New Game — without
+## this, a galaxy left in memory from a prior run (or loaded save) leaks into the new game.
+func reset_galaxy() -> void:
+	star_systems.clear()
+	neutral_core_systems.clear()
+	treaties.clear()
+	active_node = ""
+	invading_node = ""
+
 ## Builds concentric rings of nodes around a central core, webbed to adjacent rings + ring
 ## neighbours, with the player owning one rim node. Deterministic per galaxy_run_number.
 func generate_galaxy(player_faction: String) -> void:

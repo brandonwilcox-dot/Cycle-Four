@@ -157,11 +157,16 @@ a `VfxLayer` under the MapGrid; no-op without a map.
 15. ✅ **SCENE PROMOTED** (`039215a`) — Battle3D moved scenes/test → scenes/main; `main_scene` restored
     to `Root.tscn`; `TitleScreen.BATTLE_SCENE` → Battle3D. Real flow now: **Root → Title → SceneManager
     → 3D Battle**. 2D `Battle.tscn` kept as fallback.
-16. 🔶 **save/load — IN PROGRESS (1/3)** (`15f596c`): SaveManager already auto-persists faction/economy/
-    galaxy(+dev). ✅ (1) Continue-aware boot — `_continue_game()` restores faction + active-node map,
-    skips faction-select. TODO (2) capture 3D development on `game_saving`; (3) restore towers/
-    buildings/walls/claims/FOB rank on Continue/return (port the proven 2D Battle.gd helpers).
-17. TO-DO: full scripted Academy tutorial (with scene-promotion arc); AbilityController plane pass +
+16. ✅ **save/load — COMPLETE (1-3/3)** (`15f596c`, `2fc714a`): SaveManager auto-persists faction/
+    economy/galaxy(+dev). (1) Continue-aware boot restores faction + active-node map, skips faction-
+    select. (2) Capture on `game_saving` — claims/towers/garrisons/walls/FOB-rank into active node's
+    development. (3) Restore on Continue + galaxy deploy/return; seed-reconcile pins the home map.
+    Structures tracked by cell (`_tower_cells`/`_building_cells`/`_wall_cells`); garrisons use the
+    faction starter `.tres` so they persist. Compile-clean; full New Game→save→Continue is a playtest.
+17. ✅ **Freeze fix** (`4be8f42`) — rapid-U hard freeze was an infinite loop in `HUD._push_notification`
+    (deferred `queue_free` in a `while get_child_count()` eviction); fixed with `remove_child` first +
+    debounce-stamp-on-every-press. Proven via headless 2000× notification spam.
+18. TO-DO: full scripted Academy tutorial (with scene-promotion arc); AbilityController plane pass +
     ability/move-path overlays; merge `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**

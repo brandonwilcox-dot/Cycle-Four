@@ -161,6 +161,7 @@ func _on_new_game_pressed() -> void:
 	## Fresh slate. We do NOT delete the existing save here — it is overwritten
 	## naturally once the new run auto-saves, so quitting mid-Academy is non-destructive.
 	GameState.reset_for_new_game()
+	GalaxyManager.reset_galaxy()   ## drop any in-memory/loaded galaxy so a brand-new one generates
 	SceneManager.change_to(BATTLE_SCENE)
 
 func _on_continue_pressed() -> void:
