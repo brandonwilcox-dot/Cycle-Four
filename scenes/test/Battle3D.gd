@@ -40,6 +40,7 @@ var _commander : Node = null
 const TOWER_DATA = preload("res://resources/towers/architects_t1.tres")
 const SELECT_RADIUS : float = 52.0
 var _map_grid    : Node = null
+var _hud         : Control = null
 var _selected_tower : Node = null   ## built tower selected for upgrade (U)
 var _placing        : bool = false
 var _place_building : bool = false   ## false = tower, true = building/garrison
@@ -311,6 +312,8 @@ func _set_placing(value: bool) -> void:
 		_preview.visible = value
 	if value:
 		_update_preview()
+	elif _hud != null:
+		_hud.call("end_placement_mode")   ## unlock the HUD build buttons when placement ends
 
 func _update_preview() -> void:
 	if _preview == null:
@@ -349,10 +352,14 @@ func _setup_unit_layer() -> void:
 func _setup_hud() -> void:
 	var cl : CanvasLayer = CanvasLayer.new()
 	add_child(cl)
-	var hud : Control = HUD_SCENE.instantiate()
-	cl.add_child(hud)
+	_hud = HUD_SCENE.instantiate()
+	cl.add_child(_hud)
+	## HUD build buttons → 3D placement mode (tower vs garrison).
 	EventBus.tower_placement_requested.connect(func(_td: Resource) -> void:
 		_place_building = false
+		_set_placing(true))
+	EventBus.building_placement_requested.connect(func(_bd: Resource) -> void:
+		_place_building = true
 		_set_placing(true))
 
 func _setup_preview() -> void:

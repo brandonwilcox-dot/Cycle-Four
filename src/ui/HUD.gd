@@ -295,6 +295,12 @@ func end_placement_mode() -> void:
 		place_tower_btn.disabled = false
 	else:
 		place_tower_btn.disabled = true
+	## Also reset the building button — it locks the same way on building_placement_requested.
+	if _starter_building != null:
+		place_building_btn.text     = "Place Building [%d]" % int(_starter_building.get("primary_cost"))
+		place_building_btn.disabled = false
+	else:
+		place_building_btn.disabled = true
 
 func _on_place_building_pressed() -> void:
 	if _starter_building == null:

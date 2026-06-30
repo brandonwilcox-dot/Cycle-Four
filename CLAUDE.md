@@ -120,9 +120,14 @@ a `VfxLayer` under the MapGrid; no-op without a map.
    is listening). HUD now shows faction resources + build buttons + starter tower; garrison produces
    friendly units (gets roster unit + resolves unit layer via new "unit_layer" group; Building lazy-resolves
    it). Fixed the "garrison no units" + "HUD only energy" playtest issues.
-2. TO-DO: tower upgrade UI (needs tower selection/inspection), Academy, GameOver, save/load, galaxy
-   deploy/capture, deferred ability/LoS rings + 3D XP/health bars, revert the `main_scene` hack, merge
-   `feat/3d` → main.
+2. ✅ **HUD build button** (`c8aea1c`) — was correctly `can_afford`-gated (no resources at battle start);
+   seeded demo starting resources after faction-select so it's usable. (B-key bypasses economy.)
+3. ✅ **Tower upgrades** (`c8aea1c`) — LEFT-click a built tower selects it; **U** upgrades to `data.upgrade_to`
+   via `Tower.upgrade()`. Demo: free (real game charges + offers the A/B branch).
+4. **Backlog I1 (deep, → C2/D1):** friendly-unit movement/formations — patrol clips through buildings;
+   units should form up outside the garrison perimeter, move only when needed. In playtest-backlog doc.
+5. TO-DO: Academy, GameOver, save/load, galaxy deploy/capture, deferred ability/LoS rings + 3D XP/HP
+   bars + AbilityController plane pass, revert the `main_scene` hack, merge `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
