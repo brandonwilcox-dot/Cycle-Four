@@ -11,7 +11,7 @@
 ## SaveManager no longer auto-loads at startup; this screen owns the load decision.
 extends Control
 
-const BATTLE_SCENE   : String = "res://scenes/main/Battle.tscn"
+const BATTLE_SCENE   : String = "res://scenes/main/Battle3D.tscn"   ## 3D battle (promoted from scenes/test; 2D Battle.tscn kept as fallback)
 const SETTINGS_PATH : String = "user://settings.cfg"
 
 const COL_BG       : Color = Color(0.05, 0.05, 0.08, 1.0)

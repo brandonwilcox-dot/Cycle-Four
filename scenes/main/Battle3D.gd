@@ -1,8 +1,8 @@
-## 3D migration Stage 1 — vertical slice (planning/3d-migration-plan.md).
-## Proves the foundation: a Camera3D rig at ~52°, a DirectionalLight3D with shadows, a 3D ground
-## built at the real grid size (MapGrid COLS×ROWS×CELL_SIZE), the FOB as a mesh, a grid overlay,
-## and click→ground picking via World3D — clicking drops a marker on the picked cell centre,
-## proving the 2D⇄3D coordinate mapping. NOT the real battle yet; entities arrive in Stage 2.
+## Battle3D — the 3D battle screen (promoted from scenes/test during the 3D migration; reached via
+## Root → TitleScreen → SceneManager.change_to). Owns the live board: faction-select, the FOB/Commander,
+## tower/garrison/wall placement + the Commander engineering loop, paced waves, the galaxy deploy/
+## capture loop, camera rig, and GameOver. The 2D scenes/main/Battle.tscn remains as a fallback.
+## Remaining toward full parity: save/load (Continue), the scripted Academy tutorial, AbilityController.
 extends Node3D
 
 const WORLD3D     = preload("res://src/core/World3D.gd")
@@ -95,7 +95,7 @@ func _ready() -> void:
 	_show_faction_select()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stage 6c\nLEFT select Commander / tower | U upgrade selected tower | RIGHT move (Shift chain) | B tower | G garrison | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view"
+	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
