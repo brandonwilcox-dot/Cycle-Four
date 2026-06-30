@@ -44,6 +44,21 @@ func get_camera() -> Camera3D:
 func is_galaxy_zoom() -> bool:
 	return _dist >= GALAXY_ZOOM_DIST
 
+## Page Up — near top-down birds-eye centered on `center`, zoomed to frame `dist`.
+func snap_birdseye(center: Vector3, dist: float) -> void:
+	position = center
+	_yaw = 0.0
+	_pitch = PITCH_MAX_DEG
+	_dist = clampf(dist, DIST_MIN, DIST_MAX)
+	_update_camera()
+
+## Page Down — focus on `center` at the default tactical angle, zoomed to frame `dist`.
+func snap_focus(center: Vector3, dist: float) -> void:
+	position = center
+	_pitch = DEFAULT_PITCH_DEG
+	_dist = clampf(dist, DIST_MIN, DIST_MAX)
+	_update_camera()
+
 func _update_camera() -> void:
 	rotation.y = _yaw
 	var pitch : float = deg_to_rad(_pitch)

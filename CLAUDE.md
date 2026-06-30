@@ -106,6 +106,12 @@ a `VfxLayer` under the MapGrid; no-op without a map.
   A* routes into a UnitLayer; FOB/towers/Commander defend with 3D tracers. Fog reveals as you explore.
 - Playtest build (`eda2fcb`) — `run/main_scene` → `Battle3D.tscn` (BRANCH-ONLY, temporary) so the exported
   debug exe boots straight into the playable 3D battle. **Revert this before merge.**
+- Engineer beam (`e5f2e52`) — 3D build/repair beam Commander→structure (playtest-flagged build feedback).
+- HUD overlay (`c171287`, **6c partial**) — the real `HUD.tscn` (Control) overlays the 3D battle on a
+  CanvasLayer; EventBus-driven so resources/waves/notifications/objectives display live. Build button wired
+  to 3D placement (works once faction-select lands); B-key meanwhile.
+- **Playtest-confirmed 2026-06-29:** movement, build (now w/ beam), tower aim/response, enemy damage +
+  death poof all good; "mechanics feel solid."
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.

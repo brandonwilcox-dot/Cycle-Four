@@ -40,9 +40,10 @@ var _commander : Node = null
 const TOWER_DATA = preload("res://resources/towers/architects_t1.tres")
 const SELECT_RADIUS : float = 52.0
 var _map_grid    : Node = null
-var _placing     : bool = false
-var _preview     : MeshInstance3D = null
-var _preview_mat : StandardMaterial3D = null
+var _placing        : bool = false
+var _place_building : bool = false   ## false = tower, true = building/garrison
+var _preview        : MeshInstance3D = null
+var _preview_mat    : StandardMaterial3D = null
 
 ## Stage 6b waves.
 const SPAWN_INTERVAL : float = 1.6
@@ -72,7 +73,7 @@ func _ready() -> void:
 	_setup_waves()
 
 	var title : Label3D = Label3D.new()
-	title.text = "3D MIGRATION — Stage 6: RTS controls\nLEFT = select Commander | RIGHT = move (Shift = chain) | B = build tower (LEFT place / RIGHT cancel) | wheel = zoom (out far = galaxy) | WASD = pan | MIDDLE+drag = rotate | Delete/Insert = reset/lock view"
+	title.text = "3D MIGRATION — Stage 6\nLEFT select | RIGHT move (Shift chain) | B build tower | G build garrison | PgUp birds-eye | PgDn focus Commander | wheel zoom (out far = galaxy) | WASD pan | MIDDLE+drag rotate | Delete/Insert reset/lock view"
 	title.position = _cell_center3(BASE_CELL, 420.0)
 	title.pixel_size = 0.9
 	title.modulate = Color(0.8, 0.9, 1.0)
@@ -174,7 +175,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if _placing:
-				_try_place_tower(_hovered_cell())
+				_try_place(_hovered_cell())
 				if not Input.is_key_pressed(KEY_SHIFT):
 					_set_placing(false)
 			else:
@@ -190,7 +191,25 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var k : InputEventKey = event
 		if k.keycode == KEY_B:
-			_set_placing(not _placing)
+			if _placing and not _place_building:
+				_set_placing(false)
+			else:
+				_place_building = false
+				_set_placing(true)
+		elif k.keycode == KEY_G:
+			if _placing and _place_building:
+				_set_placing(false)
+			else:
+				_place_building = true
+				_set_placing(true)
+		elif k.keycode == KEY_PAGEUP:
+			## Birds-eye centered on the map.
+			_rig.call("snap_birdseye", Vector3(COLS * CELL * 0.5, 0.0, ROWS * CELL * 0.5), float(COLS * CELL) * 0.9)
+		elif k.keycode == KEY_PAGEDOWN:
+			## Focus the Commander; frame ~its sensor range.
+			if is_instance_valid(_commander):
+				var sr : float = float(_commander.call("get_sensor_radius"))
+				_rig.call("snap_focus", WORLD3D.to3(_commander.call("plane_pos"), 0.0), sr * 2.0)
 		elif k.keycode == KEY_ESCAPE:
 			if _placing:
 				_set_placing(false)
@@ -216,17 +235,27 @@ func _select_at(world2: Vector2) -> void:
 	var hit : bool = WORLD3D.is_valid(world2) and world2.distance_to(_commander.call("plane_pos")) <= SELECT_RADIUS
 	_commander.call("set_selected", hit)
 
-## Place an (unbuilt) tower at the hovered cell if the map allows it; the Commander then builds it.
-func _try_place_tower(cell: Vector2i) -> void:
+## Place an (unbuilt) tower or building at the hovered cell if the map allows it; the Commander builds it.
+func _try_place(cell: Vector2i) -> void:
 	if cell == Vector2i(-1, -1) or _map_grid == null:
 		return
 	if not bool(_map_grid.call("can_place_at", cell.x, cell.y)):
 		return
-	var t : Node = TOWER_SCENE.instantiate()
-	t.call("setup", TOWER_DATA, false)   ## unbuilt — the Commander constructs it
-	t.call("place_at", _cell_center2(cell))
-	add_child(t)
-	_map_grid.call("mark_tower_placed", cell.x, cell.y)
+	if _place_building:
+		var bd : BuildingData = BUILDING_DATA.new()
+		bd.building_name = "Garrison"
+		bd.color_hint = Color(0.55, 0.75, 0.95)
+		bd.income_rate = 0.5
+		var b : Node = BUILDING_SCENE.instantiate()
+		b.call("setup", bd, false)        ## unbuilt — Commander constructs it
+		b.call("place_at", _cell_center2(cell))
+		add_child(b)
+	else:
+		var t : Node = TOWER_SCENE.instantiate()
+		t.call("setup", TOWER_DATA, false)   ## unbuilt — the Commander constructs it
+		t.call("place_at", _cell_center2(cell))
+		add_child(t)
+		_map_grid.call("mark_tower_placed", cell.x, cell.y)
 
 func _set_placing(value: bool) -> void:
 	_placing = value
@@ -256,7 +285,9 @@ func _setup_hud() -> void:
 	add_child(cl)
 	var hud : Control = HUD_SCENE.instantiate()
 	cl.add_child(hud)
-	EventBus.tower_placement_requested.connect(func(_td: Resource) -> void: _set_placing(true))
+	EventBus.tower_placement_requested.connect(func(_td: Resource) -> void:
+		_place_building = false
+		_set_placing(true))
 
 func _setup_preview() -> void:
 	_preview = MeshInstance3D.new()
