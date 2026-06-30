@@ -17,6 +17,7 @@ const ENEMY_BASE_SCRIPT = preload("res://src/entities/EnemyBase.gd")
 const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
 const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
 const GALAXY_VIEW       = preload("res://src/ui/GalaxyView.gd")
+const HUD_SCENE         = preload("res://scenes/ui/HUD.tscn")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -55,6 +56,7 @@ func _ready() -> void:
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
 	_setup_preview()
+	_setup_hud()
 	_spawn_base()
 	_spawn_commander()
 	_spawn_enemy_base()
@@ -244,6 +246,17 @@ func _update_preview() -> void:
 	_preview.position = _cell_center3(cell, 6.0)
 	var ok : bool = _map_grid != null and bool(_map_grid.call("can_place_at", cell.x, cell.y))
 	_preview_mat.albedo_color = Color(0.3, 1.0, 0.4, 0.5) if ok else Color(1.0, 0.3, 0.25, 0.5)
+
+## Stage 6c: overlay the real HUD (a Control) on a CanvasLayer above the 3D viewport. It's
+## EventBus-driven (resources / waves / notifications / objectives), so it displays live with no
+## controller wiring. The build button needs the faction-select flow (deeper 6c); meanwhile we connect
+## its placement signal to our 3D placement mode and keep the B key.
+func _setup_hud() -> void:
+	var cl : CanvasLayer = CanvasLayer.new()
+	add_child(cl)
+	var hud : Control = HUD_SCENE.instantiate()
+	cl.add_child(hud)
+	EventBus.tower_placement_requested.connect(func(_td: Resource) -> void: _set_placing(true))
 
 func _setup_preview() -> void:
 	_preview = MeshInstance3D.new()
