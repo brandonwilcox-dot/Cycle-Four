@@ -434,8 +434,13 @@ func _on_notification_pushed(message: String, priority: String) -> void:
 
 ## Pushes a right-aligned, auto-fading label into the notification stack.
 func _push_notification(text: String, color: Color) -> void:
+	## Evict oldest toasts past the cap. remove_child() decrements the count IMMEDIATELY — using only
+	## queue_free() here would spin forever (deferred free leaves the count unchanged inside the loop),
+	## which froze the game under rapid notification spam.
 	while notification_stack.get_child_count() >= MAX_TOASTS:
-		notification_stack.get_child(0).queue_free()
+		var oldest : Node = notification_stack.get_child(0)
+		notification_stack.remove_child(oldest)
+		oldest.queue_free()
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
