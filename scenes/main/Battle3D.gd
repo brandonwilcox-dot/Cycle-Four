@@ -90,9 +90,12 @@ func _ready() -> void:
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
 	add_child(_rig)
 
-	## Stage 6c — faction-select: choose a faction before the battle (replaces the hardcoded architects).
-	## The world (units/base/commander/waves) is only built after the choice, in _start_battle().
-	_show_faction_select()
+	## Continue (a save was loaded → GameState has a faction) restores straight into the battle;
+	## New Game shows the faction-select screen. The world is built in _start_battle() either way.
+	if not GameState.current_faction.is_empty():
+		_continue_game()
+	else:
+		_show_faction_select()
 
 	var title : Label3D = Label3D.new()
 	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view"
@@ -436,8 +439,22 @@ func _choose_faction(faction_id: String, sub_path: String) -> void:
 		_faction_layer = null
 	_start_battle()
 
-## Build the faction-dependent world once a faction is chosen (units/base/commander/enemy/towers/waves).
-func _start_battle() -> void:
+## Continue: a save was loaded (faction/economy/galaxy already restored by SaveManager). Restore the
+## faction listeners, load the active node's seeded map, and start the battle without demo clutter.
+## (Development restore — saved towers/buildings/walls/claims/FOB rank — is the next save/load increment.)
+func _continue_game() -> void:
+	FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
+	var node_id : String = GalaxyManager.active_node
+	if node_id != "" and GalaxyManager.star_systems.has(node_id):
+		var seed_v : int = int(GalaxyManager.star_systems[node_id].get("seed", 0))
+		_map_grid.call("load_map_data", MAP_GENERATOR.generate(seed_v))
+		_map_grid.call("queue_redraw")
+	_start_battle(true)
+	EventBus.notification_pushed.emit("Game restored.", "positive")
+
+## Build the faction-dependent world (units/base/commander/enemy/waves). On a fresh start it also
+## drops the demo towers/garrison; a restored game skips those (saved development restores instead).
+func _start_battle(restored: bool = false) -> void:
 	if _battle_started:
 		return
 	_battle_started = true
@@ -445,9 +462,10 @@ func _start_battle() -> void:
 	_spawn_base()
 	_spawn_commander()
 	_spawn_enemy_base()
-	_spawn_walls()
-	_spawn_demo_towers()
-	_spawn_demo_building()
+	if not restored:
+		_spawn_walls()
+		_spawn_demo_towers()
+		_spawn_demo_building()
 	_setup_waves()
 
 ## Friendly units (garrison defenders) live here; tagged "unit_layer" so a Building can resolve it
