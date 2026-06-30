@@ -46,6 +46,10 @@ var _map_grid    : Node = null
 var _hud         : Control = null
 var _galaxy_view : Node = null
 var _deployed_node : String = ""    ## galaxy node currently being fought ("" = home); capture-on-clear target
+## Placed-structure tracking (cell → node) for save/load capture. Mirrors the 2D Battle dicts.
+var _tower_cells    : Dictionary = {}
+var _building_cells : Dictionary = {}
+var _wall_cells     : Dictionary = {}
 var _selected_tower : Node = null   ## built tower selected for upgrade (U)
 var _last_upgrade_t  : float = -1.0   ## debounce: rapid upgrades thrash the free/rebuild cycle
 const UPGRADE_COOLDOWN : float = 0.35
@@ -80,6 +84,7 @@ var _wave_timer  : float = WAVE_GRACE
 
 func _ready() -> void:
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
+	EventBus.game_saving.connect(_capture_territory_development)      ## snapshot dev into the active node before each save
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -172,6 +177,7 @@ func _spawn_walls() -> void:
 		w.call("place_at", _cell_center2(cell))
 		add_child(w)
 		w.call("mark_built")
+		_wall_cells[cell] = w
 
 func _setup_marker() -> void:
 	_marker = MeshInstance3D.new()
@@ -356,21 +362,27 @@ func _try_place(cell: Vector2i) -> void:
 		var w : Node = WALL_SCRIPT.new()
 		w.call("place_at", _cell_center2(cell))   ## inert — the Commander raises it (engineering)
 		add_child(w)
+		_wall_cells[cell] = w
 	elif _place_building:
-		var bd : BuildingData = BUILDING_DATA.new()
-		bd.building_name = "Garrison"
-		bd.color_hint = Color(0.55, 0.75, 0.95)
-		bd.income_rate = 0.5
+		## Use the faction's starter garrison (.tres) so it has a resource_path → persistable on save.
+		var bd : Resource = FactionManager.get_starter_building()
+		if bd == null:
+			bd = BUILDING_DATA.new()
+			bd.building_name = "Garrison"
+			bd.color_hint = Color(0.55, 0.75, 0.95)
+			bd.income_rate = 0.5
 		var b : Node = BUILDING_SCENE.instantiate()
 		b.call("setup", bd, false)        ## unbuilt — Commander constructs it
 		b.call("place_at", _cell_center2(cell))
 		add_child(b)
+		_building_cells[cell] = b
 	else:
 		var t : Node = TOWER_SCENE.instantiate()
 		t.call("setup", TOWER_DATA, false)   ## unbuilt — the Commander constructs it
 		t.call("place_at", _cell_center2(cell))
 		add_child(t)
 		_map_grid.call("mark_tower_placed", cell.x, cell.y)
+		_tower_cells[cell] = t
 
 func _set_placing(value: bool) -> void:
 	_placing = value
@@ -455,6 +467,9 @@ func _continue_game() -> void:
 		_map_grid.call("load_map_data", MAP_GENERATOR.generate(seed_v))
 		_map_grid.call("queue_redraw")
 	_start_battle(true)
+	## Re-place the saved development (claims, towers, garrisons, walls, FOB rank) onto the loaded map.
+	if node_id != "" and GalaxyManager.star_systems.has(node_id):
+		_restore_territory_development(GalaxyManager.star_systems[node_id].get("development", {}))
 	EventBus.notification_pushed.emit("Game restored.", "positive")
 
 ## Build the faction-dependent world (units/base/commander/enemy/waves). On a fresh start it also
@@ -471,6 +486,12 @@ func _start_battle(restored: bool = false) -> void:
 		_spawn_walls()
 		_spawn_demo_towers()
 		_spawn_demo_building()
+		## Seed reconcile (fresh start): pin the home node's seed to the map actually generated, so a
+		## later Continue regenerates this exact map and the saved cells line up.
+		if GalaxyManager.active_node != "" and GalaxyManager.star_systems.has(GalaxyManager.active_node):
+			var md : MapData = _map_grid.map_data
+			if md != null:
+				GalaxyManager.star_systems[GalaxyManager.active_node]["seed"] = int(md.map_seed)
 	_setup_waves()
 
 ## Friendly units (garrison defenders) live here; tagged "unit_layer" so a Building can resolve it
@@ -565,15 +586,17 @@ func _try_deploy(world2: Vector2) -> void:
 	if not (id in GalaxyManager.frontier(FactionManager.active_faction)):
 		EventBus.notification_pushed.emit("That territory isn't on your frontier.", "warning")
 		return
+	_capture_territory_development()         ## snapshot the territory we're leaving before switching
 	var seed_v : int = int(GalaxyManager.star_systems[id].get("seed", 0))
 	_map_grid.call("load_map_data", MAP_GENERATOR.generate(seed_v))
 	_map_grid.call("queue_redraw")          ## recolor the 3D terrain from the new map
 	GalaxyManager.active_node = id
 	_collect_spawns()                        ## new map → new spawn cells for the wave driver
 	_reset_battlefield()                     ## fresh territory: clear forces, reset Commander to base
+	_restore_territory_development(GalaxyManager.star_systems[id].get("development", {}))   ## re-place saved dev
 	_deployed_node = id
-	## A fresh enemy base to destroy = the capture condition for this territory.
-	if not _spawn_cells.is_empty():
+	## A fresh enemy base to destroy = the capture condition for this territory (skip if already captured).
+	if not _spawn_cells.is_empty() and GalaxyManager.star_systems[id].get("owner", "") != FactionManager.active_faction:
 		var owner_fac : String = str(GalaxyManager.star_systems[id].get("owner", "mesh"))
 		_spawn_enemy_base_at(_spawn_cells[0], owner_fac, StringName("deploy_%s" % id))
 	if _galaxy_view.has_method("queue_redraw"):
@@ -594,6 +617,9 @@ func _reset_battlefield() -> void:
 			if is_instance_valid(n):
 				n.queue_free()
 	_selected_tower = null
+	_tower_cells.clear()
+	_building_cells.clear()
+	_wall_cells.clear()
 	if _marker != null:
 		_marker.visible = false
 	if is_instance_valid(_commander):
@@ -612,6 +638,111 @@ func _on_enemy_base_destroyed(_spawn_id: StringName) -> void:
 	if _galaxy_view != null and _galaxy_view.has_method("queue_redraw"):
 		_galaxy_view.call("queue_redraw")
 	EventBus.notification_pushed.emit("Territory %s captured!" % node_id, "positive")
+
+## -- save/load: per-territory development capture/restore (port of the 2D Battle.gd helpers) --
+
+## [game_saving] Snapshot the active territory's development (claims, towers, garrisons, walls, FOB
+## rank) into GalaxyManager so SaveManager persists it inside the galaxy block.
+func _capture_territory_development() -> void:
+	if not _battle_started:
+		return
+	var node_id : String = GalaxyManager.active_node
+	if node_id.is_empty() or not GalaxyManager.star_systems.has(node_id):
+		return
+	var dev : Dictionary = GalaxyManager.star_systems[node_id].get("development", {})
+	dev["claimed"]   = _map_grid.call("get_claimed_indices")
+	dev["towers"]    = _capture_towers()
+	dev["buildings"] = _capture_buildings()
+	dev["walls"]     = _capture_walls()
+	dev["fob"]       = _capture_fob()
+	GalaxyManager.star_systems[node_id]["development"] = dev
+
+func _capture_towers() -> Array:
+	var out : Array = []
+	for cell in _tower_cells:
+		var t = _tower_cells[cell]
+		if not is_instance_valid(t):
+			continue
+		var td = t.get("data")
+		if td == null or String(td.resource_path).is_empty():
+			continue
+		out.append({"id": String(td.resource_path), "cell": [int(cell.x), int(cell.y)], "level": int(t.get("level"))})
+	return out
+
+func _capture_buildings() -> Array:
+	var out : Array = []
+	for cell in _building_cells:
+		var b = _building_cells[cell]
+		if not is_instance_valid(b):
+			continue
+		var bd = b.get("data")
+		if bd == null or String(bd.resource_path).is_empty():
+			continue   ## runtime-built data (no path) isn't restorable — skip
+		out.append({"id": String(bd.resource_path), "cell": [int(cell.x), int(cell.y)], "level": int(b.get("_level"))})
+	return out
+
+func _capture_walls() -> Array:
+	var out : Array = []
+	for cell in _wall_cells:
+		if is_instance_valid(_wall_cells[cell]):
+			out.append([int(cell.x), int(cell.y)])
+	return out
+
+func _capture_fob() -> Dictionary:
+	var b : Node = get_tree().get_first_node_in_group("base")
+	if b == null:
+		return {}
+	return {"rank": int(b.get("_fortification_rank"))}
+
+## Re-apply a territory's saved development onto the freshly-loaded map. Towers/garrisons/walls come
+## back already BUILT (the Commander already raised them in the saved session).
+func _restore_territory_development(dev: Dictionary) -> void:
+	var claims : Array = dev.get("claimed", [])
+	if not claims.is_empty():
+		_map_grid.call("apply_claimed_indices", claims)
+	for trec in dev.get("towers", []):
+		if typeof(trec) != TYPE_DICTIONARY:
+			continue
+		var tdata : Resource = load(String(trec.get("id", "")))
+		var tcell : Array = trec.get("cell", [])
+		if tdata != null and tcell.size() == 2:
+			var cell : Vector2i = Vector2i(int(tcell[0]), int(tcell[1]))
+			var t : Node = TOWER_SCENE.instantiate()
+			t.call("setup", tdata, true)   ## restored = already built
+			t.call("place_at", _cell_center2(cell))
+			add_child(t)
+			_map_grid.call("mark_tower_placed", cell.x, cell.y)
+			_tower_cells[cell] = t
+			if int(trec.get("level", 1)) > 1:
+				t.call("restore_level", int(trec.get("level", 1)))
+	for brec in dev.get("buildings", []):
+		if typeof(brec) != TYPE_DICTIONARY:
+			continue
+		var bdata : Resource = load(String(brec.get("id", "")))
+		var bcell : Array = brec.get("cell", [])
+		if bdata != null and bcell.size() == 2:
+			var cell : Vector2i = Vector2i(int(bcell[0]), int(bcell[1]))
+			var b : Node = BUILDING_SCENE.instantiate()
+			b.call("setup", bdata, true)   ## restored = built, income already in restored rates
+			b.call("place_at", _cell_center2(cell))
+			add_child(b)
+			if int(brec.get("level", 1)) > 1:
+				b.set("_level", int(brec.get("level", 1)))
+			_building_cells[cell] = b
+	for wrec in dev.get("walls", []):
+		if typeof(wrec) != TYPE_ARRAY or (wrec as Array).size() != 2:
+			continue
+		var wcell : Vector2i = Vector2i(int(wrec[0]), int(wrec[1]))
+		var w : Node = WALL_SCRIPT.new()
+		w.call("place_at", _cell_center2(wcell))
+		add_child(w)
+		w.call("mark_built")
+		_wall_cells[wcell] = w
+	var fob : Dictionary = dev.get("fob", {})
+	if int(fob.get("rank", 0)) > 0:
+		var base : Node = get_tree().get_first_node_in_group("base")
+		if base != null and base.has_method("restore_rank"):
+			base.call("restore_rank", int(fob.get("rank", 0)))
 
 ## Begin the next wave: size grows each wave; announce it.
 func _start_next_wave() -> void:
@@ -657,6 +788,8 @@ func _spawn_demo_towers() -> void:
 		t.call("setup", entry[0], true)            ## start_built so it attacks immediately
 		t.call("place_at", _cell_center2(entry[1]))
 		add_child(t)
+		_map_grid.call("mark_tower_placed", int(entry[1].x), int(entry[1].y))
+		_tower_cells[entry[1]] = t
 
 ## Stage 2c demo: place one converted Building (garrison) to show its 3D mesh. Inert here (no
 ## faction/unit-layer), so it just demonstrates the structure; production lights up post-FriendlyUnit.
@@ -668,3 +801,4 @@ func _spawn_demo_building() -> void:
 	b.call("setup", bd, true)                       ## restored=true → built/solid, no economy side effects
 	b.call("place_at", _cell_center2(Vector2i(16, 20)))
 	add_child(b)
+	_building_cells[Vector2i(16, 20)] = b           ## runtime BuildingData has no resource_path → capture skips it
