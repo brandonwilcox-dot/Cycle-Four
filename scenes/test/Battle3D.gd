@@ -53,6 +53,15 @@ var _place_building : bool = false   ## false = tower, true = building/garrison
 var _preview        : MeshInstance3D = null
 var _preview_mat    : StandardMaterial3D = null
 
+## Stage 6c faction-select. id → [sub_path, display name, accent color] (sub-paths match Academy defaults).
+const FACTION_CHOICES : Array = [
+	["architects", "standard",  "THE ARCHITECTS", "Efficiency. Strongest idle economy.", Color(1.00, 0.55, 0.18)],
+	["bloom",      "purist",    "THE BLOOM",      "Adapt. Near-unkillable late game.",    Color(0.45, 0.80, 0.30)],
+	["mesh",       "networked", "THE MESH",       "Raid. Steal the enemy's resources.",   Color(0.30, 0.65, 1.00)],
+]
+var _battle_started : bool = false
+var _faction_layer  : CanvasLayer = null
+
 ## Stage 6b waves.
 const SPAWN_INTERVAL : float = 1.6
 var _unit_layer  : Node3D = null
@@ -67,21 +76,15 @@ func _ready() -> void:
 	_setup_marker()
 	_setup_preview()
 	_setup_hud()
-	_select_faction()      ## Stage 6c: set active_faction → HUD resources/buttons + garrison production
-	_setup_unit_layer()    ## must exist before garrisons _ready (their friendly units spawn here)
-	_spawn_base()
-	_spawn_commander()
-	_spawn_enemy_base()
-	_spawn_walls()
 	_spawn_galaxy()
 
 	_rig = CAM_RIG.new()
 	_rig.position = _cell_center3(BASE_CELL, 0.0)   ## look at the FOB to start
 	add_child(_rig)
 
-	_spawn_demo_towers()
-	_spawn_demo_building()
-	_setup_waves()
+	## Stage 6c — faction-select: choose a faction before the battle (replaces the hardcoded architects).
+	## The world (units/base/commander/waves) is only built after the choice, in _start_battle().
+	_show_faction_select()
 
 	var title : Label3D = Label3D.new()
 	title.text = "3D MIGRATION — Stage 6c\nLEFT select Commander / tower | U upgrade selected tower | RIGHT move (Shift chain) | B tower | G garrison | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view"
@@ -175,6 +178,8 @@ func _process(delta: float) -> void:
 	if _placing:
 		_update_preview()
 	## Stage 6b: trickle enemy waves from the map's spawn points along their real A* paths.
+	if not _battle_started:
+		return   ## wait for faction-select to build the world
 	_spawn_timer -= delta
 	if _spawn_timer <= 0.0:
 		_spawn_timer = SPAWN_INTERVAL
@@ -183,6 +188,8 @@ func _process(delta: float) -> void:
 ## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
 ## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
 func _unhandled_input(event: InputEvent) -> void:
+	if not _battle_started:
+		return   ## faction-select still up — no gameplay input yet (camera rig handles its own input)
 	if event is InputEventMouseButton:
 		var mb : InputEventMouseButton = event
 		if not mb.pressed:
@@ -357,12 +364,67 @@ func _update_preview() -> void:
 ## Stage 6c: pick a faction so active_faction is set — lights up the HUD's faction resources +
 ## build buttons + tower upgrades AND lets garrisons resolve their roster unit. (architects/standard;
 ## the real game routes this through the FactionSelect screen — wired here so the battle plays.)
-func _select_faction() -> void:
-	FactionManager.select_faction("architects", "standard")
+## Stage 6c faction-select screen: a simple full-screen chooser shown before the battle. Picking a
+## faction selects it (with its default sub-path), then builds the world via _start_battle().
+func _show_faction_select() -> void:
+	_faction_layer = CanvasLayer.new()
+	add_child(_faction_layer)
+
+	var bg : ColorRect = ColorRect.new()
+	bg.color = Color(0.03, 0.05, 0.08, 0.92)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_faction_layer.add_child(bg)
+
+	var col : VBoxContainer = VBoxContainer.new()
+	col.set_anchors_preset(Control.PRESET_CENTER)
+	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	col.grow_vertical = Control.GROW_DIRECTION_BOTH
+	col.add_theme_constant_override("separation", 18)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	_faction_layer.add_child(col)
+
+	var heading : Label = Label.new()
+	heading.text = "CHOOSE YOUR FACTION"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 40)
+	col.add_child(heading)
+
+	for choice in FACTION_CHOICES:
+		var btn : Button = Button.new()
+		btn.custom_minimum_size = Vector2(440.0, 78.0)
+		btn.text = "%s\n%s" % [choice[2], choice[3]]
+		btn.add_theme_color_override("font_color", choice[4])
+		btn.add_theme_font_size_override("font_size", 22)
+		var fid : String = choice[0]
+		var sub : String = choice[1]
+		btn.pressed.connect(func() -> void: _choose_faction(fid, sub))
+		col.add_child(btn)
+
+## Commit the chosen faction and start the battle.
+func _choose_faction(faction_id: String, sub_path: String) -> void:
+	FactionManager.select_faction(faction_id, sub_path)
 	## Demo convenience: seed resources so the HUD build button is affordable immediately (the real
-	## game earns these by claiming territory through the Academy ramp). Without this, can_afford gates
-	## the HUD button at battle start — which is why it "did nothing" while the B-key (free) worked.
+	## game earns these by claiming territory through the Academy ramp).
 	EconomyManager.add_resource(FactionManager.get_primary_resource(), 400.0)
+	if is_instance_valid(_faction_layer):
+		_faction_layer.queue_free()
+		_faction_layer = null
+	_start_battle()
+
+## Build the faction-dependent world once a faction is chosen (units/base/commander/enemy/towers/waves).
+func _start_battle() -> void:
+	if _battle_started:
+		return
+	_battle_started = true
+	_setup_unit_layer()    ## must exist before garrisons _ready (their friendly units spawn here)
+	_spawn_base()
+	_spawn_commander()
+	_spawn_enemy_base()
+	_spawn_walls()
+	_spawn_demo_towers()
+	_spawn_demo_building()
+	_setup_waves()
 
 ## Friendly units (garrison defenders) live here; tagged "unit_layer" so a Building can resolve it
 ## by group (its hardcoded ../../UnitLayer path doesn't hold in the 3D scene layout).

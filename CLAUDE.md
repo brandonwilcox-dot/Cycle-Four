@@ -140,8 +140,17 @@ a `VfxLayer` under the MapGrid; no-op without a map.
    unwind, Commander back to base), spawns a fresh `EnemyBase` (territory's owner faction) at the new
    map's first spawn cell; destroying it → `enemy_base_destroyed` → `GalaxyManager.capture_system`
    flips the node + expands the frontier. The full tactical→deploy→clear→capture loop runs in 3D.
-10. TO-DO: save/load; Academy intro; GameOver; deferred ability/LoS rings + 3D XP/HP bars +
-    AbilityController plane pass; revert `main_scene` hack; merge `feat/3d` → main.
+10. ✅ **Q/E camera yaw** (`b60a964`) — hold Q/E to rotate the view (CameraRig3D `_process`), with
+    middle-drag rotate.
+11. ✅ **GameOver overlay** (`2a92614`) — mounted the self-wiring `GameOverScreen.tscn` in the 3D HUD;
+    shows on `base_destroyed`, Try Again / Return to Menu reload Battle3D.
+12. ✅ **Commander LoS/sensor range rings** (`c50e87b`) — flat ground TorusMesh rings (vision green /
+    sensor blue) shown when selected, sized to rank-scaled radii. (3D HP bars already done on units +
+    Commander; enemy units already have HP bar + damage tint.)
+13. TO-DO (the heavy remaining items): **save/load** (note the persistence gap — buildings/claims/
+    per-territory state aren't serialized yet, so this is an arc, not a quick item); **Academy intro**;
+    AbilityController plane-coord pass + remaining ability/move-path overlays; revert `main_scene`
+    hack; merge `feat/3d` → main.
 
 **Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
 Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
