@@ -18,6 +18,7 @@ const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
 const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
 const GALAXY_VIEW       = preload("res://src/ui/GalaxyView.gd")
 const HUD_SCENE         = preload("res://scenes/ui/HUD.tscn")
+const MAP_GENERATOR     = preload("res://src/core/map/MapGenerator.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -41,6 +42,7 @@ const TOWER_DATA = preload("res://resources/towers/architects_t1.tres")
 const SELECT_RADIUS : float = 52.0
 var _map_grid    : Node = null
 var _hud         : Control = null
+var _galaxy_view : Node = null
 var _selected_tower : Node = null   ## built tower selected for upgrade (U)
 var _last_upgrade_t  : float = -1.0   ## debounce: rapid upgrades thrash the free/rebuild cycle
 const UPGRADE_COOLDOWN : float = 0.35
@@ -138,9 +140,9 @@ func _spawn_enemy_base() -> void:
 ## threshold (wheel) and the board shrinks away to reveal the 3D territory-node graph.
 func _spawn_galaxy() -> void:
 	GalaxyManager.ensure_galaxy("architects")
-	var gv : Node = GALAXY_VIEW.new()
-	add_child(gv)
-	gv.call("setup", Vector2(COLS * CELL * 0.5, ROWS * CELL * 0.5))
+	_galaxy_view = GALAXY_VIEW.new()
+	add_child(_galaxy_view)
+	_galaxy_view.call("setup", Vector2(COLS * CELL * 0.5, ROWS * CELL * 0.5))
 
 ## Stage 2g: a couple of built walls on the enemy approach — enemies grind them to pass.
 func _spawn_walls() -> void:
@@ -184,6 +186,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_try_place(_hovered_cell())
 				if not Input.is_key_pressed(KEY_SHIFT):
 					_set_placing(false)
+			elif bool(_rig.call("is_galaxy_zoom")):
+				_try_deploy(_mouse_ground())   ## zoomed out → click a frontier node to deploy
 			else:
 				_left_click(_mouse_ground())
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
@@ -398,11 +402,38 @@ func _cell_center2(cell: Vector2i) -> Vector2:
 
 ## Stage 6b: real waves — collect the map's spawn cells and trickle enemies down their A* paths.
 func _setup_waves() -> void:
+	_collect_spawns()
+
+## (Re)reads the current map's spawn cells for the wave driver — also after a galaxy deploy.
+func _collect_spawns() -> void:
+	_spawn_cells.clear()
+	_spawn_idx = 0
 	var md : MapData = _map_grid.map_data if _map_grid != null else null
 	if md != null:
 		for sp in md.spawn_points:
 			if sp != null:
 				_spawn_cells.append(sp.position)
+
+## Stage 6c: galaxy deploy — when zoomed out, click a frontier node to load that territory's seeded
+## map and drop back onto the battlefield. (Capture-on-win is a follow-up; this is the deploy nav.)
+func _try_deploy(world2: Vector2) -> void:
+	if _galaxy_view == null or not WORLD3D.is_valid(world2) or _map_grid == null:
+		return
+	var id : String = _galaxy_view.call("node_at", world2)
+	if id == "":
+		return
+	if not (id in GalaxyManager.frontier(FactionManager.active_faction)):
+		EventBus.notification_pushed.emit("That territory isn't on your frontier.", "warning")
+		return
+	var seed_v : int = int(GalaxyManager.star_systems[id].get("seed", 0))
+	_map_grid.call("load_map_data", MAP_GENERATOR.generate(seed_v))
+	_map_grid.call("queue_redraw")          ## recolor the 3D terrain from the new map
+	GalaxyManager.active_node = id
+	_collect_spawns()                        ## new map → new spawn cells for the wave driver
+	if _galaxy_view.has_method("queue_redraw"):
+		_galaxy_view.call("queue_redraw")    ## recenter the graph on the new active node
+	_rig.call("snap_focus", Vector3(COLS * CELL * 0.5, 0.0, ROWS * CELL * 0.5), 1600.0)
+	EventBus.notification_pushed.emit("Deploying to territory %s." % id, "positive")
 
 func _spawn_one_enemy() -> void:
 	if _spawn_cells.is_empty() or _map_grid == null:
