@@ -55,7 +55,9 @@ func save_game() -> void:
 	_save_dirty = false
 
 func load_game() -> void:
+	print("[SL] load_game: SAVE_PATH=", SAVE_PATH, " global=", ProjectSettings.globalize_path(SAVE_PATH), " exists=", FileAccess.file_exists(SAVE_PATH))
 	if not FileAccess.file_exists(SAVE_PATH):
+		print("[SL] load_game: NO FILE — aborting (fresh state)")
 		return  # New game -- managers initialize with defaults
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	var text := file.get_as_text()
@@ -66,6 +68,7 @@ func load_game() -> void:
 		_try_load_backup()
 		return
 	_apply_all_state(result)
+	print("[SL] load_game: applied. faction=", GameState.current_faction, " active_node=", GalaxyManager.active_node)
 
 func mark_dirty() -> void:
 	_save_dirty = true
