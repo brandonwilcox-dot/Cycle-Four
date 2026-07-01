@@ -334,6 +334,10 @@ func open_fob_inspection(base: Node) -> void:
 	inspection_panel.open_fob(base)
 	_set_depth(HudDepth.TACTICAL)
 
+## Opens the unit (enemy/friendly) inspection panel.
+func open_unit_inspection(unit: Node) -> void:
+	inspection_panel.open_unit(unit)
+
 ## Closes the inspection panel. Returns to glance if no other panel is open.
 func close_inspection() -> void:
 	inspection_panel.visible = false

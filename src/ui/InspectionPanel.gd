@@ -149,6 +149,40 @@ func open_fob(base: Node) -> void:
 	visible = true
 	move_to_front()
 
+## Populates the panel with unit stats (enemy or friendly). Units can't be upgraded/sold/retargeted.
+const _ARMOR_NAMES : Array = ["Plated", "Organic", "Synthetic"]
+func open_unit(unit: Node) -> void:
+	var d : Resource = unit.get("data")
+	if d == null:
+		return
+	var name_str : String = str(d.get("unit_name") if d.get("unit_name") else "Unit")
+	var tier   : int   = int(d.get("tier") if d.get("tier") != null else 1)
+	var maxhp  : float = float(d.get("max_health") if d.get("max_health") != null else 0.0)
+	var curhp  : float = float(unit.get("_current_health")) if unit.get("_current_health") != null else maxhp
+	var dmg    : float = float(d.get("attack_damage") if d.get("attack_damage") != null else 0.0)
+	var rng    : float = float(d.get("attack_range") if d.get("attack_range") != null else 0.0)
+	var spd    : float = float(d.get("move_speed") if d.get("move_speed") != null else 0.0)
+	var armor  : float = float(d.get("armor") if d.get("armor") != null else 0.0)
+	var atype  : int   = int(d.get("armor_type") if d.get("armor_type") != null else 0)
+	var atype_str : String = _ARMOR_NAMES[atype] if atype >= 0 and atype < _ARMOR_NAMES.size() else ""
+	var fac : String = str(d.get("faction_id") if d.get("faction_id") else "")
+	title_label.text = "%s  —  Tier %d%s" % [name_str, tier, ("  (%s)" % fac.capitalize()) if fac != "" else ""]
+	var combat_line : String = ("DMG %.1f   ·   RANGE %.0f\n" % [dmg, rng]) if dmg > 0.0 else "Non-combatant\n"
+	stats_label.text = (
+		"HP %d / %d\n" % [int(curhp), int(maxhp)] +
+		combat_line +
+		"SPD %.0f   ·   ARMOR %.0f %s" % [spd, armor, atype_str]
+	)
+	upgrade_btn.visible    = false
+	_upgrade_b_btn.visible = false
+	_target_btn.visible    = false
+	_sell_btn.visible      = false
+	for b in _doctrine_btns:
+		b.visible = false
+	_tower = null
+	visible = true
+	move_to_front()
+
 ## Configures an upgrade button for a branch target (null hides it). Shows the
 ## target tower's name + fresh-build cost, and disables it when unaffordable.
 func _configure_upgrade_button(btn: Button, target: Resource) -> void:

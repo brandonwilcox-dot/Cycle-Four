@@ -53,7 +53,8 @@ var _deployed_node : String = ""    ## galaxy node currently being fought ("" = 
 var _tower_cells    : Dictionary = {}
 var _building_cells : Dictionary = {}
 var _wall_cells     : Dictionary = {}
-var _selected_tower : Node = null   ## built tower selected for upgrade (U)
+var _selected_tower : Node = null   ## built tower selected for upgrade (U) / inspection
+var _selected_building : Node = null   ## garrison currently inspected (for Sell)
 var _last_upgrade_t  : float = -1.0   ## debounce: rapid upgrades thrash the free/rebuild cycle
 const UPGRADE_COOLDOWN : float = 0.35
 var _placing        : bool = false
@@ -91,6 +92,9 @@ var _wave_timer  : float = WAVE_GRACE
 func _ready() -> void:
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
 	EventBus.game_saving.connect(_capture_territory_development)      ## snapshot dev into the active node before each save
+	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade)      ## inspection-panel Upgrade buttons (branch A/B)
+	EventBus.panel_sell_requested.connect(_on_panel_sell)           ## inspection-panel Sell button
+	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine)       ## inspection-panel FOB doctrine buttons
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -122,6 +126,9 @@ func _exit_tree() -> void:
 		[EventBus.tower_placement_requested, _on_tower_req],
 		[EventBus.building_placement_requested, _on_build_req],
 		[EventBus.wall_placement_requested, _on_wall_req],
+		[EventBus.panel_upgrade_requested, _on_panel_upgrade],
+		[EventBus.panel_sell_requested, _on_panel_sell],
+		[EventBus.fob_doctrine_requested, _on_fob_doctrine],
 	]:
 		if (sig_cb[0] as Signal).is_connected(sig_cb[1]):
 			(sig_cb[0] as Signal).disconnect(sig_cb[1])
@@ -333,35 +340,74 @@ func _hovered_cell() -> Vector2i:
 		return Vector2i(-1, -1)
 	return Vector2i(int(clampf(floor(g.x / CELL), 0, COLS - 1)), int(clampf(floor(g.y / CELL), 0, ROWS - 1)))
 
-## LEFT-click dispatch: a built tower under the cursor selects it (for upgrade); otherwise fall through
-## to Commander select/deselect.
+## LEFT-click dispatch: open the stats inspection panel for whatever's under the cursor
+## (tower → also selectable for upgrade; garrison; FOB; unit), else select/deselect the Commander.
 func _left_click(world2: Vector2) -> void:
+	_selected_building = null
 	var t : Node = _tower_at(world2)
 	if t != null:
 		_selected_tower = t
 		if is_instance_valid(_commander):
 			_commander.call("set_selected", false)
-		EventBus.notification_pushed.emit("Tower selected — press U to upgrade.", "normal")
+		if _hud != null:
+			_hud.call("open_tower_inspection", t, true)
 		return
 	_selected_tower = null
+	var b : Node = _building_at(world2)
+	if b != null:
+		_selected_building = b
+		if _hud != null:
+			_hud.call("open_building_inspection", b)
+		return
+	var fob : Node = _fob_at(world2)
+	if fob != null:
+		if _hud != null:
+			_hud.call("open_fob_inspection", fob)
+		return
+	var u : Node = _unit_at(world2)
+	if u != null:
+		if _hud != null:
+			_hud.call("open_unit_inspection", u)
+		return
+	## Empty ground: close the panel and select/deselect the Commander.
+	if _hud != null:
+		_hud.call("close_inspection")
 	_select_at(world2)
 
-## Nearest built tower within a small radius of a plane point, or null.
-func _tower_at(world2: Vector2) -> Node:
+## Nearest node in `group` within `radius` of a plane point (optionally must be built). null if none.
+func _nearest_in_group(world2: Vector2, group: String, radius: float, must_be_built: bool) -> Node:
 	if not WORLD3D.is_valid(world2):
 		return null
 	var best   : Node  = null
-	var best_d : float = 36.0
-	for t in get_tree().get_nodes_in_group("towers"):
-		if not is_instance_valid(t) or not bool(t.call("is_built")):
+	var best_d : float = radius
+	for n in get_tree().get_nodes_in_group(group):
+		if not is_instance_valid(n):
 			continue
-		var d : float = world2.distance_to(t.call("plane_pos"))
+		if must_be_built and n.has_method("is_built") and not bool(n.call("is_built")):
+			continue
+		var d : float = world2.distance_to(n.call("plane_pos"))
 		if d <= best_d:
 			best_d = d
-			best   = t
+			best   = n
 	return best
 
-## Upgrade the selected tower to its next tier (branch A) if it has one. Demo: free (real game charges).
+func _tower_at(world2: Vector2) -> Node:
+	return _nearest_in_group(world2, "towers", 36.0, true)
+
+func _building_at(world2: Vector2) -> Node:
+	return _nearest_in_group(world2, "buildings", 40.0, false)
+
+func _fob_at(world2: Vector2) -> Node:
+	return _nearest_in_group(world2, "base", 56.0, false)
+
+## Nearest unit (enemy or friendly) under the cursor.
+func _unit_at(world2: Vector2) -> Node:
+	var e : Node = _nearest_in_group(world2, "units", 34.0, false)
+	if e != null:
+		return e
+	return _nearest_in_group(world2, "friendly_units", 34.0, false)
+
+## U key: quick-upgrade the selected tower on branch A (debounced against the free/rebuild churn).
 func _try_upgrade_selected_tower() -> void:
 	if not is_instance_valid(_selected_tower):
 		return
@@ -370,17 +416,75 @@ func _try_upgrade_selected_tower() -> void:
 	var now : float = Time.get_ticks_msec() / 1000.0
 	if now - _last_upgrade_t < UPGRADE_COOLDOWN:
 		return
-	_last_upgrade_t = now   ## throttle EVERY press (incl. max-tier/unbuilt) so rapid U can't spam notifications each frame
+	_last_upgrade_t = now
+	_do_upgrade(0)
+
+## Upgrade the selected tower on branch (0 = A / upgrade_to, 1 = B / upgrade_to_b), charging its cost.
+func _do_upgrade(branch: int) -> void:
+	if not is_instance_valid(_selected_tower):
+		return
 	if not bool(_selected_tower.call("is_built")):
 		EventBus.notification_pushed.emit("Finish building the tower first.", "warning")
 		return
 	var d : Resource = _selected_tower.get("data")
-	var nxt : Resource = d.get("upgrade_to") if d != null else null
+	var nxt : Resource = null
+	if d != null:
+		nxt = d.get("upgrade_to_b") if branch == 1 else d.get("upgrade_to")
 	if nxt == null:
 		EventBus.notification_pushed.emit("Tower is at its max tier.", "warning")
 		return
+	var primary : String = FactionManager.get_primary_resource()
+	var cost : float = float(nxt.get("primary_cost")) if nxt.get("primary_cost") != null else 0.0
+	if not EconomyManager.can_afford({primary: cost}):
+		EventBus.notification_pushed.emit("Not enough %s to upgrade (need %d)." % [primary, int(cost)], "warning")
+		return
+	EconomyManager.spend({primary: cost})
 	_selected_tower.call("upgrade", nxt)
 	EventBus.notification_pushed.emit("Tower upgraded to %s." % str(nxt.get("tower_name")), "positive")
+
+## -- Inspection-panel button handlers --
+
+func _on_panel_upgrade(branch: int) -> void:
+	_do_upgrade(branch)
+
+func _on_panel_sell() -> void:
+	var primary : String = FactionManager.get_primary_resource()
+	if is_instance_valid(_selected_tower):
+		var d : Resource = _selected_tower.get("data")
+		var refund : float = floorf(float(d.get("primary_cost")) * 0.5) if d != null and d.get("primary_cost") != null else 0.0
+		EconomyManager.add_resource(primary, refund)
+		var cell : Vector2i = _map_grid.call("world_to_cell", _selected_tower.call("plane_pos"))
+		_map_grid.call("unmark_tower", cell.x, cell.y)
+		_tower_cells.erase(cell)
+		_selected_tower.queue_free()
+		_selected_tower = null
+		EventBus.notification_pushed.emit("Tower sold — refunded %d %s." % [int(refund), primary], "positive")
+	elif is_instance_valid(_selected_building):
+		var cell : Vector2i = _map_grid.call("world_to_cell", _selected_building.call("plane_pos"))
+		_building_cells.erase(cell)
+		if _selected_building.has_method("destroy"):
+			_selected_building.call("destroy")   ## reverses territory income + frees
+		else:
+			_selected_building.queue_free()
+		_selected_building = null
+		EventBus.notification_pushed.emit("Garrison sold.", "positive")
+	if _hud != null:
+		_hud.call("close_inspection")
+
+func _on_fob_doctrine(doctrine_id: String) -> void:
+	var base : Node = get_tree().get_first_node_in_group("base")
+	if base == null or not base.has_method("set_doctrine"):
+		return
+	var primary : String = FactionManager.get_primary_resource()
+	var cost : float = 60.0
+	if not EconomyManager.can_afford({primary: cost}):
+		EventBus.notification_pushed.emit("Not enough %s for an FOB doctrine (need %d)." % [primary, int(cost)], "warning")
+		return
+	EconomyManager.spend({primary: cost})
+	base.call("set_doctrine", doctrine_id)
+	EventBus.notification_pushed.emit("FOB doctrine set: %s." % doctrine_id.capitalize(), "positive")
+	if _hud != null:
+		_hud.call("open_fob_inspection", base)   ## refresh the panel
 
 ## Select the Commander if the click landed within SELECT_RADIUS of it, else deselect.
 func _select_at(world2: Vector2) -> void:
