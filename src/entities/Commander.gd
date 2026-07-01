@@ -268,6 +268,22 @@ func _recompute_rank_stats() -> void:
 	_current_move_speed = MOVE_BASE_SPEED * pow(1.0 + SPEED_PER_RANK, float(_commander_rank))
 	_damage_multiplier  = pow(1.0 + DAMAGE_PER_RANK, float(_commander_rank))
 
+## -- save/load: the Commander's earned progress (claimed count drives rank/XP/speed/damage/rings) --
+
+func get_claimed_count() -> int:
+	return _claimed_count
+
+## Restore earned progress on Continue: rank, XP bar, range rings, and rank-scaled stats.
+func restore_progress(claimed_count: int) -> void:
+	_claimed_count = maxi(0, claimed_count)
+	@warning_ignore("integer_division")
+	_commander_rank = mini(_claimed_count / CELLS_PER_RANK, RANK_CAP)
+	_recompute_rank_stats()
+	_refresh_range_rings()
+	if _rank_chevrons != null:
+		_rank_chevrons.call("set_rank", _commander_rank)
+	_update_rank_bar()
+
 ## -- Combat --
 
 func _try_primary_attack() -> void:

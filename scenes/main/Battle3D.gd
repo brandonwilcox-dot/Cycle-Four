@@ -21,6 +21,7 @@ const HUD_SCENE         = preload("res://scenes/ui/HUD.tscn")
 const GAME_OVER_SCENE   = preload("res://scenes/ui/GameOverScreen.tscn")
 const TITLE_SCENE       = "res://scenes/ui/TitleScreen.tscn"
 const SETTINGS_PATH     = "user://settings.cfg"
+const CONTROLS_TEXT     = "LEFT-CLICK  select Commander / tower\nU  upgrade selected tower\nRIGHT-CLICK  move Commander (hold Shift to chain)\nB  build tower        G  build garrison\nBuild Wall button  (Architects only)\n\nPgUp  birds-eye view      PgDn  focus Commander\nWheel  zoom (out far = galaxy map)\nWASD  pan       Q / E  rotate\nMIDDLE-drag  free rotate\nDelete  reset view   Insert  save custom view\n\nGalaxy zoom: LEFT-CLICK a frontier node to deploy\nESC  this menu"
 const MAP_GENERATOR     = preload("res://src/core/map/MapGenerator.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
@@ -107,14 +108,7 @@ func _ready() -> void:
 		_continue_game()
 	else:
 		_show_faction_select()
-
-	var title : Label3D = Label3D.new()
-	title.text = "CYCLE FOUR\nLEFT select Commander / tower | U upgrade tower | RIGHT move (Shift chain) | B tower | G garrison | Build Wall (Architects) | PgUp birds-eye | PgDn focus | wheel zoom (out=galaxy) | WASD pan | Q/E rotate | MIDDLE+drag rotate | Del/Ins view | ESC menu"
-	title.position = _cell_center3(BASE_CELL, 420.0)
-	title.pixel_size = 0.9
-	title.modulate = Color(0.8, 0.9, 1.0)
-	title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	add_child(title)
+	## (Controls used to be an on-map banner; they now live in ESC → Help.)
 
 ## EventBus is an autoload that outlives this scene; Load/Continue free + recreate Battle3D, so we MUST
 ## disconnect here or dead instances accumulate stale connections ("Lambda capture freed" errors + double
@@ -579,8 +573,18 @@ func _build_pause_main() -> void:
 	col.add_child(_menu_button("Resume", _close_pause_menu))
 	col.add_child(_menu_button("Save Game", _pause_save))
 	col.add_child(_menu_button("Load Game", _pause_load))
+	col.add_child(_menu_button("Help", _build_pause_help))
 	col.add_child(_menu_button("Settings", _build_pause_settings))
 	col.add_child(_menu_button("Return to Main Menu", _pause_main_menu))
+
+func _build_pause_help() -> void:
+	var col : VBoxContainer = _pause_column("CONTROLS")
+	var lbl : Label = Label.new()
+	lbl.text = CONTROLS_TEXT
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 16)
+	col.add_child(lbl)
+	col.add_child(_menu_button("Back", _build_pause_main))
 
 func _build_pause_settings() -> void:
 	var col : VBoxContainer = _pause_column("SETTINGS")
@@ -819,10 +823,12 @@ func _capture_territory_development() -> void:
 		return
 	var dev : Dictionary = GalaxyManager.star_systems[node_id].get("development", {})
 	dev["claimed"]   = _map_grid.call("get_claimed_indices")
+	dev["revealed"]  = _map_grid.call("get_revealed_indices")   ## fog-of-war the player uncovered
 	dev["towers"]    = _capture_towers()
 	dev["buildings"] = _capture_buildings()
 	dev["walls"]     = _capture_walls()
 	dev["fob"]       = _capture_fob()
+	dev["commander"] = {"claimed": int(_commander.call("get_claimed_count"))} if is_instance_valid(_commander) else {}
 	GalaxyManager.star_systems[node_id]["development"] = dev
 
 func _capture_towers() -> Array:
@@ -871,6 +877,12 @@ func _restore_territory_development(dev: Dictionary) -> void:
 	var claims : Array = dev.get("claimed", [])
 	if not claims.is_empty():
 		_map_grid.call("apply_claimed_indices", claims)
+	var revealed : Array = dev.get("revealed", [])
+	if not revealed.is_empty():
+		_map_grid.call("apply_revealed_indices", revealed)   ## restore explored fog-of-war
+	var cmd : Dictionary = dev.get("commander", {})
+	if is_instance_valid(_commander) and cmd.has("claimed"):
+		_commander.call("restore_progress", int(cmd.get("claimed", 0)))
 	for trec in dev.get("towers", []):
 		if typeof(trec) != TYPE_DICTIONARY:
 			continue

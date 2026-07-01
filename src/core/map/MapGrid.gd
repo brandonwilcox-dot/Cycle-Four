@@ -349,6 +349,28 @@ func apply_claimed_indices(indices: Array) -> void:
 	if changed:
 		queue_redraw()
 
+## Flat indices of all REVEALED (explored, fog-cleared) cells — captured so a Continue can restore
+## the fog-of-war the player uncovered (claimed cells cover only owned ground, not the wider sightline).
+func get_revealed_indices() -> Array:
+	var out : Array = []
+	if map_data == null:
+		return out
+	for i in COLS * ROWS:
+		if map_data.get_meta_revealed(i):
+			out.append(i)
+	return out
+
+## Re-applies saved REVEALED indices onto the freshly-loaded (fully-fogged) map.
+func apply_revealed_indices(indices: Array) -> void:
+	if map_data == null:
+		return
+	for v in indices:
+		var i : int = int(v)
+		if i >= 0 and i < COLS * ROWS:
+			map_data.set_meta_revealed(i, true)
+	if not indices.is_empty():
+		queue_redraw()
+
 ## C3 (raids): the nearest GROUND cell on the CLAIMED frontier — a GROUND cell orthogonally
 ## adjacent to a CLAIMED or BASE cell — within `max_radius` (Chebyshev) of `from_cell`. A
 ## garrison raids this so the player's territory grows outward contiguously. (-1,-1) if none.
