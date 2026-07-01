@@ -341,6 +341,10 @@ func apply_claimed_indices(indices: Array) -> void:
 		var i : int = int(v)
 		if i >= 0 and i < COLS * ROWS and _cells[i] == Cell.GROUND:
 			_cells[i] = Cell.CLAIMED
+			## Owned territory is revealed — otherwise a restore leaves it fogged and _cell_color
+			## paints it as fog instead of claimed (the "explored territory not preserved" bug).
+			if map_data != null:
+				map_data.set_meta_revealed(i, true)
 			changed = true
 	if changed:
 		queue_redraw()

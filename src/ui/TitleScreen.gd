@@ -165,7 +165,6 @@ func _on_new_game_pressed() -> void:
 	SceneManager.change_to(BATTLE_SCENE)
 
 func _on_continue_pressed() -> void:
-	print("[SL] Continue pressed. has_save=", SaveManager.has_save(), " BATTLE_SCENE=", BATTLE_SCENE)
 	if not SaveManager.has_save():
 		return
 	SaveManager.load_game()

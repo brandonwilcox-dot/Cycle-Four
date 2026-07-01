@@ -103,7 +103,6 @@ func _ready() -> void:
 
 	## Continue (a save was loaded → GameState has a faction) restores straight into the battle;
 	## New Game shows the faction-select screen. The world is built in _start_battle() either way.
-	print("[SL] Battle3D._ready: current_faction='", GameState.current_faction, "' -> ", ("CONTINUE" if not GameState.current_faction.is_empty() else "NEW GAME"))
 	if not GameState.current_faction.is_empty():
 		_continue_game()
 	else:
@@ -506,7 +505,6 @@ func _choose_faction(faction_id: String, sub_path: String) -> void:
 func _continue_game() -> void:
 	FactionManager.restore_faction(GameState.current_faction, GameState.current_sub_path)
 	var node_id : String = GalaxyManager.active_node
-	print("[SL] _continue_game: node_id='", node_id, "' has=", GalaxyManager.star_systems.has(node_id), " seed=", (GalaxyManager.star_systems.get(node_id, {}).get("seed") if node_id != "" else "n/a"), " devkeys=", (GalaxyManager.star_systems.get(node_id, {}).get("development", {}).keys() if node_id != "" else []))
 	if node_id != "" and GalaxyManager.star_systems.has(node_id):
 		var seed_v : int = int(GalaxyManager.star_systems[node_id].get("seed", 0))
 		_map_grid.call("load_map_data", MAP_GENERATOR.generate(seed_v))
@@ -920,7 +918,6 @@ func _restore_territory_development(dev: Dictionary) -> void:
 		if base != null and base.has_method("restore_rank"):
 			base.call("restore_rank", int(fob.get("rank", 0)))
 	_map_grid.call("queue_redraw")   ## recolor terrain so restored CLAIMED cells show
-	print("[SL] _restore_territory_development: towers=", n_towers, " garrisons=", n_builds, " walls=", n_walls, " claims=", claims.size())
 	EventBus.notification_pushed.emit(
 		"Restored: %d towers, %d garrisons, %d walls, %d claimed cells." % [n_towers, n_builds, n_walls, claims.size()],
 		"positive")
