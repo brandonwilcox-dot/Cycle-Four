@@ -183,6 +183,33 @@ func open_unit(unit: Node) -> void:
 	visible = true
 	move_to_front()
 
+## Populates the panel with the player Commander's stats (rank/HP/damage/speed/sight/territory).
+func open_commander(cmd: Node) -> void:
+	var hp     : float = float(cmd.get("_current_health")) if cmd.get("_current_health") != null else 0.0
+	var maxhp  : float = float(cmd.get("_max_health")) if cmd.get("_max_health") != null else 0.0
+	var rank   : int   = int(cmd.get("_commander_rank")) if cmd.get("_commander_rank") != null else 0
+	var claimed: int   = int(cmd.get("_claimed_count")) if cmd.get("_claimed_count") != null else 0
+	var spd    : float = float(cmd.get("_current_move_speed")) if cmd.get("_current_move_speed") != null else 0.0
+	var dmul   : float = float(cmd.get("_damage_multiplier")) if cmd.get("_damage_multiplier") != null else 1.0
+	var los    : int   = int(cmd.call("_los_radius")) if cmd.has_method("_los_radius") else 0
+	var sensor : int   = int(cmd.call("_sensor_radius")) if cmd.has_method("_sensor_radius") else 0
+	title_label.text = "Commander  —  Rank %d" % rank
+	stats_label.text = (
+		"HP %d / %d\n" % [int(hp), int(maxhp)] +
+		"DMG ×%.2f   ·   SPD %.0f\n" % [dmul, spd] +
+		"Sight %d   ·   Sensor %d  (cells)\n" % [los, sensor] +
+		"Territory claimed: %d cells" % claimed
+	)
+	upgrade_btn.visible    = false
+	_upgrade_b_btn.visible = false
+	_target_btn.visible    = false
+	_sell_btn.visible      = false
+	for b in _doctrine_btns:
+		b.visible = false
+	_tower = null
+	visible = true
+	move_to_front()
+
 ## Configures an upgrade button for a branch target (null hides it). Shows the
 ## target tower's name + fresh-build cost, and disables it when unaffordable.
 func _configure_upgrade_button(btn: Button, target: Resource) -> void:

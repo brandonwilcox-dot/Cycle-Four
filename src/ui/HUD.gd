@@ -338,6 +338,10 @@ func open_fob_inspection(base: Node) -> void:
 func open_unit_inspection(unit: Node) -> void:
 	inspection_panel.open_unit(unit)
 
+## Opens the player Commander inspection panel.
+func open_commander_inspection(cmd: Node) -> void:
+	inspection_panel.open_commander(cmd)
+
 ## Closes the inspection panel. Returns to glance if no other panel is open.
 func close_inspection() -> void:
 	inspection_panel.visible = false

@@ -369,9 +369,7 @@ func _left_click(world2: Vector2) -> void:
 		if _hud != null:
 			_hud.call("open_unit_inspection", u)
 		return
-	## Empty ground: close the panel and select/deselect the Commander.
-	if _hud != null:
-		_hud.call("close_inspection")
+	## Empty ground: select/deselect the Commander (which opens/closes its stat panel).
 	_select_at(world2)
 
 ## Nearest node in `group` within `radius` of a plane point (optionally must be built). null if none.
@@ -492,6 +490,11 @@ func _select_at(world2: Vector2) -> void:
 		return
 	var hit : bool = WORLD3D.is_valid(world2) and world2.distance_to(_commander.call("plane_pos")) <= SELECT_RADIUS
 	_commander.call("set_selected", hit)
+	if _hud != null:
+		if hit:
+			_hud.call("open_commander_inspection", _commander)
+		else:
+			_hud.call("close_inspection")
 
 ## Place an (unbuilt) tower or building at the hovered cell if the map allows it; the Commander builds it.
 func _try_place(cell: Vector2i) -> void:

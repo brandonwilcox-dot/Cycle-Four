@@ -295,7 +295,21 @@ func claim_cell(col: int, row: int) -> void:
 	if get_cell(col, row) != Cell.GROUND:
 		return
 	_cells[col + row * COLS] = Cell.CLAIMED
+	_reveal_with_neighbors(col, row)
 	queue_redraw()   ## No AStar rebuild needed -- CLAIMED is not enemy-traversable
+
+## Reveals a cell and its 8 neighbours. Owning territory reveals it AND the cells bordering it — so
+## paths threading through claimed ground (and garrison-raid-claimed territory the Commander never
+## sighted) don't render as fogged holes. Used by claim + restore.
+func _reveal_with_neighbors(col: int, row: int) -> void:
+	if map_data == null:
+		return
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var c : int = col + dx
+			var r : int = row + dy
+			if c >= 0 and c < COLS and r >= 0 and r < ROWS:
+				map_data.set_meta_revealed(c + r * COLS, true)
 
 ## -- Sphere-of-influence area operations --
 ## These power the Commander's sight-range claim, the FOB's rank-scaling territory,
@@ -317,6 +331,8 @@ func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
 				continue
 			_cells[c + r * COLS] = Cell.CLAIMED
 			newly.append(Vector2i(c, r))
+	for cell in newly:
+		_reveal_with_neighbors(cell.x, cell.y)   ## owned territory (+ bordering paths) is revealed
 	if not newly.is_empty():
 		queue_redraw()   ## Single call; don't emit one per cell
 	return newly
@@ -341,10 +357,11 @@ func apply_claimed_indices(indices: Array) -> void:
 		var i : int = int(v)
 		if i >= 0 and i < COLS * ROWS and _cells[i] == Cell.GROUND:
 			_cells[i] = Cell.CLAIMED
-			## Owned territory is revealed — otherwise a restore leaves it fogged and _cell_color
-			## paints it as fog instead of claimed (the "explored territory not preserved" bug).
-			if map_data != null:
-				map_data.set_meta_revealed(i, true)
+			## Owned territory (+ bordering paths) is revealed — otherwise a restore leaves it fogged
+			## and _cell_color paints it as fog instead of claimed.
+			@warning_ignore("integer_division")
+			var row : int = i / COLS
+			_reveal_with_neighbors(i % COLS, row)
 			changed = true
 	if changed:
 		queue_redraw()
