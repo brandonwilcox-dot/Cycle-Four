@@ -34,6 +34,39 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-01 (3) — VISUAL SUPERCHARGE V2: ground pass — SCREENSHOT-VERIFIED, playtest pending
+
+On main. Also: Academy centering fix (`7b496dc` — chamber is authored around the node origin;
+Battle3D now positions the instance at viewport centre, matching the 2D Battle.tscn's (960,540)).
+
+**V2 ground pass (`assets/shaders/ground_tiles.gdshader` + MapGrid rendering changes):**
+- Tiles are now FULL-size (were 0.92 → see-through gaps); grid lines are drawn IN-SHADER and
+  **fade with camera distance** (`grid_near` 1200 / `grid_far` 3500 px — planning tool up close,
+  terrain from afar).
+- **Per-cell data texture** (COLS×ROWS RGBA8, `filter_linear`): R=revealed, G=claimed, B=path-ness.
+  MapGrid._refresh_terrain rewrites it on the existing dirty flag. Linear sampling = effects blend
+  smoothly ACROSS cell boundaries, which per-instance colors never could.
+- **Fog of war moved fully into the shader** (instance colors no longer carry fog): unexplored is
+  near-black desaturated with a noisy **dissolve frontier**. `_cell_color` fog branch removed.
+- **Claimed ground = faction substrate creep** (`MapGrid._CREEP_PARAMS`): Architects = warm stone
+  + amber half-cell crystalline seams (static, engineered); Bloom = deep green + breathing
+  bioluminescent speckle; Mesh = near-black + electric-blue traces w/ traveling pulse. Emissive →
+  blooms under V1 glow. Uniforms re-applied per refresh so Academy-commit/Continue repaints.
+- Macro fbm noise variation on ground (paths/spawns/base stay smooth = readable corridors).
+- **Screenshot-verified via MCP + desktop capture:** fog dissolve island around the FOB, amber
+  Architect lattice on claimed cells, smooth lavender paths, faded far grid. Zero errors.
+
+**[BUG FIX] Continue skipped the Academy:** Battle3D `_ready` continued on `current_faction`
+alone — but the Academy PRE-SEEDS architects for its scenarios, and SaveManager auto-saves, so
+quitting mid-Academy resumed as an unsorted Architect. Now gates on BOTH faction AND
+`GameState.academy_completed` (2D Battle.gd parity); a mid-Academy save restarts the Academy.
+
+Both exes re-exported 2026-07-01 (21:39). **Playtest:** all three factions' creep (F1/F2/F3),
+fog frontier while exploring, grid fade while zooming, perf (fbm per-pixel — watch late-wave).
+**Next (V3 per plan):** faction substrate materials on entities (crystalline / organic / conductive).
+
+---
+
 ## Session 2026-07-01 (2) — Stage 6c FINISH: Academy in 3D + abilities plane pass — COMPILE+BOOT VERIFIED
 
 The last two parity items before merge, on `feat/3d`. (V1 atmosphere playtest-confirmed earlier today.)

@@ -62,7 +62,8 @@ self-contained node/resource and doubles as motivation fuel.
 
 ## 4. The stages (each ≈ one session, MCP-verified, export + playtest checkpoint)
 
-### V1 — Atmosphere: the environment overhaul  ← START HERE (biggest single win)
+### V1 — Atmosphere: the environment overhaul — ✅ DONE + PLAYTEST-VERIFIED 2026-07-01
+(Also: Stage 6c finished + `feat/3d` merged to main the same day — V2+ runs on main.)
 The one-session change that transforms every existing mesh and effect at once.
 1. **Switch renderer to Forward+** (desktop .exe target; Mobile buys us nothing).
    ⚠ Watch the [P1][MONITOR] OS-hang — if GPU pressure is the culprit, Forward+
@@ -141,6 +142,15 @@ materials carry the canon.
 
 ### V5 — Set pieces: galaxy, Ancients, the dread
 The canon-specific payoffs.
+0. **Academy / Pilgrimage chamber effects pass** (added 2026-07-01 — user request). The chamber
+   is currently flat 2D canvas drawing (ColorRects + `_draw` circles) and gets NOTHING from the
+   V1 atmosphere (glow/grade don't touch CanvasLayers). Canonically it IS the Pilgrimage
+   interior — the strongest set piece in the game. Options, in ascending ambition:
+   (a) 2D polish: canvas_item shaders on the chamber (soft vignette, breathing Mark glow,
+   grain, slow light sweep from the aperture) — cheap, keeps the proven 2D scene;
+   (b) rebuild the chamber as a 3D room (low-albedo material from V5.3, real aperture light
+   shaft, camera descent replacing the scale tween) — the full canon treatment, bigger lift,
+   revisit after V5.3 exists. Ship (a) in V5; decide (b) after seeing it.
 1. **Galaxy view beauty pass:** nebula backdrop, bloomed stars, owner-colored
    system glows, the Core visually *wrong* — darker than the space around it
    (light-absorbing, per canon). Slow drift. Awe.

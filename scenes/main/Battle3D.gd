@@ -116,7 +116,10 @@ func _ready() -> void:
 	## Continue (a save was loaded → GameState has a faction) restores straight into the battle;
 	## New Game runs the Academy (chamber → observed scenarios → sorting). The world is built in
 	## _start_battle() either way — the Academy triggers it when its live scenarios begin.
-	if not GameState.current_faction.is_empty():
+	## Continue requires BOTH a faction AND a completed Academy (2D parity, Battle.gd) — the
+	## Academy pre-seeds a faction for its scenarios, so a mid-Academy quit must NOT resume as
+	## an unsorted Architect; it restarts the Academy instead.
+	if not GameState.current_faction.is_empty() and GameState.academy_completed:
 		_continue_game()
 	else:
 		_start_academy()

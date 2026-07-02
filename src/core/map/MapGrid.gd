@@ -55,8 +55,14 @@ var map_data : MapData = null
 
 ## 3D terrain rendering (Stage 3). The board is one MultiMesh of flat tiles; queue_redraw() marks it
 ## dirty and _process coalesces refreshes to one per frame (claim/reveal spam → a single recolor).
+## V2 ground pass: tiles carry the ground shader (assets/shaders/ground_tiles.gdshader) — per-cell
+## fog/claimed/path state feeds it via a COLS×ROWS data texture so fog edges and faction creep
+## blend smoothly ACROSS cell boundaries (filter_linear), which flat per-instance colors can't do.
 var _terrain_mm    : MultiMeshInstance3D = null
 var _terrain_dirty : bool = false
+var _ground_mat    : ShaderMaterial = null
+var _data_img      : Image = null
+var _data_tex      : ImageTexture = null
 
 ## Phase 4: register_active_spawn() / _active_spawns are retired.
 ## Connectivity validation now derives active spawn cells from map_data.spawn_points
@@ -640,15 +646,26 @@ func _process(_delta: float) -> void:
 	if _terrain_dirty:
 		_refresh_terrain()
 
-## Builds the ground as one MultiMesh of flat tiles (per-instance colored). Tiles are slightly
-## smaller than a cell so the dark gaps between them read as grid lines.
+const _GROUND_SHADER := preload("res://assets/shaders/ground_tiles.gdshader")
+
+## Faction substrate creep for claimed ground (V2): pattern id + base tone + glow accent per
+## faction (codex/11.3 palette — Architect amber crystalline / Bloom bioluminescent green /
+## Mesh near-black electric blue). Default = the pre-V2 neutral green.
+const _CREEP_PARAMS : Dictionary = {
+	"architects": [0, Color(0.30, 0.26, 0.17), Color(1.00, 0.82, 0.38)],
+	"bloom":      [1, Color(0.10, 0.30, 0.16), Color(0.45, 1.00, 0.50)],
+	"mesh":       [2, Color(0.07, 0.09, 0.14), Color(0.35, 0.75, 1.00)],
+}
+
+## Builds the ground as one MultiMesh of full-size flat tiles running the V2 ground shader
+## (grid lines are drawn in-shader and fade with camera distance — no more see-through gaps).
 func _build_terrain() -> void:
 	_terrain_mm = MultiMeshInstance3D.new()
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(CELL_SIZE * 0.92, CELL_SIZE * 0.92)
+	pm.size = Vector2(CELL_SIZE, CELL_SIZE)
 	mm.mesh = pm
 	mm.instance_count = COLS * ROWS
 	for row in ROWS:
@@ -658,15 +675,22 @@ func _build_terrain() -> void:
 			mm.set_instance_transform(i, Transform3D(Basis(), origin))
 			mm.set_instance_color(i, _FOG_COL)
 	_terrain_mm.multimesh = mm
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 1.0
-	_terrain_mm.material_override = mat
+	_data_img = Image.create(COLS, ROWS, false, Image.FORMAT_RGBA8)
+	_data_tex = ImageTexture.create_from_image(_data_img)
+	_ground_mat = ShaderMaterial.new()
+	_ground_mat.shader = _GROUND_SHADER
+	_ground_mat.set_shader_parameter("map_tex", _data_tex)
+	_ground_mat.set_shader_parameter("map_cells", Vector2(COLS, ROWS))
+	_ground_mat.set_shader_parameter("cell_size", float(CELL_SIZE))
+	_ground_mat.set_shader_parameter("fog_color", _FOG_COL)
+	_terrain_mm.material_override = _ground_mat
 	_terrain_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_terrain_mm)
 	_refresh_terrain()
 
-## Recolors every tile from current cell state + fog. Throttled via the dirty flag (one recolor/frame).
+## Recolors every tile + rewrites the shader data texture from current cell state.
+## Throttled via the dirty flag (one refresh/frame). Fog now lives ONLY in the shader
+## (via the data texture) so its edge can dissolve smoothly across cell boundaries.
 func _refresh_terrain() -> void:
 	_terrain_dirty = false
 	if _terrain_mm == null:
@@ -677,13 +701,35 @@ func _refresh_terrain() -> void:
 		for sp in map_data.spawn_points:
 			if sp != null:
 				spawn_state[sp.position.x + sp.position.y * COLS] = sp.state
-	for i in COLS * ROWS:
-		mm.set_instance_color(i, _cell_color(i, spawn_state))
+	for row in ROWS:
+		for col in COLS:
+			var i : int = col + row * COLS
+			mm.set_instance_color(i, _cell_color(i, spawn_state))
+			var revealed : float = 1.0
+			if map_data != null and not map_data.get_meta_revealed(i):
+				revealed = 0.0
+			var kind : int = _cells[i]
+			var claimed : float = 1.0 if kind == Cell.CLAIMED else 0.0
+			## Paths / spawns / base read as worked corridors: the shader gives them less noise.
+			var pathness : float = 1.0 if (kind == Cell.PATH or kind == Cell.BASE or spawn_state.has(i)) else 0.0
+			_data_img.set_pixel(col, row, Color(revealed, claimed, pathness, 1.0))
+	_data_tex.update(_data_img)
+	_apply_faction_ground_params()
 
-## Per-tile color: fog if unrevealed; spawn overlay (active/dormant) on spawn cells; else by cell type.
+## Pushes the active faction's substrate-creep look to the ground shader (cheap; runs per refresh
+## so a faction selected mid-session — Academy commit, Continue — repaints claimed ground).
+func _apply_faction_ground_params() -> void:
+	if _ground_mat == null:
+		return
+	var params : Array = _CREEP_PARAMS.get(FactionManager.active_faction, [1, _CLAIM_COL, Color(0.45, 1.0, 0.5)])
+	_ground_mat.set_shader_parameter("creep_pattern", int(params[0]))
+	_ground_mat.set_shader_parameter("claim_base", params[1])
+	_ground_mat.set_shader_parameter("creep_accent", params[2])
+
+## Per-tile color: spawn overlay (active/dormant) on spawn cells; else by cell type.
+## (Fog is no longer applied here — the ground shader darkens unrevealed cells from the
+## data texture, giving soft frontier edges instead of hard per-tile fog.)
 func _cell_color(i: int, spawn_state: Dictionary) -> Color:
-	if map_data != null and not map_data.get_meta_revealed(i):
-		return _FOG_COL
 	if spawn_state.has(i):
 		return _SPAWN_COL if spawn_state[i] == SpawnPoint.SpawnState.ACTIVE else _SPAWN_DIM
 	match _cells[i]:
