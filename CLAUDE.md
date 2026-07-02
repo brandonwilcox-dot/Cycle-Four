@@ -34,6 +34,39 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 — VISUAL SUPERCHARGE V3: substrate materials — SCREENSHOT-VERIFIED (Architects)
+
+The three canon substrates (the Mark's three circles, codex/08) as material treatments on
+entity BODIES. New `src/vfx/SubstrateMaterials.gd` (preload pattern, statics):
+- `apply(mat, faction_id)` configures an entity's EXISTING StandardMaterial3D — never replaces
+  it, so every albedo-based mechanic keeps working untouched (damage tint, hijack cyan, pollen,
+  spawn flash, construction-ghost alpha, stealth transparency).
+- **architects** = crystalline: roughness 0.22 / metallic 0.30 / rim, amber seam-lattice emission.
+  **bloom** = biological: matte 0.90, green bioluminescent-vein emission (static now; the pulse
+  is a V4 motion item). **mesh** = conductive: metallic 0.65, albedo darkened 30% toward
+  near-black, electric-blue circuit-trace emission (traveling pulse also V4).
+- Patterns are 64×64 **code-generated emission textures** (seams / value-noise veins / circuit
+  traces; deterministic PATTERN_SEED), **object-space triplanar-mapped** (repeat ≈ 44 px) so they
+  wrap all the procedural primitives uniformly. All under V1 glow → the lattice lines bloom.
+- **Wired into 8 entities:** Tower `_mat` + Building `_mat` + Wall `_mat` + Base `_solid` +
+  Commander hull (replaces its old flat emission) → player faction; Unit + FriendlyUnit bodies →
+  `data.faction_id` (enemies wear THEIR substrate); EnemyBase body → its owner `_faction`.
+- **Readability kept clean:** HP/build bars, LoS/zone rings, engineer beam, EnemyBase core pip
+  untouched; the Tower damage-type core gem explicitly strips the pattern
+  (`emission_texture=null`, triplanar off) so it stays pure damage-type color = tracer match.
+- Deliberately skipped: Convoy (P2 polish), AncientWatcher (V5 low-albedo treatment), H5
+  faction-distinct silhouettes (still backlog).
+
+**Verified:** MCP boot zero errors; desktop screenshot in the Academy scenario shows the FOB +
+Commander in Architect crystalline (amber seams matching the ground creep). Clean export = compile
+check; both exes re-exported 2026-07-02. **Playtest:** all three factions (F1/F2/F3) — substrate
+readable per faction, tint mechanics intact (hijack cyan / damage fade / ghost alpha), tower gem
+still reads damage type, perf. Tune in SubstrateMaterials (energies, uv1_scale, PBR params).
+**Next (V4 per plan):** motion — GPUParticles, dissolve deaths, rising construction, recoil,
+walk cycles, screen shake; + the Bloom pulse / Mesh trace-scroll animation hooks.
+
+---
+
 ## Session 2026-07-01 (4) — V2b: TWO-TIER FOG + wave feel pass — SCREENSHOT-VERIFIED
 
 Direct response to the V2 playtest (Architects). User directives implemented / triaged:
