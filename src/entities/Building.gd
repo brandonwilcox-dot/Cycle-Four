@@ -305,8 +305,12 @@ func _build_visual() -> void:
 
 	_refresh_build_visual()
 
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+
+## V3: garrison bodies carry the player faction's substrate.
 func _mat(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_color = col
+	_SUBSTRATE.apply(m, FactionManager.active_faction)
 	_body_mats.append(m)
 	return m

@@ -238,9 +238,13 @@ func _build_visual() -> void:
 	_hp_fill = _make_bar(Color(0.20, 0.90, 0.20), bar_y + 0.1, 90.0)   ## fill
 	_hp_mat = _hp_fill.material_override as StandardMaterial3D
 
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+
+## V3: the FOB structure carries the player faction's substrate.
 func _solid(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_color = col
+	_SUBSTRATE.apply(m, FactionManager.active_faction)
 	return m
 
 func _make_bar(col: Color, y: float, width: float) -> MeshInstance3D:

@@ -10,6 +10,7 @@ extends Node3D
 
 const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 
 const AGGRO_RADIUS    : float = 240.0
 const MAX_LEASH       : float = 220.0
@@ -187,6 +188,8 @@ func _build_visual() -> void:
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var m : StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_color = data.color_hint if data != null else Color.CYAN
+	if data != null:
+		_SUBSTRATE.apply(m, data.faction_id)   ## V3: army wears its faction's substrate
 	_mesh.material_override = m
 	add_child(_mesh)
 

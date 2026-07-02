@@ -14,6 +14,7 @@ extends Node3D
 const Combat = preload("res://src/combat/Combat.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 
 const VISION_RADIUS         : int   = 3
 const SENSOR_RADIUS         : int   = 9
@@ -428,9 +429,8 @@ func _build_visual() -> void:
 	_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var bmat : StandardMaterial3D = StandardMaterial3D.new()
 	bmat.albedo_color = Color(1.0, 0.82, 0.18)
-	bmat.emission_enabled = true
-	bmat.emission = Color(0.8, 0.6, 0.1)
-	bmat.emission_energy_multiplier = 0.5
+	## V3: the Commander's hull carries the faction substrate (replaces the old flat emission).
+	_SUBSTRATE.apply(bmat, FactionManager.active_faction)
 	_body.material_override = bmat
 	add_child(_body)
 

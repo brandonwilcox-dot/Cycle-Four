@@ -9,6 +9,7 @@
 extends Node3D
 
 const WORLD3D = preload("res://src/core/World3D.gd")
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 
 const MAX_HEALTH : float = 500.0
 const BODY_SIZE   : float = 56.0
@@ -118,6 +119,7 @@ func _build_visual() -> void:
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var bmat : StandardMaterial3D = StandardMaterial3D.new()
 	bmat.albedo_color = BODY_COLOR
+	_SUBSTRATE.apply(bmat, _faction)   ## V3: the base wears its owner faction's substrate
 	body.material_override = bmat
 	add_child(body)
 

@@ -495,6 +495,8 @@ func _build_visual() -> void:
 	cmat.emission_enabled = true
 	cmat.emission = ccol
 	cmat.emission_energy_multiplier = 1.6
+	cmat.emission_texture = null       ## the core gem is pure damage-type color — no substrate
+	cmat.uv1_triplanar = false         ## pattern (readability: it must match the tracer exactly)
 	core.material_override = cmat
 	add_child(core)
 
@@ -542,10 +544,14 @@ func _build_visual() -> void:
 
 	_refresh_build_visual()
 
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+
 ## Builds a StandardMaterial3D, tracking it so ghosting can fade the whole tower while unbuilt.
+## V3: body parts carry the player faction's substrate (crystalline / organic / conductive).
 func _mat(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_color = col
+	_SUBSTRATE.apply(m, FactionManager.active_faction)
 	_body_mats.append(m)
 	return m
 

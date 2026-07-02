@@ -12,6 +12,7 @@ extends Node3D
 const Combat = preload("res://src/combat/Combat.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
@@ -460,6 +461,8 @@ func _build_visual() -> void:
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_mat = StandardMaterial3D.new()
 	_mat.albedo_color = _base_color
+	if data != null:
+		_SUBSTRATE.apply(_mat, data.faction_id)   ## V3: enemies wear THEIR faction's substrate
 	if data != null and data.stealth:
 		_mat.albedo_color.a = 0.85
 		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

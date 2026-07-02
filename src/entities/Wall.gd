@@ -109,9 +109,13 @@ func _build_visual() -> void:
 	_build_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_build_bar)
 
+const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+
+## V3: walls carry the player faction's substrate (in practice: Architect crystalline).
 func _mat(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_color = col
+	_SUBSTRATE.apply(m, FactionManager.active_faction)
 	_body_mats.append(m)
 	return m
 
