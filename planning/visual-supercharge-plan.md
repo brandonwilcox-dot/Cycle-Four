@@ -100,6 +100,10 @@ The board is 60×34 flat colored tiles; this stage makes it a *place*.
 4. **Fog of war as shader, not tile tint:** a fog texture sampled by the ground
    shader → soft dissolving edges, unexplored = darker + desaturated (canon:
    the unknown *absorbs light*). Sight radii become soft light pools.
+   **V2b (shipped 2026-07-01, user playtest directive): TWO-TIER fog** — live
+   line-of-sight pools (Commander/FOB/towers/garrisons/units) vs explored-but-
+   unwatched "memory" (dim, desaturated, claims still legible) vs unexplored
+   (near-black). The dark is ever-present; light is something you *hold*.
 5. **Claimed territory = faction creep** (the canon moment of this stage):
    claiming re-textures ground in the faction substrate — Architects: geometric
    crystalline tiling spreading in straight seams; Bloom: mossy growth +

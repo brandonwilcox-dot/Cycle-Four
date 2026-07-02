@@ -78,11 +78,14 @@ var _menu_open      : bool = false         ## gates gameplay input; freeze via E
 var _pause_status   : Label = null         ## in-menu confirmation line (e.g. "Game saved.")
 
 ## Stage 6b waves — paced, finite waves with a grace period and rests (not an unending stream).
-const SPAWN_INTERVAL : float = 1.6    ## seconds between units within a wave
-const WAVE_GRACE     : float = 8.0    ## quiet time before the first wave (build a defense)
-const WAVE_REST      : float = 14.0   ## quiet time between waves
-const WAVE_SIZE_BASE : int   = 5      ## wave 1 size; +2 each subsequent wave
-const MAX_LIVE_ENEMIES : int = 24     ## hard cap on concurrent hostiles — never let the field flood
+## V2b feel pass (playtest 2026-07-01: "waves aren't waves — just a trickle"): units burst out
+## in a tight pack, waves are bigger, and the lull between them is a real lull. The REAL fix is
+## wave-system parity (WaveManager/WaveTableBuilder — backlog J1); these are placeholder tunables.
+const SPAWN_INTERVAL : float = 0.5    ## seconds between units within a wave — a pack, not a drip
+const WAVE_GRACE     : float = 12.0   ## quiet time before the first wave (build a defense)
+const WAVE_REST      : float = 22.0   ## quiet time between waves — a lull that means something
+const WAVE_SIZE_BASE : int   = 10     ## wave 1 size; +3 each subsequent wave
+const MAX_LIVE_ENEMIES : int = 48     ## hard cap on concurrent hostiles — never let the field flood
 var _unit_layer  : Node3D = null
 var _spawn_cells : Array[Vector2i] = []
 var _spawn_idx   : int   = 0
@@ -102,6 +105,7 @@ func _ready() -> void:
 	EventBus.academy_phase_ended.connect(_on_academy_phase_ended)
 	EventBus.academy_spawn_requested.connect(_on_academy_spawn)
 	EventBus.academy_clear_units.connect(_on_academy_clear)
+	EventBus.wave_called_early.connect(_on_wave_called_early)   ## HUD Begin Waves → wave now
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -145,6 +149,7 @@ func _exit_tree() -> void:
 		[EventBus.academy_phase_ended, _on_academy_phase_ended],
 		[EventBus.academy_spawn_requested, _on_academy_spawn],
 		[EventBus.academy_clear_units, _on_academy_clear],
+		[EventBus.wave_called_early, _on_wave_called_early],
 	]:
 		if (sig_cb[0] as Signal).is_connected(sig_cb[1]):
 			(sig_cb[0] as Signal).disconnect(sig_cb[1])
@@ -1103,10 +1108,16 @@ func _restore_territory_development(dev: Dictionary) -> void:
 ## Begin the next wave: size grows each wave; announce it.
 func _start_next_wave() -> void:
 	_wave_num += 1
-	_wave_left = WAVE_SIZE_BASE + (_wave_num - 1) * 2
+	_wave_left = WAVE_SIZE_BASE + (_wave_num - 1) * 3
 	_resting = false
 	_wave_timer = 0.0   ## first unit of the wave spawns right away
 	EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles." % [_wave_num, _wave_left], "warning")
+
+## HUD "Begin Waves" button (→ WaveManager.begin_waves → wave_called_early): skip the rest of
+## the current grace/lull and bring the wave now. No-op mid-wave or during Academy scenarios.
+func _on_wave_called_early() -> void:
+	if _battle_started and not _academy_scenarios_active and _resting:
+		_start_next_wave()
 
 ## Reset the wave cadence (fresh battle / after a galaxy deploy): grace period, wave 1 next.
 func _reset_waves() -> void:

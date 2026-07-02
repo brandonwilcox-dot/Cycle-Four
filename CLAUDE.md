@@ -34,6 +34,39 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-01 (4) — V2b: TWO-TIER FOG + wave feel pass — SCREENSHOT-VERIFIED
+
+Direct response to the V2 playtest (Architects). User directives implemented / triaged:
+
+**Two-tier fog (user: "line of sight should always remain visible, but as you move away the
+fog returns… the dark/ever-present threat"):**
+- `MapGrid`: live line-of-sight recomputed every 0.15s (`VIS_REFRESH`) from friendly eyes —
+  Commander (asks `get_detector_radius`), FOB 4.5 cells, towers 3, garrisons 2.5, friendly units 2
+  (`VIS_GROUP_RADII`; construction ghosts excluded via `is_built`). Fed to the ground shader via
+  the data texture **A channel**; only marks terrain dirty when the lit set changes.
+- Shader: three tiers — **watched** (fully lit, soft noisy pool edges), **explored memory**
+  (dim ~38%, desaturated, cool — claims/paths legible but shadowed; creep glow drops to 20%),
+  **unknown** (near-black dissolve, unchanged). Exploration still works exactly as before —
+  reveal/claim mechanics untouched; this is presentation on top.
+- **Screenshot-verified via MCP**: all three tiers visible in one frame (lit pools around
+  Commander+FOB, grey memory ring, black frontier).
+
+**Wave feel pass (user: "waves aren't really waves — a stream; never enough units to stress
+the graphics; I don't even press Begin Waves"):**
+- Placeholder-driver tunables: in-wave burst 0.5s (was 1.6), wave 1 = 10 units +3/wave (was 5+2),
+  rest 22s (was 14), grace 12s, live cap 48 (was 24).
+- **Begin Waves button wired**: HUD → `WaveManager.begin_waves()` → `wave_called_early` →
+  Battle3D `_on_wave_called_early` skips the rest of the grace/lull. No-op mid-wave / in Academy.
+- **The real fix is backlog J1** (playtest-backlog addendum 2026-07-01): port the true wave system
+  (WaveManager/WaveTableBuilder — counter-faction composition, preview/announce, economy loop)
+  into Battle3D. Also logged: **J3 map exploration pacing** (map fully explored in ~90s — couples
+  with F1 terrain features, which the user notes would also make the ground shading land harder).
+
+Both exes re-exported 2026-07-01 (22:59). **Playtest:** fog tiers while expanding + losing ground
+(does memory read as "yours but unwatched"?), wave burst feel + Begin Waves, perf at the 48 cap.
+
+---
+
 ## Session 2026-07-01 (3) — VISUAL SUPERCHARGE V2: ground pass — SCREENSHOT-VERIFIED, playtest pending
 
 On main. Also: Academy centering fix (`7b496dc` — chamber is authored around the node origin;

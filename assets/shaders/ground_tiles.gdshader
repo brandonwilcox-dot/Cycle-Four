@@ -6,8 +6,10 @@
 // unknown absorbs light, codex/04), and claimed territory rendered as faction substrate
 // creep: Architect crystalline seams / Bloom bioluminescent growth / Mesh circuit traces.
 //
-// map_tex (COLS×ROWS, filter_linear): R = revealed, G = claimed, B = path-ness (paths/
-// spawns/base get less noise), A unused. MapGrid._refresh_terrain updates it.
+// map_tex (COLS×ROWS, filter_linear): R = revealed (permanently explored), G = claimed,
+// B = path-ness (paths/spawns/base get less noise), A = LIT (inside a friendly sight circle
+// right now). Three fog tiers: unknown (near-black) / explored memory (dim, desaturated —
+// the dark is ever-present) / watched (fully lit). MapGrid._refresh_terrain updates it.
 shader_type spatial;
 render_mode cull_back;
 
@@ -66,6 +68,7 @@ void fragment() {
 	float revealed = data.r;
 	float claimed  = data.g;
 	float pathness = data.b;
+	float lit_raw  = data.a;
 
 	// --- base: instance color + macro variation (paths stay smoother = readable corridors)
 	float n = fbm(wpos.xz * 0.013);
@@ -103,13 +106,22 @@ void fragment() {
 	float line = smoothstep(0.44, 0.478, max(gc.x, gc.y));
 	base *= 1.0 - line * 0.38 * grid_fade;
 
-	// --- fog of war: smooth dissolve at the explored frontier; unexplored absorbs light
+	// --- fog of war, three tiers ---
+	// unknown: near-black, noisy dissolve frontier (the unknown absorbs light).
+	// explored memory: you keep the map knowledge, but unwatched ground sinks into a dim,
+	// desaturated dark — the ever-present threat. Claims/paths stay legible, just shadowed.
+	// watched: soft light pools around anything with eyes (Commander/FOB/towers/garrisons/units).
 	float e = revealed + (fbm(wpos.xz * 0.02 + vec2(31.0)) - 0.5) * 0.35;
-	float vis = smoothstep(0.35, 0.62, e);
+	float explored = smoothstep(0.35, 0.62, e);
+	float lit = smoothstep(0.30, 0.70, lit_raw + (fbm(wpos.xz * 0.025 + vec2(7.3)) - 0.5) * 0.30);
+
+	float luma = dot(base, vec3(0.3333));
+	vec3 memory_col = (mix(vec3(luma), base, 0.45) * 0.38) + fog_color * 0.35;
+	vec3 seen = mix(memory_col, base, lit);
 	vec3 fogged = fog_color * (0.75 + 0.5 * n);
 
-	ALBEDO = mix(fogged, base, vis);
-	EMISSION = emis * vis;
+	ALBEDO = mix(fogged, seen, explored);
+	EMISSION = emis * explored * (0.20 + 0.80 * lit);   // creep glows faintly from memory, fully when watched
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.15;
 }

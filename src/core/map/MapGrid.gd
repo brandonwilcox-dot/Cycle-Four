@@ -64,6 +64,21 @@ var _ground_mat    : ShaderMaterial = null
 var _data_img      : Image = null
 var _data_tex      : ImageTexture = null
 
+## V2b two-tier fog (playtest 2026-07-01): live line-of-sight, separate from permanent
+## exploration. Cells are LIT only inside a friendly entity's sight circle; explored-but-
+## unwatched ground drops to a dim "memory" (the ever-present dark — canon). Recomputed on
+## a throttle from friendly groups; fed to the ground shader via the data texture A channel.
+const VIS_REFRESH : float = 0.15
+## Fallback sight radii (px) per friendly group; the Commander asks the entity itself.
+const VIS_GROUP_RADII : Dictionary = {
+	"base":           4.5 * 64.0,
+	"towers":         3.0 * 64.0,
+	"buildings":      2.5 * 64.0,
+	"friendly_units": 2.0 * 64.0,
+}
+var _visible   : PackedByteArray = PackedByteArray()
+var _vis_timer : float = 0.0
+
 ## Phase 4: register_active_spawn() / _active_spawns are retired.
 ## Connectivity validation now derives active spawn cells from map_data.spawn_points
 ## (see _all_spawns_connected()).
@@ -642,9 +657,46 @@ const _FOG_COL    : Color = Color(0.035, 0.045, 0.065)
 func queue_redraw() -> void:
 	_terrain_dirty = true
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_vis_timer -= delta
+	if _vis_timer <= 0.0:
+		_vis_timer = VIS_REFRESH
+		_recompute_visibility()   ## marks the terrain dirty when the lit set changes
 	if _terrain_dirty:
 		_refresh_terrain()
+
+## Rebuilds the live line-of-sight set from every friendly eye on the field. Cheap
+## (a few dozen circles over a 60×34 grid) and throttled to VIS_REFRESH.
+func _recompute_visibility() -> void:
+	if _visible.size() != COLS * ROWS:
+		_visible.resize(COLS * ROWS)
+	var next : PackedByteArray = PackedByteArray()
+	next.resize(COLS * ROWS)
+	var commander : Node = get_tree().get_first_node_in_group("commander")
+	if commander != null and commander.has_method("plane_pos"):
+		var r : float = 3.0 * CELL_SIZE
+		if commander.has_method("get_detector_radius"):
+			r = maxf(r, float(commander.call("get_detector_radius")))
+		_mark_circle(next, commander.call("plane_pos"), r)
+	for grp : String in VIS_GROUP_RADII:
+		for n in get_tree().get_nodes_in_group(grp):
+			if not (is_instance_valid(n) and n.has_method("plane_pos")):
+				continue
+			if n.has_method("is_built") and not bool(n.call("is_built")):
+				continue   ## construction ghosts have no eyes yet
+			_mark_circle(next, n.call("plane_pos"), float(VIS_GROUP_RADII[grp]))
+	if next != _visible:
+		_visible = next
+		_terrain_dirty = true
+
+func _mark_circle(buf: PackedByteArray, center2: Vector2, radius_px: float) -> void:
+	var r2 : float = radius_px * radius_px
+	var c_min : Vector2i = world_to_cell(center2 - Vector2(radius_px, radius_px))
+	var c_max : Vector2i = world_to_cell(center2 + Vector2(radius_px, radius_px))
+	for row in range(c_min.y, c_max.y + 1):
+		for col in range(c_min.x, c_max.x + 1):
+			if cell_to_world(col, row).distance_squared_to(center2) <= r2:
+				buf[col + row * COLS] = 1
 
 const _GROUND_SHADER := preload("res://assets/shaders/ground_tiles.gdshader")
 
@@ -712,7 +764,8 @@ func _refresh_terrain() -> void:
 			var claimed : float = 1.0 if kind == Cell.CLAIMED else 0.0
 			## Paths / spawns / base read as worked corridors: the shader gives them less noise.
 			var pathness : float = 1.0 if (kind == Cell.PATH or kind == Cell.BASE or spawn_state.has(i)) else 0.0
-			_data_img.set_pixel(col, row, Color(revealed, claimed, pathness, 1.0))
+			var lit : float = 1.0 if (i < _visible.size() and _visible[i] == 1) else 0.0
+			_data_img.set_pixel(col, row, Color(revealed, claimed, pathness, lit))
 	_data_tex.update(_data_img)
 	_apply_faction_ground_params()
 

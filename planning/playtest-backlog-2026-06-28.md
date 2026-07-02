@@ -119,6 +119,26 @@ only on fire). New items surfaced:
   formation + collision-aware movement system already captured as **C2** (and couples with **D1** enemy
   columns) — a real subsystem, not a tweak. Scope it with C2/D1 when the formations track is picked.
 
+# Addendum — 2026-07-01 (V2 ground-pass playtest, Architects)
+
+- **J1 — [MAJOR] Real wave-system parity in Battle3D.** User: "Waves aren't really waves — just a
+  stream of enemies. I don't even press Begin Waves. Never enough units to stress the graphics."
+  Battle3D's wave driver is a Stage-6b placeholder: a hardcoded mesh "Raider" trickle, no
+  `WaveManager`/`WaveTableBuilder` (so no counter-faction composition, no wave preview/announce arc,
+  no Begin-Waves economy loop). Same-day mitigation: burst cadence (0.5s in-wave), bigger waves
+  (10 + 3/wave, cap 48), real lulls (22s), Begin Waves button wired to call the wave early. The FIX
+  is porting the real wave system into Battle3D — schedule as its own arc (couples with H4 scaling
+  and the B assault arc).
+- **J2 — Two-tier fog — SHIPPED same day (V2b).** User design directive: explored ≠ watched. Live
+  line-of-sight pools around Commander/FOB/towers/garrisons/friendly units; explored-but-unwatched
+  ground falls back to a dim desaturated "memory" (claims/paths legible, shadowed); unexplored stays
+  near-black. "The dark/ever-present threat conceals the map." Tunables: `MapGrid.VIS_GROUP_RADII`,
+  shader `memory_col` mix.
+- **J3 — Map exploration pacing.** Full map explored in ~90 seconds — exploration should be an arc,
+  not a lap. Couples with F1 (terrain features — "geological or biological features" would also make
+  the fog/ground shading land harder, per user) and the galaxy-scale map-size ladder. Consider:
+  bigger boards per ring, slower base reveal radii, terrain that blocks sight lines (F1 + LoS).
+
 ## Cross-links (for whoever schedules these)
 
 - **F1/F2 enable G1/G2** — organic, terrain-following paths are the substrate dynamic
