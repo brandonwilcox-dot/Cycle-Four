@@ -21,9 +21,16 @@ const PATTERN_SEED : int = 74501   ## fixed — patterns must be identical every
 
 static var _tex_cache : Dictionary = {}
 
+## V4 motion: registered bloom/mesh materials are animated by tick() (called once per frame
+## from BattleAtmosphere) — Bloom veins breathe, Mesh traces travel. Weak refs: materials die
+## with their entities; dead (or pattern-stripped) entries are pruned during tick.
+static var _anim_bloom : Array[WeakRef] = []
+static var _anim_mesh  : Array[WeakRef] = []
+
 ## Configure `m` with the faction's substrate. Reads the albedo the caller already set and
 ## keeps it (mesh darkens toward near-black but keeps the hue). Unknown faction = no-op.
-static func apply(m: StandardMaterial3D, faction_id: String) -> StandardMaterial3D:
+## animate=false for materials that drive their own emission (unit hit-flash owns it).
+static func apply(m: StandardMaterial3D, faction_id: String, animate: bool = true) -> StandardMaterial3D:
 	match faction_id:
 		"architects":
 			m.roughness = 0.22
@@ -37,12 +44,33 @@ static func apply(m: StandardMaterial3D, faction_id: String) -> StandardMaterial
 			m.roughness = 0.90
 			m.metallic = 0.0
 			_emit(m, _tex("veins"), Color(0.45, 1.00, 0.50), 1.0)
+			if animate:
+				_anim_bloom.append(weakref(m))
 		"mesh":
 			m.roughness = 0.35
 			m.metallic = 0.65
 			m.albedo_color = m.albedo_color.darkened(0.30)
 			_emit(m, _tex("circuit"), Color(0.35, 0.75, 1.00), 1.3)
+			if animate:
+				_anim_mesh.append(weakref(m))
 	return m
+
+## Drive the living substrates. Bloom bioluminescence breathes (slow, desynchronized —
+## organic, quiet); Mesh circuit traces crawl along the shell (signal in transit).
+static func tick(t: float) -> void:
+	for i in range(_anim_bloom.size() - 1, -1, -1):
+		var m : StandardMaterial3D = _anim_bloom[i].get_ref() as StandardMaterial3D
+		if m == null or m.emission_texture == null:
+			_anim_bloom.remove_at(i)   ## freed with its entity, or pattern-stripped (core gem)
+			continue
+		m.emission_energy_multiplier = 1.0 + 0.40 * sin(t * 1.5 + float(i) * 0.73)
+	var scroll : float = t * 0.10   ## UV-repeat units/sec (~4.4 px/s of surface)
+	for i in range(_anim_mesh.size() - 1, -1, -1):
+		var m : StandardMaterial3D = _anim_mesh[i].get_ref() as StandardMaterial3D
+		if m == null or m.emission_texture == null:
+			_anim_mesh.remove_at(i)
+			continue
+		m.uv1_offset.x = scroll
 
 static func _emit(m: StandardMaterial3D, tex: Texture2D, col: Color, energy: float) -> void:
 	m.emission_enabled = true

@@ -34,6 +34,43 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 (2) — VISUAL SUPERCHARGE V4: motion pass — COMPILE+RUNTIME VERIFIED
+
+The world moves. All cosmetic-only; five systems, each independently tunable:
+- **Living substrates** — `SubstrateMaterials.tick(t)` (called per-frame from BattleAtmosphere)
+  animates registered STRUCTURE materials: Bloom veins **breathe** (±40% emission, desynchronized
+  per material), Mesh circuit traces **travel** (uv1_offset crawl). Weak-ref registry, self-prunes
+  freed/pattern-stripped mats (tower core gems stay untouched). Units register with animate=false —
+  they own their emission (hit flash) and their gait carries the life.
+- **Per-faction gaits** (`Unit._animate` / `FriendlyUnit._animate`, driven off ACTUAL plane
+  movement since last frame — early-return states like melee/stun read as planting, correct):
+  Architects **glide** (calm hover), Bloom **lope** (heavy bound + body roll), Mesh **skitter**
+  (fast shallow twitch). Bodies re-seat smoothly when stopped.
+- **Tower recoil** — `_recoil = 1.0` on fire, decays in `_update_aim`; the turret kicks back
+  along the barrel line (`_turret.basis.x`) and re-seats. Pairs with the muzzle/tracer VFX.
+- **Camera trauma shake** (`CameraRig3D.add_trauma`) — pooled, offset ∝ trauma², zoom-scaled,
+  always ends on a clean `_update_camera()` pose. Wired in Battle3D: base breach 0.22 /
+  base destroyed 0.9 / Commander down 0.55 / enemy base falls 0.5. Quiet over loud (max 10 px).
+- **Unit hit flash** — substrate emission flares ×3.5 on damage, decays over ~0.25s.
+
+**Deferred within V4** (noted in the plan): GPUParticles3D rework + dissolve deaths (CPU particles
+fine at current counts) and rising construction (needs body-root refactor or clip shader).
+
+**Verified:** fresh MCP boot + 30s+ runtime through Academy world-build with all systems hot —
+zero errors. Both exes re-exported 2026-07-02 (13:37). **Ops note:** an orphaned game window from
+a prior session survived MCP's stop (session break loses the handle) and confused a screenshot —
+it also incidentally proved the full Academy arc runs unattended to the sorting reveal (Mark
+trefoil renders). If visuals ever look stale: `Get-Process | ? MainWindowTitle -like "*Cycle
+Four*"` and kill strays before verifying.
+**Playtest:** gaits per faction (watch a Bloom wave lope vs Mesh skitter), tower kick on fire,
+breach shake (let one enemy reach the FOB), Bloom structures breathing / Mesh traces crawling,
+hit flash on tower fire. Tune: gait amp/freq in Unit/FriendlyUnit, TRAUMA_* / SHAKE_MAX_OFFSET,
+tick speeds in SubstrateMaterials, recoil 5.0px/6.0 decay in Tower.
+**Next (V5 per plan):** set pieces — galaxy beauty, Ancient desaturation, low-albedo Ruins,
+Academy/Pilgrimage chamber effects (V5.0, user-requested), wave telegraphy.
+
+---
+
 ## Session 2026-07-02 — VISUAL SUPERCHARGE V3: substrate materials — SCREENSHOT-VERIFIED (Architects)
 
 The three canon substrates (the Mark's three circles, codex/08) as material treatments on

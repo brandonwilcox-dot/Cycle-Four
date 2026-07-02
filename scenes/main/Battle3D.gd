@@ -106,6 +106,8 @@ func _ready() -> void:
 	EventBus.academy_spawn_requested.connect(_on_academy_spawn)
 	EventBus.academy_clear_units.connect(_on_academy_clear)
 	EventBus.wave_called_early.connect(_on_wave_called_early)   ## HUD Begin Waves → wave now
+	EventBus.base_damaged.connect(_on_base_damaged_shake)       ## V4: breaches thump the camera
+	EventBus.base_destroyed.connect(_on_base_destroyed_shake)
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -150,6 +152,8 @@ func _exit_tree() -> void:
 		[EventBus.academy_spawn_requested, _on_academy_spawn],
 		[EventBus.academy_clear_units, _on_academy_clear],
 		[EventBus.wave_called_early, _on_wave_called_early],
+		[EventBus.base_damaged, _on_base_damaged_shake],
+		[EventBus.base_destroyed, _on_base_destroyed_shake],
 	]:
 		if (sig_cb[0] as Signal).is_connected(sig_cb[1]):
 			(sig_cb[0] as Signal).disconnect(sig_cb[1])
@@ -973,6 +977,7 @@ func _reset_battlefield() -> void:
 
 ## Capture-on-clear: destroying the deployed territory's enemy base flips it to the player.
 func _on_enemy_base_destroyed(_spawn_id: StringName) -> void:
+	_shake(0.5)   ## V4: a base falling is a big moment — everywhere, not just deploys
 	if _deployed_node == "":
 		return   ## home/demo base — not a deploy target
 	var node_id : String = _deployed_node
@@ -1119,6 +1124,18 @@ func _on_wave_called_early() -> void:
 	if _battle_started and not _academy_scenarios_active and _resting:
 		_start_next_wave()
 
+## -- V4 screen shake (quiet over loud: breaches thump, deaths land) --
+
+func _shake(amount: float) -> void:
+	if _rig != null and _rig.has_method("add_trauma"):
+		_rig.call("add_trauma", amount)
+
+func _on_base_damaged_shake(_amount: float, _attacker: Dictionary) -> void:
+	_shake(0.22)
+
+func _on_base_destroyed_shake() -> void:
+	_shake(0.9)
+
 ## Reset the wave cadence (fresh battle / after a galaxy deploy): grace period, wave 1 next.
 func _reset_waves() -> void:
 	_wave_num   = 0
@@ -1150,6 +1167,7 @@ func _spawn_enemy_from(cell: Vector2i) -> void:
 func _on_commander_destroyed() -> void:
 	if not is_instance_valid(_commander):
 		return
+	_shake(0.55)   ## V4: losing the Commander lands physically
 	if _academy_scenarios_active:
 		_commander.call("revive")
 		return

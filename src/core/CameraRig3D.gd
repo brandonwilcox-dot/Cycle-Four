@@ -23,6 +23,11 @@ const YAW_DRAG_SENS     : float = 0.006    ## rad per pixel of horizontal drag
 const PITCH_DRAG_SENS   : float = 0.20     ## deg per pixel of vertical drag
 const PITCH_WHEEL_STEP  : float = 4.0      ## deg per wheel notch while rotating
 
+## V4 screen shake — a trauma pool that decays; offset ∝ trauma² so small hits barely
+## register and big ones land. Quiet over loud: the max offset is deliberately small.
+const TRAUMA_DECAY     : float = 1.6    ## trauma/sec
+const SHAKE_MAX_OFFSET : float = 10.0   ## px at full trauma (scaled by zoom)
+
 var _dist       : float = 1600.0
 var _yaw        : float = 0.0                  ## radians
 var _pitch      : float = DEFAULT_PITCH_DEG    ## degrees
@@ -30,6 +35,13 @@ var _pref_yaw   : float = 0.0                  ## preferred view (Insert sets, D
 var _pref_pitch : float = DEFAULT_PITCH_DEG
 var _camera     : Camera3D = null
 var _rotating   : bool = false
+var _trauma     : float = 0.0
+var _shake_rng  : RandomNumberGenerator = RandomNumberGenerator.new()
+
+## Feed the shake pool (base breach, base destroyed, Commander down). Clamped; several
+## small hits build to a visible shudder rather than each being invisible.
+func add_trauma(amount: float) -> void:
+	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
 func _ready() -> void:
 	add_to_group("camera_rig")   ## GalaxyView finds the rig here to gate its visibility
@@ -91,6 +103,17 @@ func _process(delta: float) -> void:
 	if yaw_in != 0.0:
 		_yaw += yaw_in * YAW_KEY_SPEED * delta
 		_update_camera()
+
+	## V4 screen shake: reset to the clean pose, then jitter the camera off it. The final
+	## frame (trauma reaching 0) ends on _update_camera() — the pose is always left clean.
+	if _trauma > 0.0:
+		_trauma = maxf(0.0, _trauma - TRAUMA_DECAY * delta)
+		_update_camera()
+		var s : float = _trauma * _trauma * SHAKE_MAX_OFFSET * (_dist / 1600.0)
+		_camera.position += Vector3(
+			_shake_rng.randf_range(-s, s),
+			_shake_rng.randf_range(-s, s),
+			0.0)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

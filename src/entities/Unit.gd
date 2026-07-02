@@ -86,6 +86,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead:
 		return
+	_animate(delta)   ## V4 gait + hit flash — before the early-return state branches
 	## Phase 4B Mesh hijack: revert on expiry; while active, fight former allies and skip enemy logic.
 	if _hijacked and Time.get_ticks_msec() / 1000.0 >= _hijacked_until:
 		_end_hijack()
@@ -211,6 +212,43 @@ func reroute(map_grid: Node) -> void:
 		return
 	_waypoints.assign(new_path)
 	_wp_index = 1
+
+## -- V4 motion: per-faction gait + hit flash ------------------------------------------
+## Driven off ACTUAL plane movement since last frame, so any early return in _process
+## (melee engagement, stun, pollen) reads as the unit planting itself — correct.
+
+const _GAIT_SETTLE : float = 8.0   ## how fast the body re-seats when stopped
+
+var _anim_t      : float = 0.0
+var _anim_last_p : Vector2 = Vector2(INF, INF)
+var _hit_flash   : float = 0.0
+var _base_emission : float = 0.0
+
+func _animate(delta: float) -> void:
+	if _mesh == null:
+		return
+	var moved : bool = _anim_last_p.is_finite() and _p.distance_squared_to(_anim_last_p) > 0.02
+	_anim_last_p = _p
+	if moved:
+		match data.faction_id if data != null else "":
+			"architects":   ## glide — a calm engineered hover, no footfall
+				_anim_t += delta * 2.0
+				_mesh.position.y = BODY_LIFT + 1.5 + sin(_anim_t * TAU * 0.5) * 1.0
+			"bloom":        ## lope — heavy organic bound with body roll
+				_anim_t += delta * 4.0
+				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 4.0
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.07
+			"mesh":         ## skitter — fast, shallow, twitchy
+				_anim_t += delta * 10.0
+				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 1.4
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.035
+	else:
+		_mesh.position.y = lerpf(_mesh.position.y, BODY_LIFT, minf(1.0, delta * _GAIT_SETTLE))
+		_mesh.rotation.z = lerpf(_mesh.rotation.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
+	## Hit flash: the substrate emission flares on damage and re-settles.
+	if _hit_flash > 0.0 and _base_emission > 0.0 and _mat != null:
+		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
+		_mat.emission_energy_multiplier = _base_emission * (1.0 + 2.5 * _hit_flash)
 
 func set_debuff(speed_mult: float) -> void:
 	if data != null and data.status_immune:
@@ -384,6 +422,7 @@ func take_damage(amount: float, damage_type: int = -1) -> bool:
 	var mult : float = Combat.multiplier(damage_type, data.armor_type) if damage_type >= 0 else 1.0
 	var effective : float = max(0.0, amount * mult - data.armor)
 	_current_health -= effective
+	_hit_flash = 1.0   ## V4: the substrate flares on impact (decays in _animate)
 	_update_health_visual()
 	if _current_health <= 0.0:
 		_die()
@@ -462,7 +501,10 @@ func _build_visual() -> void:
 	_mat = StandardMaterial3D.new()
 	_mat.albedo_color = _base_color
 	if data != null:
-		_SUBSTRATE.apply(_mat, data.faction_id)   ## V3: enemies wear THEIR faction's substrate
+		## V3: enemies wear THEIR faction's substrate. animate=false — the unit drives its own
+		## emission (V4 hit flash below); structures get the shared breathe/scroll animation.
+		_SUBSTRATE.apply(_mat, data.faction_id, false)
+	_base_emission = _mat.emission_energy_multiplier if _mat.emission_enabled else 0.0
 	if data != null and data.stealth:
 		_mat.albedo_color.a = 0.85
 		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

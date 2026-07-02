@@ -84,6 +84,7 @@ var _hijack_timer  : float = 2.0
 
 ## 3D visual nodes.
 var _turret    : Node3D = null
+var _recoil    : float = 0.0   ## V4: 1.0 on fire → decays; turret kicks back along the barrels
 var _body_mats : Array[StandardMaterial3D] = []   ## for ghosting (construction)
 var _build_bar : MeshInstance3D = null
 var _base_height : float = 40.0
@@ -184,6 +185,7 @@ func _try_attack() -> void:
 		## Cosmetic tracer/muzzle (2D Vfx no-ops in the 3D world; 3D VFX arrives in Stage 4).
 		Vfx.muzzle(_p, dt)
 		Vfx.bolt(_p, tpos, dt)
+		_recoil = 1.0   ## V4: turret kick (re-seats in _update_aim)
 		var killed : bool = target.take_damage(effective_damage, dt)
 		if killed:
 			_award_xp_for_kill(target)
@@ -391,6 +393,10 @@ func _update_aim(delta: float) -> void:
 	_aim_angle = lerp_angle(_aim_angle, _aim_target_angle, minf(1.0, AIM_TURN_RATE * delta))
 	if _turret != null:
 		_turret.rotation.y = -_aim_angle   ## plane angle → 3D yaw (barrels built along +X)
+		## V4 recoil: the turret kicks back along the barrel line on fire and re-seats.
+		if _recoil > 0.0:
+			_recoil = maxf(0.0, _recoil - delta * 6.0)
+		_turret.position = Vector3(0.0, _base_height, 0.0) - _turret.basis.x * (5.0 * _recoil)
 
 func _tier_sides(t: int) -> int:
 	return [4, 6, 8][clampi(t - 1, 0, 2)]

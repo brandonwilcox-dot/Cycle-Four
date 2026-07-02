@@ -129,6 +129,13 @@ materials carry the canon.
 
 ### V4 — Motion: make the world feel alive
 3D successor of the juice pass. All cosmetic-only.
+**Shipped 2026-07-02:** substrate animation (Bloom veins breathe / Mesh traces travel — driven
+per-frame from BattleAtmosphere via SubstrateMaterials.tick), per-faction unit gaits (Architect
+glide / Bloom lope / Mesh skitter, driven off actual movement), tower turret recoil, camera
+trauma shake (base breach/destroyed, Commander down, enemy base falls), unit hit-flash
+(substrate emission flares on damage). **Still open in V4:** item 1 (GPUParticles3D rework +
+dissolve deaths — CPU particles still fine at current counts) and item 2 (rising construction —
+needs a body-root refactor or clip shader; ghost-alpha remains the construction read for now).
 1. Upgrade `Vfx` internals to **GPUParticles3D** (keep API identical — callers
    untouched): impact sparks with light emission, faction-tinted death
    dissolves (shader alpha-noise dissolve, not sphere-pop).

@@ -8,6 +8,7 @@
 extends Node3D
 
 const SKY_SHADER := preload("res://assets/shaders/starfield_sky.gdshader")
+const SUBSTRATE  := preload("res://src/vfx/SubstrateMaterials.gd")
 
 ## --- key / fill lights ---------------------------------------------------------------
 const KEY_ROTATION_DEG   : Vector3 = Vector3(-52.0, -40.0, 0.0)   ## matches the pre-V1 sun angle
@@ -101,7 +102,9 @@ func _build_environment() -> void:
 
 ## Depth fog sells scale at tactical pitch but would wash out the galaxy graph at zoom-out
 ## (nodes sit 5000–14000 px away), so fade it toward zero while the rig reports galaxy zoom.
+## Also the heartbeat for the living substrates (V4): Bloom breathes, Mesh traces travel.
 func _process(delta: float) -> void:
+	SUBSTRATE.tick(Time.get_ticks_msec() / 1000.0)
 	if _env == null:
 		return
 	if not is_instance_valid(_rig):

@@ -58,7 +58,38 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead:
 		return
+	_animate(delta)   ## V4 gait — driven off actual movement
 	update(delta)
+
+## -- V4 motion: per-faction gait (mirrors Unit._animate; rest height is the build Y) --
+
+const _GAIT_REST_Y : float = 10.0
+const _GAIT_SETTLE : float = 8.0
+
+var _anim_t      : float = 0.0
+var _anim_last_p : Vector2 = Vector2(INF, INF)
+
+func _animate(delta: float) -> void:
+	if _mesh == null:
+		return
+	var moved : bool = _anim_last_p.is_finite() and _p.distance_squared_to(_anim_last_p) > 0.02
+	_anim_last_p = _p
+	if moved:
+		match data.faction_id if data != null else "":
+			"architects":
+				_anim_t += delta * 2.0
+				_mesh.position.y = _GAIT_REST_Y + 1.2 + sin(_anim_t * TAU * 0.5) * 0.8
+			"bloom":
+				_anim_t += delta * 4.0
+				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 3.0
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.07
+			"mesh":
+				_anim_t += delta * 10.0
+				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 1.2
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.035
+	else:
+		_mesh.position.y = lerpf(_mesh.position.y, _GAIT_REST_Y, minf(1.0, delta * _GAIT_SETTLE))
+		_mesh.rotation.z = lerpf(_mesh.rotation.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 
 func update(delta: float) -> void:
 	if data == null:
@@ -189,7 +220,9 @@ func _build_visual() -> void:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_color = data.color_hint if data != null else Color.CYAN
 	if data != null:
-		_SUBSTRATE.apply(m, data.faction_id)   ## V3: army wears its faction's substrate
+		## V3: army wears its faction's substrate (animate=false: small moving bodies
+		## don't need the shared breathe/scroll — their gait carries the life).
+		_SUBSTRATE.apply(m, data.faction_id, false)
 	_mesh.material_override = m
 	add_child(_mesh)
 
