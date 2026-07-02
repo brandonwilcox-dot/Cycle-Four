@@ -590,6 +590,9 @@ func _start_academy() -> void:
 	add_child(_academy_layer)
 	_academy = ACADEMY_SCENE.instantiate()
 	_academy.connect("selection_confirmed", _on_academy_confirmed)
+	## The chamber is authored AROUND the node origin (the chapter-0 zoom tween scales around it),
+	## so the instance must sit at screen centre — the 2D Battle.tscn placed it at (960, 540).
+	(_academy as Node2D).position = get_viewport().get_visible_rect().size * 0.5
 	_academy_layer.add_child(_academy)
 
 ## Chapter 1 begins: the Academy pre-seeded a neutral faction — build the live world for the
