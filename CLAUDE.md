@@ -77,7 +77,14 @@ scenario spawns with ZERO errors (only standing benign warnings + pre-existing A
 warnings, now parsed in this scene). Debug exe re-exported 2026-07-01. **Runtime: needs hand
 playtest** — full Academy arc (chamber → 3 scenarios → sorting → commit), F1 skip, Q Lance flash,
 W field ring (unlocks at sub-path commit — test via milestone/dev), Commander death retreat.
-**Next: merge `feat/3d` → main** (main_scene already Root.tscn; 2D Battle.tscn stays as fallback).
+**MERGED `feat/3d` → main same session** (`5bc66e8`, --no-ff): main had not moved since the 2D
+checkpoint `69f3694`, clean merge; Root→Title boot verified clean on main via MCP; **BOTH exes
+re-exported from main 2026-07-01** (release + debug). The 3D game IS the game now. `feat/3d`
+branch kept for history; `scenes/main/Battle.tscn` (2D) remains as a fallback reference.
+**Hand-playtest checklist for the merged build:** full Academy arc in the RELEASE exe (chamber
+line → 3 scenarios with real Commander control → sorting reveal → commit → real game with enemy
+base + waves), F1/F2/F3 skip in DEBUG, Q Lance pulse, Commander-death forced retreat, save →
+Continue, galaxy deploy/capture, V1 atmosphere perf late-wave ([P1][MONITOR] hang watch).
 
 ---
 
