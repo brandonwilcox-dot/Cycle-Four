@@ -7,6 +7,7 @@ extends Node3D
 
 const WORLD3D     = preload("res://src/core/World3D.gd")
 const CAM_RIG     = preload("res://src/core/CameraRig3D.gd")
+const ATMOSPHERE  = preload("res://src/core/BattleAtmosphere.gd")
 const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
 const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
@@ -147,21 +148,10 @@ func _on_wall_req() -> void:
 	_place_wall = true
 	_set_placing(true)
 
+## V1: lights + environment (sky/tonemap/glow/fog/SSAO/grade) live in the shared atmosphere
+## rig — see src/core/BattleAtmosphere.gd + planning/visual-supercharge-plan.md.
 func _setup_environment() -> void:
-	var light : DirectionalLight3D = DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-52.0, -40.0, 0.0)
-	light.light_energy = 1.15
-	light.shadow_enabled = true
-	add_child(light)
-
-	var we : WorldEnvironment = WorldEnvironment.new()
-	var env : Environment = Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.04, 0.06, 0.09)
-	env.ambient_light_color = Color(0.45, 0.5, 0.6)
-	env.ambient_light_energy = 0.55
-	we.environment = env
-	add_child(we)
+	add_child(ATMOSPHERE.new())
 
 ## Stage 3: instantiate the real MapGrid — it generates a map, renders the 3D terrain (MultiMesh
 ## tiles colored by cell type + fog), joins the "map_grid" group, and drives claim/reveal/sight for

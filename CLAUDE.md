@@ -34,6 +34,38 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-01 — VISUAL SUPERCHARGE V1: atmosphere overhaul — COMPILE VERIFIED, playtest pending
+
+New track (user): mechanics are solid — supercharge the graphics toward the Codex look.
+Plan: `planning/visual-supercharge-plan.md` (stages V1–V6). This session = V1, on `feat/3d`.
+
+- **Renderer Mobile → Forward+** (`project.godot` rendering_method) — was silently capping the
+  pipeline (no SSAO, weak glow, no volumetrics). Desktop .exe target, so Forward+ is right.
+  ⚠ Perf gate: watch the [P1][MONITOR] OS hang class in playtest after this switch.
+- **New `src/core/BattleAtmosphere.gd`** — one shared cosmetic-only rig owning the whole look
+  (Battle3D `_setup_environment` now just adds it; future 3D screens reuse it). Builds:
+  warm amber key light (prior sun angle, shadows now visible at RTS range —
+  `directional_shadow_max_distance` 6000 px; default 100 was sub-visible at pixel scale) +
+  cool blue fill (melancholy = warm/cool tension); WorldEnvironment with **AgX tonemap**,
+  **glow** (every existing emissive — tracers, damage cores, pulses, galaxy spheres — now blooms;
+  SCREEN blend, hdr_threshold 1.0), **exp depth fog** calibrated to pixel scale (0.00005; fades to
+  0 at galaxy zoom via `camera_rig.is_galaxy_zoom()` so the graph stays clear), **SSAO**
+  (radius 24 px ≈ ⅓ cell — grounds structures onto tiles), subtle grade (saturation 0.95,
+  contrast 1.03 — melancholy not grimdark). All tunables are consts at the top of the file.
+- **New `assets/shaders/starfield_sky.gdshader`** (first real asset!) — procedural sky: voxel-hash
+  point stars (2 layers, peaks >1.0 so they faintly bloom), dim fbm nebula (indigo/violet),
+  slow drift. Deliberately DIM per codex/09 (quiet over loud; the board is the subject).
+
+**Compile:** Battle3D booted clean via MCP under Forward+ (zero new errors; only standing benign
+EventBus warnings). Debug exe re-exported 2026-07-01. **Runtime: needs playtest** — confirm: sky +
+nebula visible, emissives bloom (fire a tower; check tracer/impact), shadows read, fog haze at
+tactical pitch, fog gone at galaxy zoom, HUD/readability unaffected, **frame rate stable late-wave
+(Forward+ perf gate)**. Tune consts in BattleAtmosphere.gd + sky shader uniforms.
+**Next (V2 per plan):** ground/terrain shader + fog-of-war dissolve + faction-creep claimed ground.
+Sequencing rec: finish Stage 6c (Academy, AbilityController) + merge before V2.
+
+---
+
 ## Session 2026-06-28 (4) — 3D migration Stages 0/1/2a — on branch feat/3d
 
 Branch `feat/3d` (main = 2D checkpoint `69f3694`). Per `planning/3d-migration-plan.md`:
