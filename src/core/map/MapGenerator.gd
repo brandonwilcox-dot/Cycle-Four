@@ -65,9 +65,15 @@ static func _try_generate(rng: RandomNumberGenerator, biome: StringName,
 	data.topology_template = topology_template
 	data.init_arrays()
 
-	## Pick 2–4 cardinal spawns this run.
+	## Pick 2–4 cardinal spawns this run. Shuffle with the SEEDED rng (Array.shuffle() uses the global
+	## RNG → the map wouldn't be reproducible from its seed, so a Continue would regenerate a DIFFERENT
+	## map and the saved claimed/revealed cells wouldn't line up).
 	var picks : Array = _CARDINAL_SPAWNS.duplicate()
-	picks.shuffle()
+	for i in range(picks.size() - 1, 0, -1):
+		var j : int = rng.randi_range(0, i)
+		var tmp = picks[i]
+		picks[i] = picks[j]
+		picks[j] = tmp
 	var spawn_count : int = rng.randi_range(2, 4)
 	var chosen : Array = picks.slice(0, spawn_count)
 

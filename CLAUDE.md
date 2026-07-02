@@ -34,6 +34,232 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-01 (2) — Stage 6c FINISH: Academy in 3D + abilities plane pass — COMPILE+BOOT VERIFIED
+
+The last two parity items before merge, on `feat/3d`. (V1 atmosphere playtest-confirmed earlier today.)
+
+**AbilityController plane-coordinate pass (`src/abilities/AbilityController.gd`):**
+- All entity position reads now go through `plane_pos()` (units/commander/base) — the old
+  `Vector2.distance_to(Vector3)` / `Vector2 = global_position` type errors are gone.
+- `_commander.queue_redraw()` / `_spawn_cannon_ring` (2D-only) replaced: Lance + Compile Cascade
+  flash via `Vfx.death` pulses; **zone abilities get flat emissive ground rings** (field cyan /
+  Bloom hazard green / Verdant Bulwark green at the FOB) spawned in world space, freed with the
+  zone + on `_exit_tree`. Rings glow under the V1 bloom.
+- Late-join sync: in the 3D flow the faction is selected before the Commander spawns, so `_ready`
+  re-applies `_on_faction_selected` (ultimate name/cooldown) when a faction is already active.
+- **Battle3D `_spawn_commander` now attaches the AbilityController child** (added BEFORE the
+  Commander enters the tree so `Commander._ready` resolves it). Q/W/E/R live in 3D; W targeting
+  delivers via the existing Commander ground-ray path.
+
+**Academy in 3D (Battle3D as host — the Academy stays a DIRECTOR, per architecture-north-star):**
+- `Academy.tscn` (2D scene, UI-shaped: CanvasLayers + canvas-space chamber/cadet) mounts UNCHANGED
+  on a CanvasLayer (layer 10) over the 3D battle. CadetAvatar click-to-move untouched (see the
+  recurring-regression memory — it IS the chamber control).
+- New game (`_ready`, no faction) → `_start_academy()`; Continue path unchanged. The interim
+  faction-select chooser (FACTION_CHOICES/_show_faction_select/_choose_faction) is REMOVED —
+  the Academy is the real flow now.
+- EventBus wiring in Battle3D: `academy_phase_started` → `_start_battle(false, academy=true)`
+  (live world, **no enemy base**, wave cadence held — `_academy_scenarios_active` gates the
+  `_process` wave driver), pre-select Commander + camera snap-focus. `academy_spawn_requested` →
+  `_spawn_enemy_from(spawn_cells[idx])` (shared with the wave driver via refactor).
+  `academy_clear_units` → free "units" group. `academy_phase_ended` → back to chamber (input
+  yielded via `_academy_chamber_active`). `selection_confirmed` → free the Academy layer, spawn
+  the conquest enemy base, `_reset_waves()` → the real game begins on the world the cadet defended
+  (2D-parity: scenario structures persist).
+- **DEV F1/F2/F3 restored** (debug builds, while the Academy is up): skip → architects/mesh/bloom,
+  emits `academy_phase_ended` first (HUD state), seeds 400 convenience resources.
+- **New: `commander_destroyed` handler** (was a soft-lock — nothing revived the 3D Commander):
+  Academy scenarios → revive in place; real game → forced retreat (enemies cleared, waves reset
+  to grace, Commander revived at the FOB, warning toast).
+
+**Compile/boot:** Battle3D ran ~30s under MCP through chapter 0 → phase_started → world build →
+scenario spawns with ZERO errors (only standing benign warnings + pre-existing Academy int-division
+warnings, now parsed in this scene). Debug exe re-exported 2026-07-01. **Runtime: needs hand
+playtest** — full Academy arc (chamber → 3 scenarios → sorting → commit), F1 skip, Q Lance flash,
+W field ring (unlocks at sub-path commit — test via milestone/dev), Commander death retreat.
+**Next: merge `feat/3d` → main** (main_scene already Root.tscn; 2D Battle.tscn stays as fallback).
+
+---
+
+## Session 2026-07-01 — VISUAL SUPERCHARGE V1: atmosphere overhaul — COMPILE VERIFIED, playtest pending
+
+New track (user): mechanics are solid — supercharge the graphics toward the Codex look.
+Plan: `planning/visual-supercharge-plan.md` (stages V1–V6). This session = V1, on `feat/3d`.
+
+- **Renderer Mobile → Forward+** (`project.godot` rendering_method) — was silently capping the
+  pipeline (no SSAO, weak glow, no volumetrics). Desktop .exe target, so Forward+ is right.
+  ⚠ Perf gate: watch the [P1][MONITOR] OS hang class in playtest after this switch.
+- **New `src/core/BattleAtmosphere.gd`** — one shared cosmetic-only rig owning the whole look
+  (Battle3D `_setup_environment` now just adds it; future 3D screens reuse it). Builds:
+  warm amber key light (prior sun angle, shadows now visible at RTS range —
+  `directional_shadow_max_distance` 6000 px; default 100 was sub-visible at pixel scale) +
+  cool blue fill (melancholy = warm/cool tension); WorldEnvironment with **AgX tonemap**,
+  **glow** (every existing emissive — tracers, damage cores, pulses, galaxy spheres — now blooms;
+  SCREEN blend, hdr_threshold 1.0), **exp depth fog** calibrated to pixel scale (0.00005; fades to
+  0 at galaxy zoom via `camera_rig.is_galaxy_zoom()` so the graph stays clear), **SSAO**
+  (radius 24 px ≈ ⅓ cell — grounds structures onto tiles), subtle grade (saturation 0.95,
+  contrast 1.03 — melancholy not grimdark). All tunables are consts at the top of the file.
+- **New `assets/shaders/starfield_sky.gdshader`** (first real asset!) — procedural sky: voxel-hash
+  point stars (2 layers, peaks >1.0 so they faintly bloom), dim fbm nebula (indigo/violet),
+  slow drift. Deliberately DIM per codex/09 (quiet over loud; the board is the subject).
+
+**Compile:** Battle3D booted clean via MCP under Forward+ (zero new errors; only standing benign
+EventBus warnings). Debug exe re-exported 2026-07-01. **Runtime: needs playtest** — confirm: sky +
+nebula visible, emissives bloom (fire a tower; check tracer/impact), shadows read, fog haze at
+tactical pitch, fog gone at galaxy zoom, HUD/readability unaffected, **frame rate stable late-wave
+(Forward+ perf gate)**. Tune consts in BattleAtmosphere.gd + sky shader uniforms.
+**Next (V2 per plan):** ground/terrain shader + fog-of-war dissolve + faction-creep claimed ground.
+Sequencing rec: finish Stage 6c (Academy, AbilityController) + merge before V2.
+
+---
+
+## Session 2026-06-28 (4) — 3D migration Stages 0/1/2a — on branch feat/3d
+
+Branch `feat/3d` (main = 2D checkpoint `69f3694`). Per `planning/3d-migration-plan.md`:
+- **Stage 0** (`6b37883`) — `src/core/World3D.gd`: 2D⇄3D mapping (old Y→Z, +Y up, pixel units) +
+  ground-ray picking + `node_plane()` bridge for mixed 2D/3D reads.
+- **Stage 1** (`6b37883`) — `src/core/CameraRig3D.gd` (RTS rig ~52° pitch, wheel zoom, WASD/middle
+  pan) + `scenes/test/Battle3D.tscn` slice: 3D ground at real grid (60×34×64), grid overlay, FOB
+  mesh, light/shadows, click→cell picking marker. MCP + playtest verified.
+- **Stage 2a** (`ac4fd10`) — **enemy `Unit` → `Node3D` (model/view).** Sim stays on a logical plane
+  (`_p`); transform driven via `World3D` (`_set_plane` + faces travel dir); cross-entity reads via
+  `plane_pos()`/`World3D.node_plane()`. Visual = `MeshInstance3D` (+ billboard HP bar, damage tint)
+  replacing the ColorRect; hijack/pollen/reveal adapted to material tinting. `Unit.tscn` root retyped
+  Node3D. Battle3D demo spawns a marching column. MCP-verified clean.
+
+- **Camera controls** (`bcf8e6c`) — `CameraRig3D` now orbits: hold MIDDLE+drag = rotate (yaw/pitch),
+  MIDDLE+wheel = pitch, wheel = zoom, WASD = pan, Delete = reset to preferred, Insert = lock current
+  view as preferred. (Pitch clamped 15–80°.)
+- **Stage 2b** (`7ed8fe1`) — **`Tower` → `Node3D`.** Static plane pos `_p` + `place_at()`/`plane_pos()`;
+  all targeting/aura/chain/pollen/hijack/sight via `World3D.node_plane()`. A1 silhouette re-expressed
+  as meshes: tier-sided body (cylinder 4/6/8 seg) + torus tier rings + stat-driven box barrels
+  (count~fire-rate, length~range, thickness~damage) on a yawing turret + emissive damage-type core +
+  role emblem (support halo / detector antenna). Construction ghosts via material alpha + billboard
+  build bar. 2D XP-bar/chevrons deferred (null-guarded). `Tower.tscn` root→Node3D; `TowerData.range`
+  warning silenced. Battle3D demo: a spread of tiers/branches/roles shoot the marching units. MCP clean.
+
+- **Stage 2c** (`018bbd3`) — **`Building` (garrison) → `Node3D`.** Box garrison + raised cross identity;
+  ghost via material alpha. Production/raid/level/offline logic preserved (defender spawn passes plane
+  coords, no-ops until FriendlyUnit is 3D). `Building.tscn` root→Node3D.
+- **Stage 2d** (`cd0efd7`) — **`Base` (FOB) → `Node3D`.** 3D bunker (apron/body/corners/turret) +
+  billboard HP bar recoloring by ratio. HP/fortification/influence/doctrine preserved; 2D rank bar
+  deferred. Battle3D spawns the real Base (shoots units, takes breach damage). `WorldMap.tscn` (2D world,
+  abandoned) left untouched per plan.
+
+**STAGE 2 COMPLETE — all 10 entities are Node3D** (`2a`–`2j`): Unit, Tower, Building, Base, Commander,
+EnemyBase, Wall, FriendlyUnit, Convoy, AncientWatcher. Pattern throughout: logic on a logical plane
+(`_p`), 3D transform via `World3D`, cross-entity reads via `plane_pos()`/`World3D.node_plane()`, visuals
+as `MeshInstance3D` (+ billboard bars). Battle3D is a full 3D mini-battle: FOB + towers + Commander
+shooting a marching enemy column, an enemy base fielding defenders, walls on the approach, a garrison.
+
+**Carry-overs / follow-ups before Stage 6 parity:**
+- **AbilityController** (`src/abilities/AbilityController.gd`, a `Node` child of Commander) still mixes
+  `Vector2` field/hazard centers with (now `Vector3`) unit positions — needs a plane-coordinate pass.
+  No-ops without a controller; not exercised in Battle3D. **Do before abilities work in the 3D game.**
+- 3D VFX (tracers/muzzle/impact/death/shot-flash/engineer-beam) → Stage 4 (2D `Vfx` no-ops in 3D).
+- Deferred 3D overlays: tower/commander/base/convoy XP/rank bars + chevrons, Commander LoS/sensor/
+  move-path/ability rings. Defender production needs a live faction + 3D unit layer.
+
+**STAGE 3 COMPLETE** (`aed8795`) — `MapGrid` → `Node3D`; board renders as a MultiMesh of flat tiles
+(per-instance colored by cell type + fog) replacing 2D `_draw`; `queue_redraw()` repurposed as a
+dirty-flag so all callers keep working; logic (cells/AStar/claim/reveal) unchanged. Battle3D spawns the
+real MapGrid → a true 3D battlefield with fog revealing around FOB/Commander + claimed cells greening.
+Depot markers + real terrain features (height/water/biomes — backlog F1) deferred.
+
+**STAGE 4 COMPLETE** (`9941f30`) — `Vfx`/`VfxBolt`/`VfxPulse` rebuilt as Node3D. API still takes plane
+`Vector2` so callers are unchanged: Tower (muzzle/bolt) + Unit (death) render in 3D for free; also wired
+3D tracers for Commander primary (restores the shot flash), FOB turret, FriendlyUnit. Bolt = emissive
+tracer bar + impact `CPUParticles3D` sparks; muzzle/death = expanding emissive sphere. Effects spawn into
+a `VfxLayer` under the MapGrid; no-op without a map.
+
+**STAGE 5 COMPLETE** (`09d6068`) — `GalaxyView` → `Node3D`; the territory graph renders as 3D meshes
+(owner-colored system spheres + edge bars + active/frontier rings), visible when the camera rig reports
+`is_galaxy_zoom()`. CameraRig3D zoom range extended to galaxy distance + `is_galaxy_zoom()`; rig in group
+`camera_rig`. Zoom out → board shrinks → 3D galaxy. `node_at()` pick kept for deploy.
+
+**STAGE 6a+6b COMPLETE — the 3D build is a PLAYABLE TD round.**
+- 6a (`f35f294`) — RTS controls via 3D ground raycast: LEFT select Commander / RIGHT move (shift-chain) /
+  B tower-build mode w/ live green-red placement preview; wired to `MapGrid.can_place_at`/`mark_tower_placed`
+  + Commander engineering.
+- 6b (`3d9f2f7`) — real waves: enemies trickle from the map's spawn cells down their `get_path_to_base`
+  A* routes into a UnitLayer; FOB/towers/Commander defend with 3D tracers. Fog reveals as you explore.
+- Playtest build (`eda2fcb`) — `run/main_scene` → `Battle3D.tscn` (BRANCH-ONLY, temporary) so the exported
+  debug exe boots straight into the playable 3D battle. **Revert this before merge.**
+- Engineer beam (`e5f2e52`) — 3D build/repair beam Commander→structure (playtest-flagged build feedback).
+- HUD overlay (`c171287`, **6c partial**) — the real `HUD.tscn` (Control) overlays the 3D battle on a
+  CanvasLayer; EventBus-driven so resources/waves/notifications/objectives display live. Build button wired
+  to 3D placement (works once faction-select lands); B-key meanwhile.
+- Camera snaps (`a6c7cbc`) — PgUp birds-eye (top-down, map-centered), PgDn focus Commander (~sensor
+  range), Insert/Delete custom lock/reset; G garrison placement. Playtest-confirmed working.
+- **Playtest-confirmed 2026-06-29:** movement, build (now w/ beam), tower aim/response, enemy damage +
+  death poof, camera angles, B/G placement all good; "mechanics feel solid."
+
+**Stage 6c progress:**
+1. ✅ **Faction-select flow** (`e6c6f0d`) — Battle3D selects architects/standard at startup (after the HUD
+   is listening). HUD now shows faction resources + build buttons + starter tower; garrison produces
+   friendly units (gets roster unit + resolves unit layer via new "unit_layer" group; Building lazy-resolves
+   it). Fixed the "garrison no units" + "HUD only energy" playtest issues.
+2. ✅ **HUD build button** (`c8aea1c`) — was correctly `can_afford`-gated (no resources at battle start);
+   seeded demo starting resources after faction-select so it's usable. (B-key bypasses economy.)
+3. ✅ **Tower upgrades** (`c8aea1c`) — LEFT-click a built tower selects it; **U** upgrades to `data.upgrade_to`
+   via `Tower.upgrade()`. Demo: free (real game charges + offers the A/B branch).
+4. **Backlog I1 (deep, → C2/D1):** friendly-unit movement/formations — patrol clips through buildings;
+   units should form up outside the garrison perimeter, move only when needed. In playtest-backlog doc.
+5. ✅ **HUD build buttons** (`9ec526c`) — unlock on placement end (Battle3D calls `HUD.end_placement_mode()`,
+   which now resets the building button too); garrison button wired (`building_placement_requested`).
+6. ✅ **Rapid-upgrade crash fix** (`f3d97a0`) — 0.35s upgrade debounce (the free-all+rebuild churn in
+   `Tower.upgrade` thrashed under rapid U → crash; the known [P1][MONITOR] rapid-interaction class).
+7. ✅ **Galaxy deploy** (`1bea2f0`) — zoomed-out LEFT-click a frontier node → `node_at` → load that
+   territory's seeded map (`MapGenerator.generate(seed)`), recolor terrain, recenter graph, re-collect
+   spawns, snap camera back to the battlefield. The tactical→galactic→deploy loop in 3D.
+8. ✅ **Commander move clamp** (`90ae399`) — `_clamp_to_map` keeps move orders inside the play area
+   (the ground ray hits the infinite Y=0 plane, so off-board right-clicks used to send it wandering).
+9. ✅ **Deploy = clean transition + capture-on-clear** (`2562343`) — deploy resets the battlefield
+   (`_reset_battlefield`: free towers/buildings/units/walls/enemy bases via destroy() for income
+   unwind, Commander back to base), spawns a fresh `EnemyBase` (territory's owner faction) at the new
+   map's first spawn cell; destroying it → `enemy_base_destroyed` → `GalaxyManager.capture_system`
+   flips the node + expands the frontier. The full tactical→deploy→clear→capture loop runs in 3D.
+10. ✅ **Q/E camera yaw** (`b60a964`) — hold Q/E to rotate the view (CameraRig3D `_process`), with
+    middle-drag rotate.
+11. ✅ **GameOver overlay** (`2a92614`) — mounted the self-wiring `GameOverScreen.tscn` in the 3D HUD;
+    shows on `base_destroyed`, Try Again / Return to Menu reload Battle3D.
+12. ✅ **Commander LoS/sensor range rings** (`c50e87b`) — flat ground TorusMesh rings (vision green /
+    sensor blue) shown when selected, sized to rank-scaled radii. (3D HP bars already done on units +
+    Commander; enemy units already have HP bar + damage tint.)
+13. ✅ **Faction-select screen** (`9413e0a`) — replaced hardcoded architects with a choose-your-faction
+    CanvasLayer chooser (Architects/Bloom/Mesh + Academy-default sub-paths); picking one selects the
+    faction, seeds demo resources, and `_start_battle()` builds the faction-dependent world. World
+    spawn + waves + gameplay input gated on `_battle_started`. (User scope: faction-select only.)
+14. ✅ **Bug sweep** (`8dcfed4`) — paced finite waves (8s grace + rests, no immediate unending stream);
+    move-marker fades on Commander arrival; Architect walls now build (wired `wall_placement_requested`
+    → wall placement; Commander raises them).
+15. ✅ **SCENE PROMOTED** (`039215a`) — Battle3D moved scenes/test → scenes/main; `main_scene` restored
+    to `Root.tscn`; `TitleScreen.BATTLE_SCENE` → Battle3D. Real flow now: **Root → Title → SceneManager
+    → 3D Battle**. 2D `Battle.tscn` kept as fallback.
+16. ✅ **save/load — COMPLETE (1-3/3)** (`15f596c`, `2fc714a`): SaveManager auto-persists faction/
+    economy/galaxy(+dev). (1) Continue-aware boot restores faction + active-node map, skips faction-
+    select. (2) Capture on `game_saving` — claims/towers/garrisons/walls/FOB-rank into active node's
+    development. (3) Restore on Continue + galaxy deploy/return; seed-reconcile pins the home map.
+    Structures tracked by cell (`_tower_cells`/`_building_cells`/`_wall_cells`); garrisons use the
+    faction starter `.tres` so they persist. Compile-clean; full New Game→save→Continue is a playtest.
+17. ✅ **Freeze fix** (`4be8f42`) — rapid-U hard freeze was an infinite loop in `HUD._push_notification`
+    (deferred `queue_free` in a `while get_child_count()` eviction); fixed with `remove_child` first +
+    debounce-stamp-on-every-press. Proven via headless 2000× notification spam.
+18. TO-DO: full scripted Academy tutorial (with scene-promotion arc); AbilityController plane pass +
+    ability/move-path overlays; merge `feat/3d` → main.
+
+**Remaining: Stage 6b — full Battle-controller parity + merge (its own focused arc, the riskiest piece).**
+Battle3D is a test scene; the real game still routes Title → (2D, now-broken) `Battle.tscn`/`WorldMap.tscn`.
+6b = make the 3D path the real game: rebuild/retarget the **Battle controller** (the ~1000-line `Battle.gd`
+driving Academy/HUD/FactionSelect/GameOver/waves/save/galaxy-deploy-capture) onto a 3D world scene
+(promote `Battle3D` or replace `WorldMap.tscn`); **HUD reconnect** (2D CanvasLayer overlay + entity bars
+via `unproject_position`); building/wall placement through the HUD; deploy/capture via the 3D GalaxyView;
+then **switch `run/main_scene`** off the 2D path and **merge `feat/3d` → main**. Fold in deferred items:
+engineer beam, ability/LoS/move-path rings, 3D XP/rank bars + chevrons, AbilityController plane-coord pass.
+`scenes/test/Battle3D.tscn` is the proven reference assembling every 3D building block.
+
+---
+
 ## Session 2026-06-28 (3) — MAJOR DECISION: commit to full 3D + staged migration plan
 
 After comparing two throwaway spikes — `scenes/test/Spike25D.tscn` (faked-height 2.5D, pure 2D

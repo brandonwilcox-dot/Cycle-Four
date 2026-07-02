@@ -7,11 +7,16 @@
 ##
 ## Faction divergences are dispatched via FactionManager.active_faction at cast time.
 ## The neutral numbers are the floor; faction branches add behavior.
+##
+## 3D (Stage 6c): all positions are PLANE coordinates (Vector2) — entity reads go through
+## plane_pos(), never global_position (entities are Node3D now). Zone abilities show a flat
+## emissive ground ring (field/hazard/bulwark); casts flash via the Vfx autoload.
 class_name AbilityController
 extends Node
 
 const AbilityDataScript = preload("res://src/abilities/AbilityData.gd")
 const Combat = preload("res://src/combat/Combat.gd")
+const WORLD3D = preload("res://src/core/World3D.gd")
 
 const SLOT_COUNT : int = 4
 
@@ -75,6 +80,11 @@ var _unlocked  : Array[bool]  = [false, false, false, false]
 
 var _commander = null
 
+## Flat ground rings telegraphing active zone abilities (world-space, freed with the zone).
+var _field_ring   : MeshInstance3D = null
+var _hazard_ring  : MeshInstance3D = null
+var _bulwark_ring : MeshInstance3D = null
+
 func _ready() -> void:
 	_commander = get_parent()
 	_build_abilities()
@@ -83,6 +93,16 @@ func _ready() -> void:
 	EventBus.subpath_committed.connect(_on_subpath_committed)
 	EventBus.milestone_reached.connect(_on_milestone_reached)
 	_unlock_slot(0)
+	## Late join: in the 3D flow the faction is selected before the Commander (and this
+	## controller) spawns, so the faction_selected signal already fired — sync the ultimate.
+	if not FactionManager.active_faction.is_empty():
+		_on_faction_selected(FactionManager.active_faction, "")
+
+## Rings live in world space (not under this plain Node) — free them explicitly.
+func _exit_tree() -> void:
+	for ring in [_field_ring, _hazard_ring, _bulwark_ring]:
+		if is_instance_valid(ring):
+			ring.queue_free()
 
 func _process(delta: float) -> void:
 	var now : float = Time.get_ticks_msec() / 1000.0
@@ -221,18 +241,19 @@ func _cast_lance() -> void:
 	var ab = _get_ability(0)
 	var base_dmg : float = ab.params.get("damage", 45.0) if ab != null else 45.0
 	var kills    : int   = 0
+	var cpos     : Vector2 = _commander.plane_pos()
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		if _commander.global_position.distance_to(unit.global_position) <= ATTACK_RANGE_PX:
+		if cpos.distance_to(unit.plane_pos()) <= ATTACK_RANGE_PX:
 			var died : bool = unit.take_damage(base_dmg * dmg_mult, Combat.faction_damage_type(FactionManager.active_faction))
 			if died:
 				kills += 1
 			## Architect: stun non-immune enemies.
 			if FactionManager.active_faction == "architects":
 				unit.apply_stun(1.0)
-	## Always flash the AOE ring so the player sees the Lance fire, even on a clean miss.
-	_commander.call("_spawn_cannon_ring")
+	## Always flash the AOE pulse so the player sees the Lance fire, even on a clean miss.
+	Vfx.death(cpos, Vfx.damage_color(Combat.faction_damage_type(FactionManager.active_faction)), ATTACK_RANGE_PX)
 	## Reset charge; Mesh refunds from kills.
 	lance_charge  = 0.0
 	lance_charged = false
@@ -264,31 +285,31 @@ func _cast_suppression(center: Vector2) -> void:
 	_field_until = Time.get_ticks_msec() / 1000.0 + FIELD_DURATION
 	_start_cooldown(1)
 	EventBus.ability_used.emit(1)
-	if _commander != null:
-		_commander.queue_redraw()
+	_field_ring = _spawn_zone_ring(center, FIELD_RADIUS_PX, Color(0.40, 0.80, 1.00))
 
 func _apply_field_debuff() -> void:
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		var in_field : bool = field_center.distance_to(unit.global_position) <= FIELD_RADIUS_PX
+		var in_field : bool = field_center.distance_to(unit.plane_pos()) <= FIELD_RADIUS_PX
 		unit.set_debuff(FIELD_SLOW_MULT if in_field else 1.0)
 
 func _end_field(now: float) -> void:
 	field_active = false
+	if is_instance_valid(_field_ring):
+		_field_ring.queue_free()
 	if FactionManager.active_faction == "bloom":
 		## Bloom: transition to biomass hazard instead of clearing.
 		hazard_active     = true
 		hazard_center     = field_center
 		_hazard_until     = now + HAZARD_DURATION
 		_hazard_next_tick = now + 1.0
+		_hazard_ring      = _spawn_zone_ring(hazard_center, FIELD_RADIUS_PX, Color(0.55, 1.00, 0.30))
 		## Field debuffs carry over; hazard replaces them at its rate.
 	else:
 		for unit in get_tree().get_nodes_in_group("units"):
 			if is_instance_valid(unit):
 				unit.set_debuff(1.0)
-	if _commander != null:
-		_commander.queue_redraw()
 
 ## -- Bloom biomass hazard --
 
@@ -296,23 +317,23 @@ func _apply_hazard_debuff() -> void:
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		var in_hazard : bool = hazard_center.distance_to(unit.global_position) <= FIELD_RADIUS_PX
+		var in_hazard : bool = hazard_center.distance_to(unit.plane_pos()) <= FIELD_RADIUS_PX
 		unit.set_debuff(HAZARD_SLOW_MULT if in_hazard else 1.0)
 
 func _tick_hazard_damage() -> void:
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		if hazard_center.distance_to(unit.global_position) <= FIELD_RADIUS_PX:
+		if hazard_center.distance_to(unit.plane_pos()) <= FIELD_RADIUS_PX:
 			unit.take_damage(HAZARD_DPS, Combat.faction_damage_type(FactionManager.active_faction))
 
 func _end_hazard() -> void:
 	hazard_active = false
+	if is_instance_valid(_hazard_ring):
+		_hazard_ring.queue_free()
 	for unit in get_tree().get_nodes_in_group("units"):
 		if is_instance_valid(unit):
 			unit.set_debuff(1.0)
-	if _commander != null:
-		_commander.queue_redraw()
 
 ## -- Overdrive (slot 2) --
 
@@ -375,9 +396,9 @@ func _cast_compile_cascade() -> void:
 	for unit in units:
 		if is_instance_valid(unit):
 			unit.take_damage(dmg, Combat.faction_damage_type(FactionManager.active_faction))
-	## Full-screen flash VFX via a brief white ColorRect on Commander.
+	## Map-scale pulse so the cascade visibly fires from the Commander.
 	if _commander != null:
-		_commander.call("_spawn_cannon_ring")
+		Vfx.death(_commander.plane_pos(), Color(1.00, 0.92, 0.30), 600.0)
 
 func _cast_verdant_bulwark() -> void:
 	## Bloom: 12 s of FOB +4 HP/s regen and 40 % slow on enemies within 384 px of FOB.
@@ -385,20 +406,25 @@ func _cast_verdant_bulwark() -> void:
 	_bulwark_active    = true
 	_bulwark_until     = now + BULWARK_DURATION
 	_bulwark_next_heal = now + 1.0
+	var base_node = get_tree().get_first_node_in_group("base")
+	if base_node != null:
+		_bulwark_ring = _spawn_zone_ring(base_node.plane_pos(), BULWARK_RADIUS_PX, Color(0.35, 1.00, 0.45))
 
 func _apply_bulwark_debuff() -> void:
 	var base_node = get_tree().get_first_node_in_group("base")
 	if base_node == null:
 		return
-	var base_pos : Vector2 = base_node.global_position
+	var base_pos : Vector2 = base_node.plane_pos()
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
-		var in_bulwark : bool = base_pos.distance_to(unit.global_position) <= BULWARK_RADIUS_PX
+		var in_bulwark : bool = base_pos.distance_to(unit.plane_pos()) <= BULWARK_RADIUS_PX
 		unit.set_debuff(BULWARK_SLOW_MULT if in_bulwark else 1.0)
 
 func _end_bulwark() -> void:
 	_bulwark_active = false
+	if is_instance_valid(_bulwark_ring):
+		_bulwark_ring.queue_free()
 	for unit in get_tree().get_nodes_in_group("units"):
 		if is_instance_valid(unit):
 			unit.set_debuff(1.0)
@@ -411,6 +437,32 @@ func _cast_system_seizure() -> void:
 	var now : float = Time.get_ticks_msec() / 1000.0
 	_seizure_active = true
 	_seizure_until  = now + 6.0
+
+## -- Zone ring telegraphy (3D) --
+
+## A flat emissive torus on the ground marking an active zone ability. Added to the
+## Commander's world parent (this controller is a plain Node — no 3D transform of its own).
+func _spawn_zone_ring(center: Vector2, radius: float, color: Color) -> MeshInstance3D:
+	if _commander == null or not (_commander is Node3D):
+		return null
+	var parent : Node = _commander.get_parent()
+	if parent == null:
+		return null
+	var ring : MeshInstance3D = MeshInstance3D.new()
+	var torus : TorusMesh = TorusMesh.new()
+	torus.inner_radius = maxf(radius - 4.0, 1.0)
+	torus.outer_radius = radius + 4.0
+	ring.mesh = torus
+	var mat : StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.emission_enabled = true
+	mat.emission = color
+	mat.emission_energy_multiplier = 1.4   ## past the glow threshold → the ring blooms
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = mat
+	parent.add_child(ring)
+	ring.global_position = WORLD3D.to3(center, 2.0)   ## slightly above ground — no z-fighting
+	return ring
 
 ## -- Cooldown helpers --
 

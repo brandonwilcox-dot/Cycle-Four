@@ -41,6 +41,10 @@ func _process(delta: float) -> void:
 	if _grid == null:
 		_resolve_grid()
 		return
+	## MapGrid.load_map_data() swaps in a NEW MapData on Continue/deploy; re-cache it so the minimap
+	## reflects the restored/loaded map instead of the stale (fully-fogged) original.
+	if _grid.get("map_data") != _map_data:
+		_resolve_grid()
 	_redraw_t -= delta
 	if _redraw_t <= 0.0:
 		_redraw_t = REDRAW_PERIOD

@@ -1,63 +1,118 @@
 ## GalaxyView.gd
-## Phase D — draws the galaxy graph in world space, recentred so the ACTIVE node sits at the
-## board centre (i.e. "you are here" = the battle board). Because it lives in the same world
-## space as the tactical board but spans far larger radii, zooming the camera out shrinks the
-## board to the home node and reveals the rings of territories around it — continuous
-## tactical→galactic zoom, no separate screen.
+## Phase D — the galaxy graph, recentred so the ACTIVE node sits at the board centre ("you are here"
+## = the tactical board). Lives in the same world space but spans far larger radii, so zooming the
+## Camera3D out shrinks the board to the home node and reveals the rings — continuous tactical→
+## galactic zoom, no separate screen.
 ##
-## Static unless ownership/active changes; Main calls queue_redraw() after deploy/capture.
-extends Node2D
+## 3D MIGRATION (Stage 5): now `extends Node3D`. The graph renders as 3D meshes (system spheres +
+## edge bars + active/frontier rings) floating just above the plane, rebuilt on change. Visible only
+## while the camera rig reports is_galaxy_zoom(). queue_redraw() is repurposed as a dirty-flag so
+## Battle's deploy/capture refresh calls keep working.
+extends Node3D
 
 const NODE_RADIUS : float = 150.0
-const EDGE_WIDTH  : float = 10.0
+const NODE_Y      : float = 120.0     ## float the graph above the plane so it reads when zoomed out
+const EDGE_WIDTH  : float = 18.0
+
+const WORLD3D = preload("res://src/core/World3D.gd")
 
 var board_center : Vector2 = Vector2(1920.0, 1088.0)   ## world centre of the tactical board
+var _dirty       : bool    = true
+var _rig         : Node    = null
 
 func setup(center: Vector2) -> void:
 	board_center = center
-	z_index = 50
-	queue_redraw()
+	_dirty = true
 
-## Only render while the camera is zoomed out into galaxy range, so the graph never obscures
-## the tactical board during normal play.
+## Repurposed: marks the graph for rebuild (Node3D has no CanvasItem redraw).
+func queue_redraw() -> void:
+	_dirty = true
+
+## Only render while the camera rig is zoomed into galaxy range; rebuild meshes when shown/dirty.
 func _process(_delta: float) -> void:
-	var cam : Camera2D = get_viewport().get_camera_2d()
-	var want : bool = cam != null and cam.has_method("is_galaxy_zoom") and bool(cam.call("is_galaxy_zoom"))
+	if _rig == null or not is_instance_valid(_rig):
+		_rig = get_tree().get_first_node_in_group("camera_rig")
+	var want : bool = _rig != null and _rig.has_method("is_galaxy_zoom") and bool(_rig.call("is_galaxy_zoom"))
 	if want != visible:
 		visible = want
-		if want:
-			queue_redraw()
+	if want and _dirty:
+		_rebuild()
 
-## World position of a node: board centre + its offset from the active ("home") node, so the
-## active node renders exactly where the board is.
+## World position (plane) of a node: board centre + its offset from the active ("home") node.
 func world_of(id: String) -> Vector2:
 	return board_center + (GalaxyManager.node_pos(id) - GalaxyManager.node_pos(GalaxyManager.active_node))
 
-func _draw() -> void:
+## Rebuilds the 3D graph (spheres + edges + rings). Cheap — a few dozen nodes.
+func _rebuild() -> void:
+	_dirty = false
+	for c in get_children():
+		c.queue_free()
 	if GalaxyManager.star_systems.is_empty():
 		return
 	var faction  : String = FactionManager.active_faction
 	var frontier : Array  = GalaxyManager.frontier(faction)
 
-	## Adjacency lines (drawn once per undirected edge).
+	## Adjacency bars (once per undirected edge).
 	var drawn : Dictionary = {}
 	for id in GalaxyManager.star_systems:
-		var a : Vector2 = world_of(id)
+		var a : Vector3 = WORLD3D.to3(world_of(id), NODE_Y)
 		for nb in GalaxyManager.star_systems[id].get("adj", []):
 			var key : String = (id + "|" + nb) if id < nb else (nb + "|" + id)
 			if drawn.has(key):
 				continue
 			drawn[key] = true
-			draw_line(a, world_of(nb), Color(0.30, 0.36, 0.52, 0.55), EDGE_WIDTH)
+			_add_edge(a, WORLD3D.to3(world_of(nb), NODE_Y))
 
-	## Nodes, coloured by owner; rings for the active node and capturable frontier.
+	## System spheres, colored by owner; rings for active + capturable frontier.
 	for id in GalaxyManager.star_systems:
-		var p : Vector2 = world_of(id)
-		draw_circle(p, NODE_RADIUS, _owner_color(str(GalaxyManager.star_systems[id].get("owner", "neutral")), faction))
+		var p : Vector3 = WORLD3D.to3(world_of(id), NODE_Y)
+		var owner_id : String = str(GalaxyManager.star_systems[id].get("owner", "neutral"))
+		_add_node(p, _owner_color(owner_id, faction))
 		if id == GalaxyManager.active_node:
-			draw_arc(p, NODE_RADIUS + 30.0, 0.0, TAU, 48, Color(1, 1, 1, 0.95), 9.0)
+			_add_ring(p, Color(1, 1, 1, 0.95))
 		elif id in frontier:
-			draw_arc(p, NODE_RADIUS + 30.0, 0.0, TAU, 48, Color(1.0, 0.85, 0.2, 0.95), 9.0)
+			_add_ring(p, Color(1.0, 0.85, 0.2, 0.95))
+
+func _add_node(p: Vector3, col: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var sp := SphereMesh.new()
+	sp.radius = NODE_RADIUS
+	sp.height = NODE_RADIUS * 2.0
+	mi.mesh = sp
+	mi.position = p
+	mi.material_override = _emissive(col, 0.6)
+	add_child(mi)
+
+func _add_ring(p: Vector3, col: Color) -> void:
+	var mi := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = NODE_RADIUS + 24.0
+	tm.outer_radius = NODE_RADIUS + 40.0
+	mi.mesh = tm
+	mi.position = p
+	mi.material_override = _emissive(col, 1.0)
+	add_child(mi)
+
+func _add_edge(a: Vector3, b: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	var bx := BoxMesh.new()
+	var edge_len : float = a.distance_to(b)
+	bx.size = Vector3(EDGE_WIDTH, EDGE_WIDTH, edge_len)
+	mi.mesh = bx
+	mi.position = (a + b) * 0.5
+	if edge_len > 0.01:
+		mi.look_at(b, Vector3.UP)
+	mi.material_override = _emissive(Color(0.30, 0.36, 0.52), 0.3)
+	add_child(mi)
+
+func _emissive(col: Color, energy: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = col
+	m.emission_enabled = true
+	m.emission = col
+	m.emission_energy_multiplier = energy
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return m
 
 func _owner_color(owner_id: String, faction: String) -> Color:
 	if owner_id == "core":
@@ -68,7 +123,7 @@ func _owner_color(owner_id: String, faction: String) -> Color:
 		return Color(0.45, 0.45, 0.52)        ## unclaimed
 	return Color(0.85, 0.30, 0.25)            ## a rival faction's
 
-## Nearest node to a world point within a generous pick radius, or "" if none.
+## Nearest node to a world (plane) point within a generous pick radius, or "" if none.
 func node_at(world: Vector2) -> String:
 	var best   : String = ""
 	var best_d : float  = NODE_RADIUS * 1.8

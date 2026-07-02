@@ -11,7 +11,7 @@
 ## SaveManager no longer auto-loads at startup; this screen owns the load decision.
 extends Control
 
-const BATTLE_SCENE   : String = "res://scenes/main/Battle.tscn"
+const BATTLE_SCENE   : String = "res://scenes/main/Battle3D.tscn"   ## 3D battle (promoted from scenes/test; 2D Battle.tscn kept as fallback)
 const SETTINGS_PATH : String = "user://settings.cfg"
 
 const COL_BG       : Color = Color(0.05, 0.05, 0.08, 1.0)
@@ -161,6 +161,7 @@ func _on_new_game_pressed() -> void:
 	## Fresh slate. We do NOT delete the existing save here — it is overwritten
 	## naturally once the new run auto-saves, so quitting mid-Academy is non-destructive.
 	GameState.reset_for_new_game()
+	GalaxyManager.reset_galaxy()   ## drop any in-memory/loaded galaxy so a brand-new one generates
 	SceneManager.change_to(BATTLE_SCENE)
 
 func _on_continue_pressed() -> void:

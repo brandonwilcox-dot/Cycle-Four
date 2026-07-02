@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://src/entities/Commander.gd" id="1"]
 [ext_resource type="Script" path="res://src/abilities/AbilityController.gd" id="2"]
 
-[node name="Commander" type="Node2D"]
+[node name="Commander" type="Node3D"]
 script = ExtResource("1")
 
 [node name="AbilityController" type="Node" parent="."]

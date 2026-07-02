@@ -1,9 +1,13 @@
 ## MapGrid.gd
 ## The game board: a 60×34 cell grid (3840×2176 px at 64 px/cell).
 ## Owns the AStar2D graph so units can query shortest paths to the base.
-## Drawn via _draw(); call queue_redraw() after any state change.
+## 3D MIGRATION (Stage 3): now `extends Node3D`. The board renders as a MultiMesh of flat ground
+## tiles (per-instance colored by cell type + fog) instead of the old 2D `_draw()`. All grid LOGIC
+## (cells, AStar, claim/reveal, world_to_cell) is plane-based and unchanged — entities already query
+## it with plane coords via World3D. `queue_redraw()` is repurposed as a dirty-flag entry point so
+## every existing caller (internal + Commander/Convoy fog reveals) keeps working unchanged.
 ## Design ref: core/17_units-maps-buildings.md (standard map topology)
-extends Node2D
+extends Node3D
 
 enum Cell {
 	GROUND   = 0,  ## open land -- not enemy-traversable
@@ -49,6 +53,11 @@ var _friendly_astar : AStar2D = AStar2D.new()
 ## Set by load_map_data(); consumers (Commander, WaveSpawner) may read it directly.
 var map_data : MapData = null
 
+## 3D terrain rendering (Stage 3). The board is one MultiMesh of flat tiles; queue_redraw() marks it
+## dirty and _process coalesces refreshes to one per frame (claim/reveal spam → a single recolor).
+var _terrain_mm    : MultiMeshInstance3D = null
+var _terrain_dirty : bool = false
+
 ## Phase 4: register_active_spawn() / _active_spawns are retired.
 ## Connectivity validation now derives active spawn cells from map_data.spawn_points
 ## (see _all_spawns_connected()).
@@ -93,7 +102,7 @@ func _ready() -> void:
 	## generator's reroll loop and as a reference for the tutorial map.
 	var data : MapData = MapGeneratorScript.generate()
 	load_map_data(data)
-	queue_redraw()
+	_build_terrain()
 
 ## -- Public API --
 
@@ -286,7 +295,21 @@ func claim_cell(col: int, row: int) -> void:
 	if get_cell(col, row) != Cell.GROUND:
 		return
 	_cells[col + row * COLS] = Cell.CLAIMED
+	_reveal_with_neighbors(col, row)
 	queue_redraw()   ## No AStar rebuild needed -- CLAIMED is not enemy-traversable
+
+## Reveals a cell and its 8 neighbours. Owning territory reveals it AND the cells bordering it — so
+## paths threading through claimed ground (and garrison-raid-claimed territory the Commander never
+## sighted) don't render as fogged holes. Used by claim + restore.
+func _reveal_with_neighbors(col: int, row: int) -> void:
+	if map_data == null:
+		return
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var c : int = col + dx
+			var r : int = row + dy
+			if c >= 0 and c < COLS and r >= 0 and r < ROWS:
+				map_data.set_meta_revealed(c + r * COLS, true)
 
 ## -- Sphere-of-influence area operations --
 ## These power the Commander's sight-range claim, the FOB's rank-scaling territory,
@@ -308,6 +331,8 @@ func claim_area(center: Vector2i, radius: int) -> Array[Vector2i]:
 				continue
 			_cells[c + r * COLS] = Cell.CLAIMED
 			newly.append(Vector2i(c, r))
+	for cell in newly:
+		_reveal_with_neighbors(cell.x, cell.y)   ## owned territory (+ bordering paths) is revealed
 	if not newly.is_empty():
 		queue_redraw()   ## Single call; don't emit one per cell
 	return newly
@@ -332,8 +357,35 @@ func apply_claimed_indices(indices: Array) -> void:
 		var i : int = int(v)
 		if i >= 0 and i < COLS * ROWS and _cells[i] == Cell.GROUND:
 			_cells[i] = Cell.CLAIMED
+			## Owned territory (+ bordering paths) is revealed — otherwise a restore leaves it fogged
+			## and _cell_color paints it as fog instead of claimed.
+			@warning_ignore("integer_division")
+			var row : int = i / COLS
+			_reveal_with_neighbors(i % COLS, row)
 			changed = true
 	if changed:
+		queue_redraw()
+
+## Flat indices of all REVEALED (explored, fog-cleared) cells — captured so a Continue can restore
+## the fog-of-war the player uncovered (claimed cells cover only owned ground, not the wider sightline).
+func get_revealed_indices() -> Array:
+	var out : Array = []
+	if map_data == null:
+		return out
+	for i in COLS * ROWS:
+		if map_data.get_meta_revealed(i):
+			out.append(i)
+	return out
+
+## Re-applies saved REVEALED indices onto the freshly-loaded (fully-fogged) map.
+func apply_revealed_indices(indices: Array) -> void:
+	if map_data == null:
+		return
+	for v in indices:
+		var i : int = int(v)
+		if i >= 0 and i < COLS * ROWS:
+			map_data.set_meta_revealed(i, true)
+	if not indices.is_empty():
 		queue_redraw()
 
 ## C3 (raids): the nearest GROUND cell on the CLAIMED frontier — a GROUND cell orthogonally
@@ -568,82 +620,83 @@ func world_to_cell(world_pos: Vector2) -> Vector2i:
 		int(clamp(floor(world_pos.y / CELL_SIZE), 0, ROWS - 1))
 	)
 
-## -- Drawing --
+## -- 3D terrain rendering (Stage 3) --
 
-func _draw() -> void:
-	var path_col  := Color(0.20, 0.20, 0.32, 1.0)
-	var spawn_col := Color(0.42, 0.10, 0.10, 1.0)
-	var base_col  := Color(0.52, 0.42, 0.06, 1.0)
-	var obs_col   := Color(0.30, 0.22, 0.12, 1.0)
-	var claim_col := Color(0.10, 0.30, 0.16, 1.0)   ## dark green: Commander territory
-	var line_col  := Color(0.15, 0.15, 0.22, 0.30)
+const _GROUND_COL : Color = Color(0.17, 0.27, 0.21)
+const _PATH_COL   : Color = Color(0.22, 0.22, 0.34)
+const _BASE_COL   : Color = Color(0.52, 0.42, 0.06)
+const _OBS_COL    : Color = Color(0.30, 0.22, 0.12)
+const _CLAIM_COL  : Color = Color(0.10, 0.34, 0.18)
+const _SPAWN_COL  : Color = Color(0.46, 0.11, 0.11)
+const _SPAWN_DIM  : Color = Color(0.25, 0.06, 0.06)
+const _FOG_COL    : Color = Color(0.035, 0.045, 0.065)
 
+## Repurposed: marks the terrain dirty (Node3D has no CanvasItem redraw). Every existing caller
+## — internal cell ops + Commander/Convoy fog reveals (`_map_grid.queue_redraw()`) — keeps working.
+func queue_redraw() -> void:
+	_terrain_dirty = true
+
+func _process(_delta: float) -> void:
+	if _terrain_dirty:
+		_refresh_terrain()
+
+## Builds the ground as one MultiMesh of flat tiles (per-instance colored). Tiles are slightly
+## smaller than a cell so the dark gaps between them read as grid lines.
+func _build_terrain() -> void:
+	_terrain_mm = MultiMeshInstance3D.new()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(CELL_SIZE * 0.92, CELL_SIZE * 0.92)
+	mm.mesh = pm
+	mm.instance_count = COLS * ROWS
 	for row in ROWS:
 		for col in COLS:
-			var idx : int = col + row * COLS
-			## Phase 6 fog-of-war: unrevealed cells render as background (no fill).
-			## The dark default_clear_color shows through, which IS the fog.
-			if map_data != null and not map_data.get_meta_revealed(idx):
-				continue
-			var rect := Rect2(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-			match _cells[idx]:
-				Cell.PATH:
-					draw_rect(rect, path_col)
-				Cell.BASE:
-					draw_rect(rect, base_col)
-				Cell.OBSTACLE:
-					draw_rect(rect, obs_col)
-				Cell.CLAIMED:
-					draw_rect(rect, claim_col)
-	## Phase 4: spawn cells are PATH underneath; overlay them in the spawn colour by
-	## walking map_data.spawn_points. Dormant spawns are drawn in a dimmer hue.
-	## Phase 6: spawns that are NOT yet revealed by fog are hidden entirely — drawing
-	## a dormant spawn before reveal would leak its position to the player.
+			var i : int = col + row * COLS
+			var origin := Vector3(col * CELL_SIZE + CELL_SIZE * 0.5, 0.0, row * CELL_SIZE + CELL_SIZE * 0.5)
+			mm.set_instance_transform(i, Transform3D(Basis(), origin))
+			mm.set_instance_color(i, _FOG_COL)
+	_terrain_mm.multimesh = mm
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 1.0
+	_terrain_mm.material_override = mat
+	_terrain_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_terrain_mm)
+	_refresh_terrain()
+
+## Recolors every tile from current cell state + fog. Throttled via the dirty flag (one recolor/frame).
+func _refresh_terrain() -> void:
+	_terrain_dirty = false
+	if _terrain_mm == null:
+		return
+	var mm : MultiMesh = _terrain_mm.multimesh
+	var spawn_state : Dictionary = {}
 	if map_data != null:
-		var spawn_dim := Color(spawn_col.r * 0.55, spawn_col.g * 0.55, spawn_col.b * 0.55, 1.0)
 		for sp in map_data.spawn_points:
-			if sp == null:
-				continue
-			var sp_idx : int = sp.position.x + sp.position.y * COLS
-			if not map_data.get_meta_revealed(sp_idx):
-				continue
-			var rect := Rect2(sp.position.x * CELL_SIZE, sp.position.y * CELL_SIZE,
-							  CELL_SIZE, CELL_SIZE)
-			if sp.state == SpawnPoint.SpawnState.ACTIVE:
-				draw_rect(rect, spawn_col)
-			else:
-				draw_rect(rect, spawn_dim)
+			if sp != null:
+				spawn_state[sp.position.x + sp.position.y * COLS] = sp.state
+	for i in COLS * ROWS:
+		mm.set_instance_color(i, _cell_color(i, spawn_state))
 
-	## Phase 8: render SupportGraph BuildingNode markers (depots and other non-FOB
-	## infrastructure) as a warm amber inset square so the player can spot important
-	## off-FOB spots. Gated by fog reveal like everything else — depot in the dark
-	## stays invisible until the Commander explores its cell. The FOB itself has its
-	## own scene visual (Base.tscn), so skip it.
-	if map_data != null and map_data.support_graph != null:
-		var depot_fill := Color(1.00, 0.55, 0.20, 1.0)   ## warm amber
-		var depot_edge := Color(0.40, 0.20, 0.05, 1.0)   ## dark amber outline
-		var inset      : float = 12.0
-		for node_id in map_data.support_graph.nodes:
-			var node : BuildingNode = map_data.support_graph.nodes[node_id]
-			if node == null or node_id == map_data.support_graph.fob_node_id:
-				continue
-			var d_idx : int = node.position.x + node.position.y * COLS
-			if not map_data.get_meta_revealed(d_idx):
-				continue
-			var inner := Rect2(
-				node.position.x * CELL_SIZE + inset,
-				node.position.y * CELL_SIZE + inset,
-				CELL_SIZE - inset * 2.0,
-				CELL_SIZE - inset * 2.0
-			)
-			draw_rect(inner, depot_fill)
-			draw_rect(inner, depot_edge, false, 2.0)
-
-	## Subtle grid overlay across the whole board
-	for r in ROWS + 1:
-		draw_line(Vector2(0, r * CELL_SIZE), Vector2(COLS * CELL_SIZE, r * CELL_SIZE), line_col)
-	for c in COLS + 1:
-		draw_line(Vector2(c * CELL_SIZE, 0), Vector2(c * CELL_SIZE, ROWS * CELL_SIZE), line_col)
+## Per-tile color: fog if unrevealed; spawn overlay (active/dormant) on spawn cells; else by cell type.
+func _cell_color(i: int, spawn_state: Dictionary) -> Color:
+	if map_data != null and not map_data.get_meta_revealed(i):
+		return _FOG_COL
+	if spawn_state.has(i):
+		return _SPAWN_COL if spawn_state[i] == SpawnPoint.SpawnState.ACTIVE else _SPAWN_DIM
+	match _cells[i]:
+		Cell.PATH:
+			return _PATH_COL
+		Cell.BASE:
+			return _BASE_COL
+		Cell.OBSTACLE:
+			return _OBS_COL
+		Cell.CLAIMED:
+			return _CLAIM_COL
+		_:
+			return _GROUND_COL
 
 ## -- Path building --
 
