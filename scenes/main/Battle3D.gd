@@ -14,12 +14,14 @@ const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
 const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
 const BASE_SCRIPT      = preload("res://src/entities/Base.gd")
 const COMMANDER_SCRIPT  = preload("res://src/entities/Commander.gd")
+const ABILITY_CONTROLLER = preload("res://src/abilities/AbilityController.gd")
 const ENEMY_BASE_SCRIPT = preload("res://src/entities/EnemyBase.gd")
 const WALL_SCRIPT       = preload("res://src/entities/Wall.gd")
 const MAP_GRID_SCRIPT   = preload("res://src/core/map/MapGrid.gd")
 const GALAXY_VIEW       = preload("res://src/ui/GalaxyView.gd")
 const HUD_SCENE         = preload("res://scenes/ui/HUD.tscn")
 const GAME_OVER_SCENE   = preload("res://scenes/ui/GameOverScreen.tscn")
+const ACADEMY_SCENE     = preload("res://scenes/main/Academy.tscn")
 const TITLE_SCENE       = "res://scenes/ui/TitleScreen.tscn"
 const SETTINGS_PATH     = "user://settings.cfg"
 const CONTROLS_TEXT     = "LEFT-CLICK  select Commander / tower\nU  upgrade selected tower\nRIGHT-CLICK  move Commander (hold Shift to chain)\nB  build tower        G  build garrison\nBuild Wall button  (Architects only)\n\nPgUp  birds-eye view      PgDn  focus Commander\nWheel  zoom (out far = galaxy map)\nWASD  pan       Q / E  rotate\nMIDDLE-drag  free rotate\nDelete  reset view   Insert  save custom view\n\nGalaxy zoom: LEFT-CLICK a frontier node to deploy\nESC  this menu"
@@ -64,14 +66,13 @@ var _place_wall     : bool = false   ## true = Architect wall (overrides _place_
 var _preview        : MeshInstance3D = null
 var _preview_mat    : StandardMaterial3D = null
 
-## Stage 6c faction-select. id → [sub_path, display name, accent color] (sub-paths match Academy defaults).
-const FACTION_CHOICES : Array = [
-	["architects", "standard",  "THE ARCHITECTS", "Efficiency. Strongest idle economy.", Color(1.00, 0.55, 0.18)],
-	["bloom",      "purist",    "THE BLOOM",      "Adapt. Near-unkillable late game.",    Color(0.45, 0.80, 0.30)],
-	["mesh",       "networked", "THE MESH",       "Raid. Steal the enemy's resources.",   Color(0.30, 0.65, 1.00)],
-]
 var _battle_started : bool = false
-var _faction_layer  : CanvasLayer = null
+## Stage 6c Academy: the real first-run flow (chamber → three observed scenarios → sorting).
+## Replaces the interim faction-select chooser. F1/F2/F3 skip it in debug builds (2D parity).
+var _academy                   : Node2D = null
+var _academy_layer             : CanvasLayer = null
+var _academy_chamber_active    : bool = false   ## chapters 0/2 — cadet/sorting UI own input
+var _academy_scenarios_active  : bool = false   ## chapter 1 — player commands the real Commander; waves held
 var _pause_layer    : CanvasLayer = null   ## ESC game menu (Save/Load/Settings/Main Menu)
 var _menu_open      : bool = false         ## gates gameplay input; freeze via Engine.time_scale (NOT tree pause, which blocks the menu buttons)
 var _pause_status   : Label = null         ## in-menu confirmation line (e.g. "Game saved.")
@@ -96,6 +97,11 @@ func _ready() -> void:
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade)      ## inspection-panel Upgrade buttons (branch A/B)
 	EventBus.panel_sell_requested.connect(_on_panel_sell)           ## inspection-panel Sell button
 	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine)       ## inspection-panel FOB doctrine buttons
+	EventBus.commander_destroyed.connect(_on_commander_destroyed)   ## mortality → forced retreat (revive)
+	EventBus.academy_phase_started.connect(_on_academy_phase_started)
+	EventBus.academy_phase_ended.connect(_on_academy_phase_ended)
+	EventBus.academy_spawn_requested.connect(_on_academy_spawn)
+	EventBus.academy_clear_units.connect(_on_academy_clear)
 	_setup_environment()
 	_spawn_map_grid()   ## Stage 3: the real MapGrid renders the 3D terrain + drives claim/fog
 	_setup_marker()
@@ -108,11 +114,12 @@ func _ready() -> void:
 	add_child(_rig)
 
 	## Continue (a save was loaded → GameState has a faction) restores straight into the battle;
-	## New Game shows the faction-select screen. The world is built in _start_battle() either way.
+	## New Game runs the Academy (chamber → observed scenarios → sorting). The world is built in
+	## _start_battle() either way — the Academy triggers it when its live scenarios begin.
 	if not GameState.current_faction.is_empty():
 		_continue_game()
 	else:
-		_show_faction_select()
+		_start_academy()
 	## (Controls used to be an on-map banner; they now live in ESC → Help.)
 
 ## EventBus is an autoload that outlives this scene; Load/Continue free + recreate Battle3D, so we MUST
@@ -130,6 +137,11 @@ func _exit_tree() -> void:
 		[EventBus.panel_upgrade_requested, _on_panel_upgrade],
 		[EventBus.panel_sell_requested, _on_panel_sell],
 		[EventBus.fob_doctrine_requested, _on_fob_doctrine],
+		[EventBus.commander_destroyed, _on_commander_destroyed],
+		[EventBus.academy_phase_started, _on_academy_phase_started],
+		[EventBus.academy_phase_ended, _on_academy_phase_ended],
+		[EventBus.academy_spawn_requested, _on_academy_spawn],
+		[EventBus.academy_clear_units, _on_academy_clear],
 	]:
 		if (sig_cb[0] as Signal).is_connected(sig_cb[1]):
 			(sig_cb[0] as Signal).disconnect(sig_cb[1])
@@ -169,10 +181,15 @@ func _spawn_base() -> void:
 	b.call("place_at", _cell_center2(BASE_CELL))
 	add_child(b)
 
-## Stage 2e: the player Commander (instantiated script-only → no AbilityController, so abilities
-## no-op). Auto-attacks enemies, selectable (ground ring), and left-click issues a move order.
+## Stage 2e→6c: the player Commander, now with its AbilityController (Q/W/E/R abilities live
+## in 3D — plane-coordinate pass done). The controller child must exist BEFORE the Commander
+## enters the tree so Commander._ready resolves it. Auto-attacks enemies, selectable (ground
+## ring), and left-click issues a move order.
 func _spawn_commander() -> void:
 	_commander = COMMANDER_SCRIPT.new()
+	var ac : Node = ABILITY_CONTROLLER.new()
+	ac.name = "AbilityController"
+	_commander.add_child(ac)
 	_commander.call("place_at", _cell_center2(Vector2i(28, 17)))
 	add_child(_commander)
 	_commander.call("set_selected", true)
@@ -225,8 +242,10 @@ func _process(delta: float) -> void:
 		_update_preview()
 	## Stage 6b: paced waves down the map's real A* paths — grace, then bursts separated by rests.
 	if not _battle_started:
-		return   ## wait for faction-select to build the world
+		return   ## wait for the Academy / Continue to build the world
 	_update_marker_fade()
+	if _academy_scenarios_active:
+		return   ## Academy scenarios drive their own spawns via EventBus — hold the wave cadence
 	_wave_timer -= delta
 	if _resting:
 		if _wave_timer <= 0.0:
@@ -248,8 +267,22 @@ func _process(delta: float) -> void:
 ## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
 ## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
 func _unhandled_input(event: InputEvent) -> void:
+	## DEV: F1/F2/F3 skip the Academy → architects / mesh / bloom (debug builds; before all gates).
+	if OS.is_debug_build() and _academy != null and event is InputEventKey and event.pressed and not event.echo:
+		var fk : InputEventKey = event
+		if fk.keycode == KEY_F1:
+			_academy_dev_skip("architects", "standard")
+			return
+		elif fk.keycode == KEY_F2:
+			_academy_dev_skip("mesh", "networked")
+			return
+		elif fk.keycode == KEY_F3:
+			_academy_dev_skip("bloom", "purist")
+			return
+	if _academy_chamber_active:
+		return   ## Academy chamber (chapters 0/2) — the CadetAvatar / sorting UI own input
 	if not _battle_started:
-		return   ## faction-select still up — no gameplay input yet (camera rig handles its own input)
+		return   ## world not built yet (camera rig handles its own input)
 	## ESC: cancel placement first, else toggle the pause/game menu (works while paused — node is ALWAYS).
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
 		if _placing:
@@ -543,52 +576,81 @@ func _update_preview() -> void:
 ## build buttons + tower upgrades AND lets garrisons resolve their roster unit. (architects/standard;
 ## the real game routes this through the FactionSelect screen — wired here so the battle plays.)
 ## Stage 6c faction-select screen: a simple full-screen chooser shown before the battle. Picking a
-## faction selects it (with its default sub-path), then builds the world via _start_battle().
-func _show_faction_select() -> void:
-	_faction_layer = CanvasLayer.new()
-	add_child(_faction_layer)
+## -- Academy (Stage 6c): the real first-run flow, run as a director OVER the 3D battle --
+## The 2D Academy scene is UI-shaped (chamber/cadet render via CanvasLayers + canvas-space _draw),
+## so it mounts unchanged on a CanvasLayer above the 3D viewport. It drives the world purely via
+## EventBus: phase_started → we build the live world (waves held, no enemy base) and the player
+## commands the real Commander through three observed scenarios; spawn/clear requests → our wave
+## plumbing; selection_confirmed → the chosen faction is committed and the real game begins.
+## DO NOT touch the CadetAvatar's click-to-move — it IS the player's control in the chamber.
+func _start_academy() -> void:
+	_academy_chamber_active = true
+	_academy_layer = CanvasLayer.new()
+	_academy_layer.layer = 10   ## above the HUD while the Academy runs
+	add_child(_academy_layer)
+	_academy = ACADEMY_SCENE.instantiate()
+	_academy.connect("selection_confirmed", _on_academy_confirmed)
+	_academy_layer.add_child(_academy)
 
-	var bg : ColorRect = ColorRect.new()
-	bg.color = Color(0.03, 0.05, 0.08, 0.92)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_STOP
-	_faction_layer.add_child(bg)
+## Chapter 1 begins: the Academy pre-seeded a neutral faction — build the live world for the
+## scenarios. No enemy base and no wave cadence: the Academy requests every scenario spawn.
+func _on_academy_phase_started() -> void:
+	_academy_chamber_active = false
+	_academy_scenarios_active = true
+	if not _battle_started:
+		_start_battle(false, true)
+	if is_instance_valid(_commander):
+		_commander.call("set_selected", true)   ## hand control straight to the real Commander
+	_rig.call("snap_focus", _cell_center3(BASE_CELL, 0.0), 1600.0)
 
-	var col : VBoxContainer = VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_CENTER)
-	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	col.grow_vertical = Control.GROW_DIRECTION_BOTH
-	col.add_theme_constant_override("separation", 18)
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	_faction_layer.add_child(col)
+## Scenarios over — back in the chamber for the sorting reveal (cadet/sorting UI own input again).
+func _on_academy_phase_ended() -> void:
+	_academy_scenarios_active = false
+	_academy_chamber_active = _academy != null   ## dev-skip emits this after freeing the Academy
 
-	var heading : Label = Label.new()
-	heading.text = "CHOOSE YOUR FACTION"
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", 40)
-	col.add_child(heading)
+## Scenario spawn: trickle `count` enemies from the requested spawn point down its A* path.
+func _on_academy_spawn(spawn_idx: int, count: int) -> void:
+	if _spawn_cells.is_empty() or _unit_layer == null:
+		return
+	for _i in count:
+		_spawn_enemy_from(_spawn_cells[spawn_idx % _spawn_cells.size()])
 
-	for choice in FACTION_CHOICES:
-		var btn : Button = Button.new()
-		btn.custom_minimum_size = Vector2(440.0, 78.0)
-		btn.text = "%s\n%s" % [choice[2], choice[3]]
-		btn.add_theme_color_override("font_color", choice[4])
-		btn.add_theme_font_size_override("font_size", 22)
-		var fid : String = choice[0]
-		var sub : String = choice[1]
-		btn.pressed.connect(func() -> void: _choose_faction(fid, sub))
-		col.add_child(btn)
+## Between scenarios the Academy clears the field.
+func _on_academy_clear() -> void:
+	for n in get_tree().get_nodes_in_group("units"):
+		if is_instance_valid(n):
+			n.queue_free()
 
-## Commit the chosen faction and start the battle.
-func _choose_faction(faction_id: String, sub_path: String) -> void:
+## Sorting committed: the Academy already set academy_completed + re-selected the chosen faction.
+## Retire the Academy subtree and let the real game begin on the world the cadet just defended.
+func _on_academy_confirmed() -> void:
+	_academy_chamber_active = false
+	if is_instance_valid(_academy_layer):
+		_academy_layer.queue_free()   ## frees the Academy (and its CanvasLayers) with it
+	_academy = null
+	_academy_layer = null
+	_spawn_enemy_base()   ## the conquest anchor arrives with the real game
+	_reset_waves()        ## first real wave after the standard grace period
+	EventBus.notification_pushed.emit("Assignment confirmed. Hold the line, Commander.", "positive")
+
+## DEV F1/F2/F3 (debug builds only): skip the Academy → architects / mesh / bloom, mirroring the
+## 2D dev flow. Emits academy_phase_ended FIRST so HUD state the Academy changed is restored.
+func _academy_dev_skip(faction_id: String, sub_path: String) -> void:
+	GameState.academy_completed = true
+	if is_instance_valid(_academy_layer):
+		_academy_layer.queue_free()
+	_academy = null
+	_academy_layer = null
+	EventBus.academy_phase_ended.emit()
+	_academy_scenarios_active = false
+	_academy_chamber_active = false
 	FactionManager.select_faction(faction_id, sub_path)
-	## Demo convenience: seed resources so the HUD build button is affordable immediately (the real
-	## game earns these by claiming territory through the Academy ramp).
-	EconomyManager.add_resource(FactionManager.get_primary_resource(), 400.0)
-	if is_instance_valid(_faction_layer):
-		_faction_layer.queue_free()
-		_faction_layer = null
-	_start_battle()
+	EconomyManager.add_resource(FactionManager.get_primary_resource(), 400.0)   ## dev convenience seed
+	if not _battle_started:
+		_start_battle()
+	else:
+		_spawn_enemy_base()   ## skipped mid-scenario: the academy world lacks the conquest anchor
+		_reset_waves()
 
 ## Continue: a save was loaded (faction/economy/galaxy already restored by SaveManager). Restore the
 ## faction listeners, load the active node's seeded map, and start the battle without demo clutter.
@@ -751,14 +813,15 @@ func _save_pause_settings() -> void:
 
 ## Build the faction-dependent world (units/base/commander/enemy/waves). On a fresh start it also
 ## drops the demo towers/garrison; a restored game skips those (saved development restores instead).
-func _start_battle(restored: bool = false) -> void:
+func _start_battle(restored: bool = false, academy: bool = false) -> void:
 	if _battle_started:
 		return
 	_battle_started = true
 	_setup_unit_layer()    ## must exist before garrisons _ready (their friendly units spawn here)
 	_spawn_base()
 	_spawn_commander()
-	_spawn_enemy_base()
+	if not academy:
+		_spawn_enemy_base()   ## Academy scenarios face only scripted spawns — the conquest anchor waits
 	if not restored:
 		## Clean playtest: NO demo towers/garrisons/walls. A fresh game starts empty — just the FOB,
 		## Commander, and one enemy base — so the player builds everything and saves contain only real
@@ -1051,12 +1114,37 @@ func _spawn_one_enemy() -> void:
 		return
 	var cell : Vector2i = _spawn_cells[_spawn_idx % _spawn_cells.size()]
 	_spawn_idx += 1
+	_spawn_enemy_from(cell)
+
+## Spawn a single enemy at a specific spawn cell (wave cadence + Academy scenarios share this).
+func _spawn_enemy_from(cell: Vector2i) -> void:
+	if _map_grid == null or _unit_layer == null:
+		return
 	var wp : Array = _map_grid.call("get_path_to_base", cell)
 	if wp.is_empty():
 		return
 	var u : Node = UNIT_SCENE.instantiate()
 	u.call("setup", _enemy_data(), wp)
 	_unit_layer.add_child(u)
+
+## Commander HP hit zero. In the Academy: revive in place (no retreat — keep observing). In the
+## real game: forced retreat — the field clears, the wave cadence resets, and the Commander
+## revives at the FOB. (The in-battle cost: any wave in progress is lost ground.)
+func _on_commander_destroyed() -> void:
+	if not is_instance_valid(_commander):
+		return
+	if _academy_scenarios_active:
+		_commander.call("revive")
+		return
+	for n in get_tree().get_nodes_in_group("units"):
+		if is_instance_valid(n):
+			n.queue_free()
+	_reset_waves()
+	var start2 : Vector2 = _cell_center2(Vector2i(28, 17))
+	_commander.call("place_at", start2)
+	_commander.call("move_command", start2, false)   ## clear queued orders
+	_commander.call("revive")
+	EventBus.notification_pushed.emit("Commander down — forced to retreat. Revived at the FOB.", "warning")
 
 func _enemy_data() -> UnitData:
 	var ud : UnitData = UnitData.new()

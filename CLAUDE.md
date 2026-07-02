@@ -34,6 +34,53 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-01 (2) — Stage 6c FINISH: Academy in 3D + abilities plane pass — COMPILE+BOOT VERIFIED
+
+The last two parity items before merge, on `feat/3d`. (V1 atmosphere playtest-confirmed earlier today.)
+
+**AbilityController plane-coordinate pass (`src/abilities/AbilityController.gd`):**
+- All entity position reads now go through `plane_pos()` (units/commander/base) — the old
+  `Vector2.distance_to(Vector3)` / `Vector2 = global_position` type errors are gone.
+- `_commander.queue_redraw()` / `_spawn_cannon_ring` (2D-only) replaced: Lance + Compile Cascade
+  flash via `Vfx.death` pulses; **zone abilities get flat emissive ground rings** (field cyan /
+  Bloom hazard green / Verdant Bulwark green at the FOB) spawned in world space, freed with the
+  zone + on `_exit_tree`. Rings glow under the V1 bloom.
+- Late-join sync: in the 3D flow the faction is selected before the Commander spawns, so `_ready`
+  re-applies `_on_faction_selected` (ultimate name/cooldown) when a faction is already active.
+- **Battle3D `_spawn_commander` now attaches the AbilityController child** (added BEFORE the
+  Commander enters the tree so `Commander._ready` resolves it). Q/W/E/R live in 3D; W targeting
+  delivers via the existing Commander ground-ray path.
+
+**Academy in 3D (Battle3D as host — the Academy stays a DIRECTOR, per architecture-north-star):**
+- `Academy.tscn` (2D scene, UI-shaped: CanvasLayers + canvas-space chamber/cadet) mounts UNCHANGED
+  on a CanvasLayer (layer 10) over the 3D battle. CadetAvatar click-to-move untouched (see the
+  recurring-regression memory — it IS the chamber control).
+- New game (`_ready`, no faction) → `_start_academy()`; Continue path unchanged. The interim
+  faction-select chooser (FACTION_CHOICES/_show_faction_select/_choose_faction) is REMOVED —
+  the Academy is the real flow now.
+- EventBus wiring in Battle3D: `academy_phase_started` → `_start_battle(false, academy=true)`
+  (live world, **no enemy base**, wave cadence held — `_academy_scenarios_active` gates the
+  `_process` wave driver), pre-select Commander + camera snap-focus. `academy_spawn_requested` →
+  `_spawn_enemy_from(spawn_cells[idx])` (shared with the wave driver via refactor).
+  `academy_clear_units` → free "units" group. `academy_phase_ended` → back to chamber (input
+  yielded via `_academy_chamber_active`). `selection_confirmed` → free the Academy layer, spawn
+  the conquest enemy base, `_reset_waves()` → the real game begins on the world the cadet defended
+  (2D-parity: scenario structures persist).
+- **DEV F1/F2/F3 restored** (debug builds, while the Academy is up): skip → architects/mesh/bloom,
+  emits `academy_phase_ended` first (HUD state), seeds 400 convenience resources.
+- **New: `commander_destroyed` handler** (was a soft-lock — nothing revived the 3D Commander):
+  Academy scenarios → revive in place; real game → forced retreat (enemies cleared, waves reset
+  to grace, Commander revived at the FOB, warning toast).
+
+**Compile/boot:** Battle3D ran ~30s under MCP through chapter 0 → phase_started → world build →
+scenario spawns with ZERO errors (only standing benign warnings + pre-existing Academy int-division
+warnings, now parsed in this scene). Debug exe re-exported 2026-07-01. **Runtime: needs hand
+playtest** — full Academy arc (chamber → 3 scenarios → sorting → commit), F1 skip, Q Lance flash,
+W field ring (unlocks at sub-path commit — test via milestone/dev), Commander death retreat.
+**Next: merge `feat/3d` → main** (main_scene already Root.tscn; 2D Battle.tscn stays as fallback).
+
+---
+
 ## Session 2026-07-01 — VISUAL SUPERCHARGE V1: atmosphere overhaul — COMPILE VERIFIED, playtest pending
 
 New track (user): mechanics are solid — supercharge the graphics toward the Codex look.
