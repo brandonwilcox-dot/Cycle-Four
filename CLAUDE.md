@@ -34,6 +34,43 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 (3) — VISUAL SUPERCHARGE V5: set pieces — COMPILE+RUNTIME VERIFIED
+
+The canon payoffs. Five pieces, all cosmetic-only:
+- **V5.0 Academy/Pilgrimage chamber effects** (user-requested): the Mark BREATHES
+  (`ChamberMark` — per-circle out-of-phase glow, 9s period, + escaping halo at the top of each
+  breath); the **aperture's light slowly crosses the floor** (new `src/academy/ChamberLight.gd`,
+  48s elliptical drift — the canon closing image); a **vignette + film-grain veil** over the
+  chamber (new `assets/shaders/chamber_veil.gdshader`, ColorRect w/ MOUSE_FILTER_IGNORE).
+  All additive children of Chamber (hide with it during scenarios); INPUT PATHS UNTOUCHED.
+- **V5.1 Galaxy beauty**: owned/rival systems glow brighter (bloom under V1 glow), neutral dim,
+  lanes dimmer (0.18) so systems pop; **the Core renders as an absence** — a larger sphere DARKER
+  than space (albedo ~0.012, no specular), circled by one thin deep-amber ring. The only hint.
+- **V5.2 Ancient desaturation — THE canon effect** ("color drains"): while anything is in the
+  new "ancients" group, BattleAtmosphere sinks `adjustment_saturation` 0.95 → 0.35 (drain 0.45/s,
+  recovery slower at 0.25/s). AncientWatcher joins the group; fires at milestones automatically.
+- **V5.3 Watcher low-albedo canon look**: body = deep-of-still-water near-black (absorbs light,
+  no specular), ×1.18 oversized ("proportions wrong, never commented on"), the faintest pale
+  glint (0.06 emission) so it can be found.
+- **V5.4 Wave telegraphy**: in the last 4s of a lull the active spawn mouths show pulsing
+  emissive rings in the incoming faction's substrate color, pulse quickening as the wave closes
+  (readable threat, core/22). Hidden when the wave lands / during Academy scenarios. Rings
+  rebuilt with `_collect_spawns` (so deploys re-key them).
+- Fixed a `show`-shadows-Node3D warning introduced by the first telegraphy draft.
+
+**Verified:** MCP boot through chapter 0 → phase_started → scenario with all V5 code hot, zero
+errors, zero new warnings. Both exes re-exported 2026-07-02 (19:26). **NOTE: the dev-churned
+user save was set aside as `cycle_four_save.json.devbak`** (in `%APPDATA%\Godot\app_userdata\
+Cycle Four\`) — my MCP verification runs had polluted it; next boot starts the fresh Academy.
+**Playtest:** chamber (Mark breathing, drifting light pool, vignette) on New Game; telegraphy
+rings before waves; galaxy zoom (bright systems, dark Core); watcher + desaturation at the
+first milestone. **The V1–V5 visual supercharge plan is COMPLETE except deferred items** (V4:
+GPU particles + rising construction; V2 water/height → F1) and **V6 (asset-pack decision)** —
+next session should be a full hand playtest of the whole visual stack, then V6 or the backlog
+(J1 real waves).
+
+---
+
 ## Session 2026-07-02 (2) — VISUAL SUPERCHARGE V4: motion pass — COMPILE+RUNTIME VERIFIED
 
 The world moves. All cosmetic-only; five systems, each independently tunable:

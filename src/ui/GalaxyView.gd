@@ -64,24 +64,53 @@ func _rebuild() -> void:
 			_add_edge(a, WORLD3D.to3(world_of(nb), NODE_Y))
 
 	## System spheres, colored by owner; rings for active + capturable frontier.
+	## V5.1: the CORE renders as an absence — light-absorbing, wrong (codex/04) — while
+	## every other system glows and blooms under the V1 environment.
 	for id in GalaxyManager.star_systems:
 		var p : Vector3 = WORLD3D.to3(world_of(id), NODE_Y)
 		var owner_id : String = str(GalaxyManager.star_systems[id].get("owner", "neutral"))
-		_add_node(p, _owner_color(owner_id, faction))
+		if owner_id == "core":
+			_add_core(p)
+		else:
+			_add_node(p, _owner_color(owner_id, faction), 1.2 if owner_id != "neutral" else 0.45)
 		if id == GalaxyManager.active_node:
 			_add_ring(p, Color(1, 1, 1, 0.95))
 		elif id in frontier:
 			_add_ring(p, Color(1.0, 0.85, 0.2, 0.95))
 
-func _add_node(p: Vector3, col: Color) -> void:
+func _add_node(p: Vector3, col: Color, energy: float = 0.6) -> void:
 	var mi := MeshInstance3D.new()
 	var sp := SphereMesh.new()
 	sp.radius = NODE_RADIUS
 	sp.height = NODE_RADIUS * 2.0
 	mi.mesh = sp
 	mi.position = p
-	mi.material_override = _emissive(col, 0.6)
+	mi.material_override = _emissive(col, energy)
 	add_child(mi)
+
+## The Neutral Core: a sphere DARKER than the space around it — it absorbs light rather than
+## catching it — larger than any system, circled by one thin deep-amber ring (the only hint).
+func _add_core(p: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	var sp := SphereMesh.new()
+	sp.radius = NODE_RADIUS * 1.6
+	sp.height = NODE_RADIUS * 3.2
+	mi.mesh = sp
+	mi.position = p
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.012, 0.014, 0.02)
+	m.roughness = 1.0
+	m.metallic_specular = 0.0
+	mi.material_override = m
+	add_child(mi)
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = NODE_RADIUS * 1.6 + 20.0
+	tm.outer_radius = NODE_RADIUS * 1.6 + 30.0
+	ring.mesh = tm
+	ring.position = p
+	ring.material_override = _emissive(Color(0.55, 0.38, 0.10), 0.7)
+	add_child(ring)
 
 func _add_ring(p: Vector3, col: Color) -> void:
 	var mi := MeshInstance3D.new()
@@ -102,7 +131,7 @@ func _add_edge(a: Vector3, b: Vector3) -> void:
 	mi.position = (a + b) * 0.5
 	if edge_len > 0.01:
 		mi.look_at(b, Vector3.UP)
-	mi.material_override = _emissive(Color(0.30, 0.36, 0.52), 0.3)
+	mi.material_override = _emissive(Color(0.30, 0.36, 0.52), 0.18)   ## V5.1: dim lanes, bright systems
 	add_child(mi)
 
 func _emissive(col: Color, energy: float) -> StandardMaterial3D:

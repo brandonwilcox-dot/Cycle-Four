@@ -86,6 +86,12 @@ const WAVE_GRACE     : float = 12.0   ## quiet time before the first wave (build
 const WAVE_REST      : float = 22.0   ## quiet time between waves — a lull that means something
 const WAVE_SIZE_BASE : int   = 10     ## wave 1 size; +3 each subsequent wave
 const MAX_LIVE_ENEMIES : int = 48     ## hard cap on concurrent hostiles — never let the field flood
+## V5.4 wave telegraphy: in the final seconds of a lull, the active spawn mouths glow in the
+## incoming faction's substrate color — readable threat (core/22) that doubles as tone.
+const TELEGRAPH_SECS : float = 4.0
+var _telegraph_rings : Array[MeshInstance3D] = []
+var _telegraph_mats  : Array[StandardMaterial3D] = []
+
 var _unit_layer  : Node3D = null
 var _spawn_cells : Array[Vector2i] = []
 var _spawn_idx   : int   = 0
@@ -260,6 +266,7 @@ func _process(delta: float) -> void:
 		return   ## Academy scenarios drive their own spawns via EventBus — hold the wave cadence
 	_wave_timer -= delta
 	if _resting:
+		_update_telegraphy()   ## V5.4: spawn mouths glow as the wave draws near
 		if _wave_timer <= 0.0:
 			_start_next_wave()
 		return
@@ -921,6 +928,55 @@ func _collect_spawns() -> void:
 		for sp in md.spawn_points:
 			if sp != null:
 				_spawn_cells.append(sp.position)
+	_rebuild_telegraph_rings()
+
+## -- V5.4 wave telegraphy --
+
+## One flat emissive ring per spawn cell, hidden until the final seconds before a wave.
+## Colored for the incoming faction's substrate (placeholder wave driver fields mesh Raiders).
+func _rebuild_telegraph_rings() -> void:
+	for r in _telegraph_rings:
+		if is_instance_valid(r):
+			r.queue_free()
+	_telegraph_rings.clear()
+	_telegraph_mats.clear()
+	for cell in _spawn_cells:
+		var ring : MeshInstance3D = MeshInstance3D.new()
+		var torus : TorusMesh = TorusMesh.new()
+		torus.inner_radius = CELL * 1.0
+		torus.outer_radius = CELL * 1.15
+		ring.mesh = torus
+		var mat : StandardMaterial3D = StandardMaterial3D.new()
+		var col : Color = Vfx.faction_color(_enemy_data().faction_id)
+		mat.albedo_color = col
+		mat.emission_enabled = true
+		mat.emission = col
+		mat.emission_energy_multiplier = 1.0
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = mat
+		ring.visible = false
+		add_child(ring)
+		ring.global_position = WORLD3D.to3(_cell_center2(cell), 2.0)
+		_telegraph_rings.append(ring)
+		_telegraph_mats.append(mat)
+
+## During a lull: rings appear TELEGRAPH_SECS out and pulse faster as the wave closes in.
+func _update_telegraphy() -> void:
+	var active : bool = _wave_timer <= TELEGRAPH_SECS and not _academy_scenarios_active
+	for i in _telegraph_rings.size():
+		var ring : MeshInstance3D = _telegraph_rings[i]
+		if not is_instance_valid(ring):
+			continue
+		ring.visible = active
+		if active:
+			var urgency : float = 1.0 - _wave_timer / TELEGRAPH_SECS
+			_telegraph_mats[i].emission_energy_multiplier = \
+				0.8 + 0.8 * (0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * (1.0 + urgency * 2.0)))
+
+func _hide_telegraphy() -> void:
+	for ring in _telegraph_rings:
+		if is_instance_valid(ring):
+			ring.visible = false
 
 ## Stage 6c: galaxy deploy — when zoomed out, click a frontier node to load that territory's seeded
 ## map and drop back onto the battlefield. (Capture-on-win is a follow-up; this is the deploy nav.)
@@ -1116,6 +1172,7 @@ func _start_next_wave() -> void:
 	_wave_left = WAVE_SIZE_BASE + (_wave_num - 1) * 3
 	_resting = false
 	_wave_timer = 0.0   ## first unit of the wave spawns right away
+	_hide_telegraphy()  ## the warning becomes the wave
 	EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles." % [_wave_num, _wave_left], "warning")
 
 ## HUD "Begin Waves" button (→ WaveManager.begin_waves → wave_called_early): skip the rest of

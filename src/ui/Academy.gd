@@ -8,6 +8,8 @@ extends Node2D
 signal selection_confirmed()
 
 const _TRACKER_SCRIPT = preload("res://src/academy/AcademyBehaviorTracker.gd")
+const _CHAMBER_LIGHT  = preload("res://src/academy/ChamberLight.gd")
+const _VEIL_SHADER    = preload("res://assets/shaders/chamber_veil.gdshader")
 
 ## Default sub-paths assigned when a faction is pre-seeded for Academy economy.
 const DEFAULT_SUB_PATHS : Dictionary = {
@@ -107,9 +109,26 @@ func _ready() -> void:
 	_timer_label.modulate.a   = 0.0
 	_timer_label.visible      = false
 	_wash_rect.modulate.a     = 0.0
+	_build_chamber_fx()   ## V5.0: aperture light drift + vignette/grain veil (additive-only)
 	_tracker = _TRACKER_SCRIPT.new()
 	_tracker.start_tracking()
 	_run_chapter_0()
+
+## V5.0 chamber effects — children of Chamber so they hide with it during the scenarios.
+## Strictly decorative: the veil ignores the mouse; nothing here touches the input path.
+func _build_chamber_fx() -> void:
+	var light : Node2D = _CHAMBER_LIGHT.new()
+	light.name = "ApertureLight"
+	_chamber.add_child(light)
+	var veil : ColorRect = ColorRect.new()
+	veil.name = "Veil"
+	var vm : ShaderMaterial = ShaderMaterial.new()
+	vm.shader = _VEIL_SHADER
+	veil.material = vm
+	veil.position = Vector2(-960.0, -540.0)
+	veil.size = Vector2(1920.0, 1080.0)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chamber.add_child(veil)
 
 func _process(delta: float) -> void:
 	if not _scenario_running:

@@ -10,7 +10,11 @@ const WORLD3D = preload("res://src/core/World3D.gd")
 
 const WALK_DURATION : float = 4.0
 const RECT_SIZE     : float = 32.0
-const ANCIENT_COLOR : Color = Color(0.85, 0.80, 0.55, 1.0)
+## V5.3 canon look (codex/04): the low-albedo material — "closer to the deep of still water
+## than to black"; it absorbs light rather than catching it. Slightly too large (×1.18).
+const ANCIENT_BODY  : Color = Color(0.035, 0.040, 0.055, 1.0)
+const ANCIENT_GLINT : Color = Color(0.85, 0.80, 0.55, 1.0)   ## the faintest pale presence
+const SCALE_WRONG   : float = 1.18
 
 var _p              : Vector2 = Vector2.ZERO
 var _target_pos     : Vector2 = Vector2.ZERO
@@ -33,20 +37,25 @@ func setup(target: Vector2, dialogue: String) -> void:
 	_dialogue_line = dialogue
 
 func _ready() -> void:
+	add_to_group("ancients")   ## V5.2: while any Ancient is present, the world desaturates
 	_build_visual()
 
 func _build_visual() -> void:
 	var body : MeshInstance3D = MeshInstance3D.new()
 	var bx : BoxMesh = BoxMesh.new()
-	bx.size = Vector3(RECT_SIZE, RECT_SIZE, RECT_SIZE)
+	var s : float = RECT_SIZE * SCALE_WRONG   ## proportions 15–20% off — never commented on
+	bx.size = Vector3(s, s, s)
 	body.mesh = bx
-	body.position = Vector3(0.0, RECT_SIZE * 0.5, 0.0)
+	body.position = Vector3(0.0, s * 0.5, 0.0)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var m : StandardMaterial3D = StandardMaterial3D.new()
-	m.albedo_color = ANCIENT_COLOR
-	m.emission_enabled = true
-	m.emission = ANCIENT_COLOR
-	m.emission_energy_multiplier = 0.4
+	m.albedo_color = ANCIENT_BODY   ## absorbs light; no specular catch
+	m.roughness = 1.0
+	m.metallic = 0.0
+	m.metallic_specular = 0.0
+	m.emission_enabled = true       ## the faintest pale glint — enough to find, never bright
+	m.emission = ANCIENT_GLINT
+	m.emission_energy_multiplier = 0.06
 	body.material_override = m
 	add_child(body)
 

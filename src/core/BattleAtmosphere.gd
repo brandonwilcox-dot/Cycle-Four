@@ -32,6 +32,13 @@ const SSAO_INTENSITY     : float = 1.5
 const GRADE_SATURATION   : float = 0.95       ## melancholy, not grimdark: a touch under neutral
 const GRADE_CONTRAST     : float = 1.03
 
+## V5.2 — THE canon effect (codex/03): while an Ancient is present, "color drains".
+## Saturation sinks toward OBSERVED_SATURATION while anything is in the "ancients" group,
+## then slowly returns. Drain is slower than recovery is slow — the world notices.
+const OBSERVED_SATURATION : float = 0.35
+const OBSERVED_DRAIN_RATE : float = 0.45   ## saturation/sec toward observed
+const OBSERVED_RECOVER_RATE : float = 0.25 ## saturation/sec back to the normal grade
+
 var _env : Environment = null
 var _rig : Node = null   ## camera_rig group — fog fades out at galaxy zoom so the graph stays clear
 
@@ -113,3 +120,8 @@ func _process(delta: float) -> void:
 			return
 	var target : float = 0.0 if bool(_rig.call("is_galaxy_zoom")) else FOG_DENSITY
 	_env.fog_density = move_toward(_env.fog_density, target, FOG_FADE_RATE * delta)
+	## V5.2 Ancient observation: color drains while a watcher is on the field, returns after.
+	var observed : bool = get_tree().get_first_node_in_group("ancients") != null
+	var sat_target : float = OBSERVED_SATURATION if observed else GRADE_SATURATION
+	var rate : float = OBSERVED_DRAIN_RATE if observed else OBSERVED_RECOVER_RATE
+	_env.adjustment_saturation = move_toward(_env.adjustment_saturation, sat_target, rate * delta)
