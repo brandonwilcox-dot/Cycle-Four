@@ -718,6 +718,10 @@ func _build_terrain() -> void:
 	mm.use_colors = true
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(CELL_SIZE, CELL_SIZE)
+	## V6-lite terrain: subdivide each tile so the shader's vertex relief has geometry to bend
+	## (4×4 quads/tile; world-space noise keeps shared edges crack-free across tiles).
+	pm.subdivide_width = 3
+	pm.subdivide_depth = 3
 	mm.mesh = pm
 	mm.instance_count = COLS * ROWS
 	for row in ROWS:
@@ -767,6 +771,11 @@ func _refresh_terrain() -> void:
 			var lit : float = 1.0 if (i < _visible.size() and _visible[i] == 1) else 0.0
 			_data_img.set_pixel(col, row, Color(revealed, claimed, pathness, lit))
 	_data_tex.update(_data_img)
+	## V6-lite terrain: seed the relief/water noise from the territory's map seed, so every
+	## world has its own geography (and a Continue regenerates the same one).
+	if _ground_mat != null:
+		var tseed : float = float(int(map_data.map_seed) % 4096) if map_data != null else 0.0
+		_ground_mat.set_shader_parameter("terrain_seed", tseed)
 	_apply_faction_ground_params()
 
 ## Pushes the active faction's substrate-creep look to the ground shader (cheap; runs per refresh

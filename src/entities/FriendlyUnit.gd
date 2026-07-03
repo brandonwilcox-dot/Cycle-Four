@@ -11,6 +11,7 @@ extends Node3D
 const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
 
 const AGGRO_RADIUS    : float = 240.0
 const MAX_LEASH       : float = 220.0
@@ -212,9 +213,6 @@ func _build_visual() -> void:
 
 	## Body — small faction-colored box.
 	_mesh = MeshInstance3D.new()
-	var bx : BoxMesh = BoxMesh.new()
-	bx.size = Vector3(18.0, 18.0, 18.0)
-	_mesh.mesh = bx
 	_mesh.position = Vector3(0.0, 10.0, 0.0)
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var m : StandardMaterial3D = StandardMaterial3D.new()
@@ -224,6 +222,8 @@ func _build_visual() -> void:
 		## don't need the shared breathe/scroll — their gait carries the life).
 		_SUBSTRATE.apply(m, data.faction_id, false)
 	_mesh.material_override = m
+	## V6-lite: per-faction composed silhouette (parts share the material → tints apply).
+	UNIT_BODIES.compose(_mesh, data.faction_id if data != null else "", 18.0, m)
 	add_child(_mesh)
 
 	## Billboard health bar.

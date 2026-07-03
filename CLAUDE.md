@@ -34,6 +34,45 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 (4) — VISUAL TRACK WRAP: V6-lite — units aren't cubes, terrain + water, rising construction
+
+User directive: wrap the visuals; deferred bits + terrain/water + "tired of cubes attacking
+each other." Four pieces, all zero-asset procedural:
+
+- **Unit silhouette overhaul (`src/vfx/UnitBodies.gd`)** — per-faction composed bodies on
+  Unit + FriendlyUnit; every part SHARES the unit's one material, so tint/damage-fade/hijack/
+  stealth/hit-flash still apply body-wide. Architect **wedge drone** (slim hull, sensor canopy,
+  swept wings — pairs with the glide gait); Bloom **organic crawler** (squashed body, forward
+  head, trailing pods — lopes); Mesh **skitterer** (low chassis on four legs + antenna).
+  **Commander hero hull**: sloped glacis (+X facing), command canopy, comms mast (parts share
+  the substrate material). Fallback = the old cube for unknown factions. Real model packs
+  remain the V6 decision — judge after playing this.
+- **Terrain + water (F1 visual layer)** — ground shader vertex relief (`terrain_seed` from
+  `map_data.map_seed` → every territory has its own geography; Continue regenerates it);
+  relief² so lowlands stay flat, hills read. **Paths/spawns/base/claimed stay FLAT** (data
+  texture mask in the vertex shader) — gameplay readability untouched. **Pooled water in the
+  lowlands**: animated ripple + faint emissive sparkle (reads inside the fog tiers), never
+  cuts paths/claims/creep. Tiles subdivided 4×4 (PlaneMesh) for the displacement; world-space
+  noise = crack-free across tile edges. THE SIM IS UNTOUCHED — blocking/slowing terrain (F1
+  proper) is still the open gameplay item (J3/F1 backlog).
+- **Rising construction (V4 close-out)** — Tower/Building/Wall body parts now live under a
+  `_body_root` that Y-scales with build fraction (0.12 → 1.0): structures physically climb
+  out of the ground under the Commander's beam, then stand full-height when built. Ghost
+  alpha + build bar unchanged; Tower upgrade teardown nulls the root.
+- **GPUParticles3D: CLOSED as a decision** — CPU particles retained deliberately (tiny
+  counts, identical API); revisit only if a perf capture blames particles.
+
+**Verified:** MCP boot → Academy scenario, zero errors; screenshot shows a water pool at the
+frontier + the Commander's new hull. Both exes re-exported 2026-07-02 (19:58).
+**Playtest:** all three factions' unit bodies in motion (gait + silhouette together), water
+pools + hills on open ground (and confirm paths stay flat/readable), place a tower and watch
+it RISE under the build beam, Tower upgrade rebuild still clean under rapid U (debounce holds).
+Tune: `UnitBodies` part sizes, shader `height_amp`/`water_level`, rise floor 0.12.
+**The visual supercharge track (V1–V6-lite) is WRAPPED.** Open: V6 asset-pack decision (user,
+after playtest), F1 gameplay terrain, J1 real waves, V5.0(b) 3D chamber rebuild.
+
+---
+
 ## Session 2026-07-02 (3) — VISUAL SUPERCHARGE V5: set pieces — COMPILE+RUNTIME VERIFIED
 
 The canon payoffs. Five pieces, all cosmetic-only:

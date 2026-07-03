@@ -133,9 +133,12 @@ materials carry the canon.
 per-frame from BattleAtmosphere via SubstrateMaterials.tick), per-faction unit gaits (Architect
 glide / Bloom lope / Mesh skitter, driven off actual movement), tower turret recoil, camera
 trauma shake (base breach/destroyed, Commander down, enemy base falls), unit hit-flash
-(substrate emission flares on damage). **Still open in V4:** item 1 (GPUParticles3D rework +
-dissolve deaths — CPU particles still fine at current counts) and item 2 (rising construction —
-needs a body-root refactor or clip shader; ghost-alpha remains the construction read for now).
+(substrate emission flares on damage).
+**2026-07-02 close-out:** rising construction SHIPPED (Tower/Building/Wall bodies live under a
+`_body_root` that scales up in Y with build progress — structures climb out of the ground under
+the Commander's beam). GPUParticles3D rework **CLOSED as a decision, not deferred**: CPU
+particles are retained deliberately — counts are tiny (a few dozen), the 1080 Ti doesn't notice,
+and the API would be identical; revisit ONLY if a future perf capture blames particles.
 1. Upgrade `Vfx` internals to **GPUParticles3D** (keep API identical — callers
    untouched): impact sparks with light emission, faction-tinted death
    dissolves (shader alpha-noise dissolve, not sphere-pop).
@@ -180,6 +183,20 @@ After V1–V4, reassess with screenshots: if procedural still reads "clean but
 austere," option to adopt CC0 mesh packs (Kenney space kit / Quaternius
 sci-fi) re-materialed with the V3 substrate shaders so they stay on-canon.
 Decide with the user; not assumed.
+**V6-lite SHIPPED 2026-07-02** (user: "tired of cubes attacking each other"):
+1. `src/vfx/UnitBodies.gd` — per-faction composed unit silhouettes, all parts
+   sharing the unit's one material so every tint mechanic still works:
+   Architect **wedge drone** (slim hull, sensor canopy, swept wings — glides),
+   Bloom **organic crawler** (squashed body, head, trailing pods — lopes),
+   Mesh **skitterer** (low chassis on four legs, antenna — skitters).
+   Applied to Unit + FriendlyUnit; Commander got a hero hull (sloped glacis,
+   command canopy, comms mast). Still zero-asset procedural.
+2. **Terrain + water shipped as a visual layer** (F1-lite): ground-shader
+   vertex relief on open ground (seeded per territory from map_seed; paths/
+   claims/spawns/base stay flat) + pooled animated water in the lowlands
+   with a faint sparkle. Tiles subdivided 4×4 for the displacement. The SIM
+   is untouched — gameplay terrain (blocking/slowing, F1 proper) still open.
+The full asset-pack question stays open — judge after playing V6-lite.
 
 ---
 

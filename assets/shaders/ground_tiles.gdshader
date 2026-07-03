@@ -26,8 +26,17 @@ uniform float grid_near = 1200.0;   // full grid inside this camera distance (px
 uniform float grid_far  = 3500.0;   // no grid beyond this
 uniform float noise_strength = 0.30;
 
+// V6-lite terrain/water (backlog F1, visual layer): height relief on open ground and pooled
+// water in the lowlands. Seeded per territory (MapGrid passes map_seed) so every world differs.
+// Paths / spawns / base / claimed ground stay FLAT — the game reads exactly as before.
+uniform float terrain_seed = 0.0;
+uniform float height_amp : hint_range(0.0, 40.0) = 10.0;
+uniform float water_level : hint_range(0.0, 1.0) = 0.34;
+
 varying vec3 wpos;
 varying vec4 inst_col;
+varying float v_hn;     // terrain height noise 0..1
+varying float v_flat;   // 1 = open ground (may have relief/water), 0 = gameplay-flat
 
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -59,6 +68,14 @@ float fbm(vec2 p) {
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	inst_col = COLOR;
+	// Terrain relief: continuous across tiles (world-space noise → shared edge vertices get
+	// identical heights, no cracks). relief² keeps lowlands flat and hills read as hills.
+	vec2 tuv = clamp(wpos.xz / (map_cells * cell_size), vec2(0.0), vec2(1.0));
+	vec4 td = textureLod(map_tex, tuv, 0.0);
+	v_flat = (1.0 - td.b) * (1.0 - td.g);
+	v_hn = fbm(wpos.xz * 0.006 + vec2(terrain_seed));
+	float relief = max(v_hn - water_level, 0.0);
+	VERTEX.y += relief * relief * height_amp * 3.0 * v_flat;
 }
 
 void fragment() {
@@ -73,6 +90,8 @@ void fragment() {
 	// --- base: instance color + macro variation (paths stay smoother = readable corridors)
 	float n = fbm(wpos.xz * 0.013);
 	vec3 base = inst_col.rgb * (1.0 + (n - 0.5) * mix(noise_strength, 0.10, pathness));
+	// Highlands catch a little more light; lowlands sit heavier.
+	base *= 1.0 + max(v_hn - water_level, 0.0) * 0.35 * v_flat;
 
 	// --- claimed territory: faction substrate creep with a soft, noisy frontier
 	float creep = smoothstep(0.30, 0.72, claimed + (fbm(wpos.xz * 0.03 + vec2(53.1)) - 0.5) * 0.45);
@@ -105,6 +124,16 @@ void fragment() {
 	vec2 gc = abs(fract(wpos.xz / cell_size) - 0.5);
 	float line = smoothstep(0.44, 0.478, max(gc.x, gc.y));
 	base *= 1.0 - line * 0.38 * grid_fade;
+
+	// --- water: pooled lowlands (visual only — the sim is untouched). Animated ripple with a
+	// faint emissive sparkle so it still reads inside the fog tiers. Never cuts paths/claims.
+	float water = smoothstep(water_level, water_level - 0.05, v_hn) * v_flat * (1.0 - creep);
+	if (water > 0.001) {
+		float ripple = fbm(wpos.xz * 0.05 + vec2(TIME * 0.22, TIME * 0.15));
+		vec3 wcol = vec3(0.045, 0.115, 0.185) * (0.85 + 0.5 * ripple);
+		base = mix(base, wcol, water);
+		emis = mix(emis, vec3(0.08, 0.22, 0.32) * smoothstep(0.60, 0.74, ripple), water);
+	}
 
 	// --- fog of war, three tiers ---
 	// unknown: near-black, noisy dissolve frontier (the unknown absorbs light).

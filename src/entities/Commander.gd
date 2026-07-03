@@ -433,6 +433,30 @@ func _build_visual() -> void:
 	_SUBSTRATE.apply(bmat, FactionManager.active_faction)
 	_body.material_override = bmat
 	add_child(_body)
+	## V6-lite: hero silhouette — command vehicle, not a cube. Parts share bmat (substrate).
+	var glacis : MeshInstance3D = MeshInstance3D.new()   ## sloped front plate (+X = facing)
+	var gb : BoxMesh = BoxMesh.new()
+	gb.size = Vector3(14.0, 20.0, 26.0)
+	glacis.mesh = gb
+	glacis.position = Vector3(19.0, -4.0, 0.0)
+	glacis.rotation_degrees = Vector3(0.0, 0.0, -18.0)
+	glacis.material_override = bmat
+	_body.add_child(glacis)
+	var canopy : MeshInstance3D = MeshInstance3D.new()   ## raised command canopy
+	var cs : SphereMesh = SphereMesh.new()
+	cs.radius = 9.0
+	cs.height = 18.0
+	canopy.mesh = cs
+	canopy.position = Vector3(2.0, 19.0, 0.0)
+	canopy.material_override = bmat
+	_body.add_child(canopy)
+	var mast : MeshInstance3D = MeshInstance3D.new()     ## comms mast (the leader on the field)
+	var mb : BoxMesh = BoxMesh.new()
+	mb.size = Vector3(2.2, 24.0, 2.2)
+	mast.mesh = mb
+	mast.position = Vector3(-10.0, 26.0, 0.0)
+	mast.material_override = bmat
+	_body.add_child(mast)
 
 	## Centre pip — a small white cap on top.
 	var pip : MeshInstance3D = MeshInstance3D.new()

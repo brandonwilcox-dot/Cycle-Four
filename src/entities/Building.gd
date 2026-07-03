@@ -54,6 +54,7 @@ var _raid_target_cell  : Vector2i = Vector2i(-1, -1)
 var _raid_target_world : Vector2  = Vector2.ZERO
 
 ## 3D visual.
+var _body_root : Node3D = null   ## V4 rising construction
 var _body_mats : Array[StandardMaterial3D] = []
 var _build_bar : MeshInstance3D = null
 var _height    : float = 50.0
@@ -101,6 +102,9 @@ func _refresh_build_visual() -> void:
 	if _build_bar != null:
 		_build_bar.visible = _health < _max_health
 		_build_bar.scale.x = frac
+	## V4 rising construction: the structure climbs out of the ground as it builds.
+	if _body_root != null:
+		_body_root.scale.y = 1.0 if _built else (0.12 + 0.88 * frac)
 	var a : float = 1.0 if _built else 0.5
 	for m in _body_mats:
 		if m == null:
@@ -260,6 +264,9 @@ func destroy() -> void:
 
 func _build_visual() -> void:
 	_body_mats.clear()
+	## V4 rising construction: body parts under _body_root, scaled up in Y with build progress.
+	_body_root = Node3D.new()
+	add_child(_body_root)
 	var col : Color = data.get("color_hint") if data.get("color_hint") else Color.WHITE
 
 	## Garrison body — a squat block.
@@ -270,7 +277,7 @@ func _build_visual() -> void:
 	body.position = Vector3(0.0, _height * 0.5, 0.0)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	body.material_override = _mat(col)
-	add_child(body)
+	_body_root.add_child(body)
 
 	## Raised cross/plus on top — the building identity (distinct from towers/units).
 	var cross_col : Color = col.darkened(0.5)
@@ -280,14 +287,14 @@ func _build_visual() -> void:
 	hbar.mesh = hb
 	hbar.position = Vector3(0.0, _height + 5.0, 0.0)
 	hbar.material_override = _mat(cross_col)
-	add_child(hbar)
+	_body_root.add_child(hbar)
 	var vbar : MeshInstance3D = MeshInstance3D.new()
 	var vb : BoxMesh = BoxMesh.new()
 	vb.size = Vector3(10.0, 8.0, 34.0)
 	vbar.mesh = vb
 	vbar.position = Vector3(0.0, _height + 5.0, 0.0)
 	vbar.material_override = _mat(cross_col)
-	add_child(vbar)
+	_body_root.add_child(vbar)
 
 	## Construction/repair bar — billboarded above; shown while building/damaged.
 	_build_bar = MeshInstance3D.new()

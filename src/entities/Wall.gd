@@ -20,6 +20,7 @@ var _max_health : float   = MAX_HEALTH
 var _health     : float   = START_HEALTH
 var _built      : bool    = false
 var _is_dead    : bool    = false
+var _body_root : Node3D = null   ## V4 rising construction
 var _body_mats  : Array[StandardMaterial3D] = []
 var _build_bar  : MeshInstance3D = null
 
@@ -75,6 +76,9 @@ func take_damage(amount: float, _damage_type: int = -1) -> bool:
 
 func _build_visual() -> void:
 	_body_mats.clear()
+	## V4 rising construction: body parts under _body_root, scaled up in Y with build progress.
+	_body_root = Node3D.new()
+	add_child(_body_root)
 	## Steel barrier block.
 	var body : MeshInstance3D = MeshInstance3D.new()
 	var bx : BoxMesh = BoxMesh.new()
@@ -83,7 +87,7 @@ func _build_visual() -> void:
 	body.position = Vector3(0.0, 22.0, 0.0)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	body.material_override = _mat(BODY_COLOR)
-	add_child(body)
+	_body_root.add_child(body)
 
 	## Horizontal seams so it reads as a blast wall, not a flat block.
 	for sy in [14.0, 32.0]:
@@ -93,7 +97,7 @@ func _build_visual() -> void:
 		seam.mesh = sm
 		seam.position = Vector3(0.0, sy, 0.0)
 		seam.material_override = _mat(BODY_COLOR.darkened(0.4))
-		add_child(seam)
+		_body_root.add_child(seam)
 
 	## Construction/damage bar — billboarded above.
 	_build_bar = MeshInstance3D.new()
@@ -124,6 +128,9 @@ func _refresh_build_visual() -> void:
 	if _build_bar != null:
 		_build_bar.visible = _health < _max_health
 		_build_bar.scale.x = frac
+	## V4 rising construction: the structure climbs out of the ground as it builds.
+	if _body_root != null:
+		_body_root.scale.y = 1.0 if _built else (0.12 + 0.88 * frac)
 	var a : float = 1.0 if _built else 0.5
 	for m in _body_mats:
 		if m == null:

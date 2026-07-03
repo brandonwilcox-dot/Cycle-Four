@@ -13,6 +13,7 @@ const Combat = preload("res://src/combat/Combat.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
 
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
@@ -493,9 +494,6 @@ func _build_visual() -> void:
 	_base_color = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
 
 	_mesh = MeshInstance3D.new()
-	var box : BoxMesh = BoxMesh.new()
-	box.size = Vector3(BODY_SIZE, BODY_SIZE, BODY_SIZE)
-	_mesh.mesh = box
 	_mesh.position = Vector3(0.0, BODY_LIFT, 0.0)
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_mat = StandardMaterial3D.new()
@@ -509,6 +507,8 @@ func _build_visual() -> void:
 		_mat.albedo_color.a = 0.85
 		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_mesh.material_override = _mat
+	## V6-lite: per-faction composed silhouette (parts share _mat → tints apply body-wide).
+	UNIT_BODIES.compose(_mesh, data.faction_id if data != null else "", BODY_SIZE, _mat)
 	add_child(_mesh)
 
 	## Billboarded health bar (bg + fill) above the body.

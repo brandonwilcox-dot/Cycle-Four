@@ -84,6 +84,7 @@ var _hijack_timer  : float = 2.0
 
 ## 3D visual nodes.
 var _turret    : Node3D = null
+var _body_root : Node3D = null   ## V4 rising construction: scales up in Y with build progress
 var _recoil    : float = 0.0   ## V4: 1.0 on fire → decays; turret kicks back along the barrels
 var _body_mats : Array[StandardMaterial3D] = []   ## for ghosting (construction)
 var _build_bar : MeshInstance3D = null
@@ -168,6 +169,7 @@ func upgrade(next_data: Resource) -> void:
 	for child in get_children():
 		child.queue_free()
 	_turret = null
+	_body_root = null
 	_body_mats.clear()
 	_build_bar = null
 	_build_visual()
@@ -441,6 +443,10 @@ func _on_claimed_ground() -> bool:
 
 func _build_visual() -> void:
 	_body_mats.clear()
+	## V4 rising construction: every body part lives under _body_root, which scales up in Y
+	## with build progress (the Commander raises the structure out of the ground).
+	_body_root = Node3D.new()
+	add_child(_body_root)
 	var tier   : int   = int(data.get("tier")) if data.get("tier") else 1
 	var col    : Color = data.color_hint
 	var body_r : float = 18.0 + tier * 6.0          ## 24 / 30 / 36
@@ -458,7 +464,7 @@ func _build_visual() -> void:
 	body.position = Vector3(0.0, _base_height * 0.5, 0.0)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	body.material_override = _mat(col.darkened(0.1))
-	add_child(body)
+	_body_root.add_child(body)
 
 	## Tier rings around the base (one per tier) — quick tier read.
 	for i in tier:
@@ -469,12 +475,12 @@ func _build_visual() -> void:
 		ring.mesh = tm
 		ring.position = Vector3(0.0, 2.0 + float(i) * 2.0, 0.0)
 		ring.material_override = _mat(col.lightened(0.15))
-		add_child(ring)
+		_body_root.add_child(ring)
 
 	## Turret + barrels (built along +X; yawed to the target in _update_aim).
 	_turret = Node3D.new()
 	_turret.position = Vector3(0.0, _base_height, 0.0)
-	add_child(_turret)
+	_body_root.add_child(_turret)
 	var count  : int   = clampi(int(round(float(data.attack_speed))), 1, 4)
 	var blen   : float = clampf(remap(float(data.range), 150.0, 320.0, 18.0, 46.0), 18.0, 46.0)
 	var bwid   : float = clampf(remap(float(data.damage), 10.0, 70.0, 5.0, 14.0), 5.0, 14.0)
@@ -504,7 +510,7 @@ func _build_visual() -> void:
 	cmat.emission_texture = null       ## the core gem is pure damage-type color — no substrate
 	cmat.uv1_triplanar = false         ## pattern (readability: it must match the tracer exactly)
 	core.material_override = cmat
-	add_child(core)
+	_body_root.add_child(core)
 
 	## Role emblem: support = gold halo torus; detector = antenna mast + tip.
 	var role : int = _role()
@@ -516,7 +522,7 @@ func _build_visual() -> void:
 		halo.mesh = ht
 		halo.position = Vector3(0.0, _base_height + 14.0, 0.0)
 		halo.material_override = _mat(Color(1.0, 0.95, 0.6))
-		add_child(halo)
+		_body_root.add_child(halo)
 	elif role == ROLE_DETECTOR:
 		var mast : MeshInstance3D = MeshInstance3D.new()
 		var mb : BoxMesh = BoxMesh.new()
@@ -524,7 +530,7 @@ func _build_visual() -> void:
 		mast.mesh = mb
 		mast.position = Vector3(0.0, _base_height + 18.0, 0.0)
 		mast.material_override = _mat(Color(0.7, 0.95, 1.0))
-		add_child(mast)
+		_body_root.add_child(mast)
 		var tip : MeshInstance3D = MeshInstance3D.new()
 		var ts : SphereMesh = SphereMesh.new()
 		ts.radius = 4.0
@@ -532,7 +538,7 @@ func _build_visual() -> void:
 		tip.mesh = ts
 		tip.position = Vector3(0.0, _base_height + 30.0, 0.0)
 		tip.material_override = _mat(Color(0.8, 0.97, 1.0))
-		add_child(tip)
+		_body_root.add_child(tip)
 
 	## Construction/repair bar — billboarded above the tower; shown while building/damaged.
 	_build_bar = MeshInstance3D.new()
@@ -567,6 +573,9 @@ func _refresh_build_visual() -> void:
 	if _build_bar != null:
 		_build_bar.visible = _health < _max_health
 		_build_bar.scale.x = frac
+	## V4 rising construction: the structure climbs out of the ground as it builds.
+	if _body_root != null:
+		_body_root.scale.y = 1.0 if _built else (0.12 + 0.88 * frac)
 	var a : float = 1.0 if _built else 0.5
 	for m in _body_mats:
 		if m == null:
