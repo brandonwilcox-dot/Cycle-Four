@@ -34,6 +34,39 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 (6) — PLAYTEST ROUND 2: water fix, organic grid, GIANT MECH, faction construction
+
+- **[BUG FIX] Water vanished when the Commander revealed/claimed ground.** Root cause: the
+  Commander's auto-claim flattened the terrain mask (v_flat included `1-claimed`), erasing
+  water + relief wherever it walked. Now only PATHS/spawns/base force flatness — **water and
+  hills are claim-proof**; creep and grid lines never draw over water. Side effect (accepted):
+  structures placed on a hill sink ≤ ~14 px visually.
+- **Organic over gridded:** grid lines thinner (band 0.458–0.486) and weaker (0.18, was 0.38),
+  fading 900→2200 px (was 1200→3500); Architect ground seams thinned (0.008–0.035, ×0.5);
+  macro noise up (0.38); relief up (height_amp 14).
+- **Commander is a GIANT MECH** — legs, pelvis, torso, pauldrons, sensor head, shoulder cannon,
+  comms mast (`BODY_LIFT` repurposed as torso centre = 42; HP bar + pip ride up automatically).
+  All parts share the substrate material. Smaller units unchanged (user: they're fine).
+- **Per-faction construction (`src/vfx/ConstructionRig.gd`)** — one rig per structure
+  (Tower/Building/Wall), driven from `_refresh_build_visual`:
+  · **Bloom / default = GROWS** (the V4 rise + ghost, kept — user: "most appropriate for bloom").
+  · **Architects = CARVES** — a solid granite block stands full-height from placement; an
+    emissive laser ring sweeps down it and the stone resolves into the finished crystalline
+    surface with build progress ("laser carving away granite").
+  · **Mesh = ASSEMBLES** — a translucent digital frame at full size, swarmed by three orbiting
+    emissive builder drones that rise with progress ("digitally constructed").
+  · **Upgrades flourish**: `Tower.upgrade()` replays the faction's construction signature for
+    1.2 s (carve sweep / drone swarm / growth swell) — cosmetic only, no inert window.
+  Repairs on BUILT structures show no construction theatrics (rig restores the finished look).
+
+**Verified:** MCP run into a live continued battle — mech silhouette, Mesh skitterer legs,
+substrate towers/garrisons, live combat, zero errors. Both exes re-exported 2026-07-02 (20:29).
+**Playtest:** water stays put as you claim past it; grid feel at tactical zoom; the mech; build
+a tower per faction (F1/F2/F3) to see carve vs drones vs growth; upgrade for the flourish.
+Tune: ConstructionRig STONE/LASER/DRONE consts, shader grid/noise uniforms, mech part sizes.
+
+---
+
 ## Session 2026-07-02 (5) — PLAYTEST FIXES: bases anchor spawns, abilities → 1-4, wave overhaul (J1-lite)
 
 Direct response to the user's pre-playtest notes:

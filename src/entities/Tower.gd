@@ -84,7 +84,8 @@ var _hijack_timer  : float = 2.0
 
 ## 3D visual nodes.
 var _turret    : Node3D = null
-var _body_root : Node3D = null   ## V4 rising construction: scales up in Y with build progress
+var _body_root : Node3D = null   ## body parts container (construction rig scales/tints it)
+var _con_rig   : Node3D = null   ## per-faction construction effect (grow / carve / assemble)
 var _recoil    : float = 0.0   ## V4: 1.0 on fire → decays; turret kicks back along the barrels
 var _body_mats : Array[StandardMaterial3D] = []   ## for ghosting (construction)
 var _build_bar : MeshInstance3D = null
@@ -170,9 +171,12 @@ func upgrade(next_data: Resource) -> void:
 		child.queue_free()
 	_turret = null
 	_body_root = null
+	_con_rig = null
 	_body_mats.clear()
 	_build_bar = null
 	_build_visual()
+	if _con_rig != null:
+		_con_rig.call("flourish")   ## the faction's construction signature marks the upgrade
 	_refresh_detector_group()
 
 ## -- Combat --
@@ -554,9 +558,14 @@ func _build_visual() -> void:
 	_build_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_build_bar)
 
+	_con_rig = _CON_RIG.new()
+	add_child(_con_rig)
+	_con_rig.call("setup", FactionManager.active_faction, _body_root, _body_mats, _base_height + 16.0, body_r + 10.0)
+
 	_refresh_build_visual()
 
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+const _CON_RIG   = preload("res://src/vfx/ConstructionRig.gd")
 
 ## Builds a StandardMaterial3D, tracking it so ghosting can fade the whole tower while unbuilt.
 ## V3: body parts carry the player faction's substrate (crystalline / organic / conductive).
@@ -573,12 +582,6 @@ func _refresh_build_visual() -> void:
 	if _build_bar != null:
 		_build_bar.visible = _health < _max_health
 		_build_bar.scale.x = frac
-	## V4 rising construction: the structure climbs out of the ground as it builds.
-	if _body_root != null:
-		_body_root.scale.y = 1.0 if _built else (0.12 + 0.88 * frac)
-	var a : float = 1.0 if _built else 0.5
-	for m in _body_mats:
-		if m == null:
-			continue
-		m.albedo_color.a = a
-		m.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if _built else BaseMaterial3D.TRANSPARENCY_ALPHA
+	## Per-faction construction language lives in the rig (grow / carve / drone-assemble).
+	if _con_rig != null:
+		_con_rig.call("update", frac, _built)

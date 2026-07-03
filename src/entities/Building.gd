@@ -54,7 +54,8 @@ var _raid_target_cell  : Vector2i = Vector2i(-1, -1)
 var _raid_target_world : Vector2  = Vector2.ZERO
 
 ## 3D visual.
-var _body_root : Node3D = null   ## V4 rising construction
+var _body_root : Node3D = null   ## body parts container
+var _con_rig   : Node3D = null   ## per-faction construction effect
 var _body_mats : Array[StandardMaterial3D] = []
 var _build_bar : MeshInstance3D = null
 var _height    : float = 50.0
@@ -102,15 +103,9 @@ func _refresh_build_visual() -> void:
 	if _build_bar != null:
 		_build_bar.visible = _health < _max_health
 		_build_bar.scale.x = frac
-	## V4 rising construction: the structure climbs out of the ground as it builds.
-	if _body_root != null:
-		_body_root.scale.y = 1.0 if _built else (0.12 + 0.88 * frac)
-	var a : float = 1.0 if _built else 0.5
-	for m in _body_mats:
-		if m == null:
-			continue
-		m.albedo_color.a = a
-		m.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if _built else BaseMaterial3D.TRANSPARENCY_ALPHA
+	## Per-faction construction language lives in the rig (grow / carve / drone-assemble).
+	if _con_rig != null:
+		_con_rig.call("update", frac, _built)
 
 func get_detector_radius() -> float:
 	return DETECT_RADIUS
@@ -310,9 +305,14 @@ func _build_visual() -> void:
 	_build_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_build_bar)
 
+	_con_rig = _CON_RIG.new()
+	add_child(_con_rig)
+	_con_rig.call("setup", FactionManager.active_faction, _body_root, _body_mats, _height + 10.0, 36.0)
+
 	_refresh_build_visual()
 
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+const _CON_RIG   = preload("res://src/vfx/ConstructionRig.gd")
 
 ## V3: garrison bodies carry the player faction's substrate.
 func _mat(col: Color) -> StandardMaterial3D:

@@ -40,7 +40,7 @@ const MAX_HEALTH       : float = 300.0
 const HEALTH_BAR_W     : float = 40.0
 const ENGINEER_LINE_COLOR : Color = Color(0.40, 1.00, 0.70, 0.90)   ## engineering beam tint
 const CELL_SIZE_PX     : float = 64.0
-const BODY_LIFT        : float = 16.0
+const BODY_LIFT        : float = 42.0   ## torso centre — the Commander is a GIANT MECH now
 const SELECT_RING_COLOR : Color = Color(0.40, 1.00, 0.55, 0.90)
 
 var _map_grid       : Node      = null
@@ -422,9 +422,9 @@ func get_sensor_radius() -> float:
 func _build_visual() -> void:
 	## Gold hero body — taller/brighter than units so it reads as the player.
 	_body = MeshInstance3D.new()
-	var bx : BoxMesh = BoxMesh.new()
-	bx.size = Vector3(30.0, 34.0, 30.0)
-	_body.mesh = bx
+	var torso : BoxMesh = BoxMesh.new()
+	torso.size = Vector3(26.0, 24.0, 30.0)
+	_body.mesh = torso
 	_body.position = Vector3(0.0, BODY_LIFT, 0.0)
 	_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var bmat : StandardMaterial3D = StandardMaterial3D.new()
@@ -433,30 +433,20 @@ func _build_visual() -> void:
 	_SUBSTRATE.apply(bmat, FactionManager.active_faction)
 	_body.material_override = bmat
 	add_child(_body)
-	## V6-lite: hero silhouette — command vehicle, not a cube. Parts share bmat (substrate).
-	var glacis : MeshInstance3D = MeshInstance3D.new()   ## sloped front plate (+X = facing)
-	var gb : BoxMesh = BoxMesh.new()
-	gb.size = Vector3(14.0, 20.0, 26.0)
-	glacis.mesh = gb
-	glacis.position = Vector3(19.0, -4.0, 0.0)
-	glacis.rotation_degrees = Vector3(0.0, 0.0, -18.0)
-	glacis.material_override = bmat
-	_body.add_child(glacis)
-	var canopy : MeshInstance3D = MeshInstance3D.new()   ## raised command canopy
-	var cs : SphereMesh = SphereMesh.new()
-	cs.radius = 9.0
-	cs.height = 18.0
-	canopy.mesh = cs
-	canopy.position = Vector3(2.0, 19.0, 0.0)
-	canopy.material_override = bmat
-	_body.add_child(canopy)
-	var mast : MeshInstance3D = MeshInstance3D.new()     ## comms mast (the leader on the field)
-	var mb : BoxMesh = BoxMesh.new()
-	mb.size = Vector3(2.2, 24.0, 2.2)
-	mast.mesh = mb
-	mast.position = Vector3(-10.0, 26.0, 0.0)
-	mast.material_override = bmat
-	_body.add_child(mast)
+	## Playtest 2026-07-02: GIANT MECH silhouette — legs, pelvis, torso, pauldrons, head,
+	## shoulder cannon, comms mast. All parts share bmat (substrate); +X = facing. Positions
+	## are torso-relative; leg bottoms land on the ground (BODY_LIFT is the torso centre).
+	_mech_part(bmat, _mech_box(11.0, 30.0, 12.0), Vector3(2.0, -27.0, 9.5))    ## legs
+	_mech_part(bmat, _mech_box(11.0, 30.0, 12.0), Vector3(2.0, -27.0, -9.5))
+	_mech_part(bmat, _mech_box(18.0, 9.0, 26.0), Vector3(0.0, -15.0, 0.0))     ## pelvis
+	_mech_part(bmat, _mech_box(13.0, 11.0, 14.0), Vector3(-2.0, 13.0, 21.0))   ## pauldrons
+	_mech_part(bmat, _mech_box(13.0, 11.0, 14.0), Vector3(-2.0, 13.0, -21.0))
+	var head_mesh : SphereMesh = SphereMesh.new()
+	head_mesh.radius = 7.5
+	head_mesh.height = 15.0
+	_mech_part(bmat, head_mesh, Vector3(6.0, 17.0, 0.0))                       ## sensor head
+	_mech_part(bmat, _mech_box(30.0, 7.0, 7.0), Vector3(12.0, 11.0, 21.0))     ## shoulder cannon
+	_mech_part(bmat, _mech_box(2.4, 24.0, 2.4), Vector3(-9.0, 22.0, -8.0))     ## comms mast
 
 	## Centre pip — a small white cap on top.
 	var pip : MeshInstance3D = MeshInstance3D.new()
@@ -464,7 +454,7 @@ func _build_visual() -> void:
 	sp.radius = 6.0
 	sp.height = 12.0
 	pip.mesh = sp
-	pip.position = Vector3(0.0, BODY_LIFT + 22.0, 0.0)
+	pip.position = Vector3(6.0, BODY_LIFT + 27.0, 0.0)   ## atop the mech's sensor head
 	pip.material_override = _unlit(Color(1, 1, 1, 0.95))
 	add_child(pip)
 
@@ -514,6 +504,19 @@ func _set_ring_radius(ring: MeshInstance3D, radius_px: float) -> void:
 	if tm != null:
 		tm.outer_radius = radius_px
 		tm.inner_radius = maxf(0.0, radius_px - 5.0)
+
+func _mech_part(mat: Material, mesh: Mesh, pos: Vector3) -> void:
+	var mi : MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.position = pos
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_body.add_child(mi)
+
+func _mech_box(x: float, y: float, z: float) -> BoxMesh:
+	var b : BoxMesh = BoxMesh.new()
+	b.size = Vector3(x, y, z)
+	return b
 
 func _unlit(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()

@@ -22,15 +22,15 @@ uniform vec3 claim_base : source_color = vec3(0.10, 0.30, 0.16); // claimed grou
 uniform vec3 creep_accent : source_color = vec3(0.45, 1.0, 0.50);// substrate glow color
 uniform vec3 fog_color : source_color = vec3(0.030, 0.038, 0.055);
 
-uniform float grid_near = 1200.0;   // full grid inside this camera distance (px)
-uniform float grid_far  = 3500.0;   // no grid beyond this
-uniform float noise_strength = 0.30;
+uniform float grid_near = 900.0;    // full grid inside this camera distance (px)
+uniform float grid_far  = 2200.0;   // no grid beyond this
+uniform float noise_strength = 0.38;
 
 // V6-lite terrain/water (backlog F1, visual layer): height relief on open ground and pooled
 // water in the lowlands. Seeded per territory (MapGrid passes map_seed) so every world differs.
 // Paths / spawns / base / claimed ground stay FLAT — the game reads exactly as before.
 uniform float terrain_seed = 0.0;
-uniform float height_amp : hint_range(0.0, 40.0) = 10.0;
+uniform float height_amp : hint_range(0.0, 40.0) = 14.0;
 uniform float water_level : hint_range(0.0, 1.0) = 0.34;
 
 varying vec3 wpos;
@@ -72,7 +72,7 @@ void vertex() {
 	// identical heights, no cracks). relief² keeps lowlands flat and hills read as hills.
 	vec2 tuv = clamp(wpos.xz / (map_cells * cell_size), vec2(0.0), vec2(1.0));
 	vec4 td = textureLod(map_tex, tuv, 0.0);
-	v_flat = (1.0 - td.b) * (1.0 - td.g);
+	v_flat = 1.0 - td.b;   // paths/spawns/base flat; claiming does NOT flatten (water survives)
 	v_hn = fbm(wpos.xz * 0.006 + vec2(terrain_seed));
 	float relief = max(v_hn - water_level, 0.0);
 	VERTEX.y += relief * relief * height_amp * 3.0 * v_flat;
@@ -93,8 +93,11 @@ void fragment() {
 	// Highlands catch a little more light; lowlands sit heavier.
 	base *= 1.0 + max(v_hn - water_level, 0.0) * 0.35 * v_flat;
 
+	// Water mask first: creep and grid never draw over water (claiming keeps the pool).
+	float water = smoothstep(water_level, water_level - 0.05, v_hn) * v_flat;
+
 	// --- claimed territory: faction substrate creep with a soft, noisy frontier
-	float creep = smoothstep(0.30, 0.72, claimed + (fbm(wpos.xz * 0.03 + vec2(53.1)) - 0.5) * 0.45);
+	float creep = smoothstep(0.30, 0.72, claimed + (fbm(wpos.xz * 0.03 + vec2(53.1)) - 0.5) * 0.45) * (1.0 - water);
 	vec3 emis = vec3(0.0);
 	if (creep > 0.001) {
 		base = mix(base, claim_base * (0.85 + 0.3 * n), creep * 0.85);
@@ -103,7 +106,7 @@ void fragment() {
 			// Architects: engineered crystalline seams — straight lines on the half-cell
 			// lattice, constant (nothing organic, nothing pulsing).
 			vec2 g = abs(fract(wpos.xz / (cell_size * 0.5)) - 0.5);
-			pat = (1.0 - smoothstep(0.015, 0.06, min(g.x, g.y))) * 0.8;
+			pat = (1.0 - smoothstep(0.008, 0.035, min(g.x, g.y))) * 0.5;
 		} else if (creep_pattern == 1) {
 			// Bloom: bioluminescent growth — noise-thresholded speckle that breathes slowly.
 			float s = fbm(wpos.xz * 0.085);
@@ -122,12 +125,11 @@ void fragment() {
 	vec3 cam = INV_VIEW_MATRIX[3].xyz;
 	float grid_fade = 1.0 - smoothstep(grid_near, grid_far, distance(cam, wpos));
 	vec2 gc = abs(fract(wpos.xz / cell_size) - 0.5);
-	float line = smoothstep(0.44, 0.478, max(gc.x, gc.y));
-	base *= 1.0 - line * 0.38 * grid_fade;
+	float line = smoothstep(0.458, 0.486, max(gc.x, gc.y));
+	base *= 1.0 - line * 0.18 * grid_fade * (1.0 - water);
 
 	// --- water: pooled lowlands (visual only — the sim is untouched). Animated ripple with a
-	// faint emissive sparkle so it still reads inside the fog tiers. Never cuts paths/claims.
-	float water = smoothstep(water_level, water_level - 0.05, v_hn) * v_flat * (1.0 - creep);
+	// faint emissive sparkle so it still reads inside the fog tiers. Claim-proof.
 	if (water > 0.001) {
 		float ripple = fbm(wpos.xz * 0.05 + vec2(TIME * 0.22, TIME * 0.15));
 		vec3 wcol = vec3(0.045, 0.115, 0.185) * (0.85 + 0.5 * ripple);
