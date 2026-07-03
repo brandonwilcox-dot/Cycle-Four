@@ -33,7 +33,7 @@ uniform float terrain_seed = 0.0;
 // The Commander claims/constructs as it moves: the creep PATTERN shows at full strength
 // only near it (the work in progress); settled territory keeps a faint trace (playtest).
 uniform vec2 commander_pos = vec2(-99999.0, -99999.0);
-uniform float height_amp : hint_range(0.0, 40.0) = 14.0;
+uniform float height_amp : hint_range(0.0, 40.0) = 21.0;   // round 4: terrain read as flat
 uniform float water_level : hint_range(0.0, 1.0) = 0.34;
 
 varying vec3 wpos;

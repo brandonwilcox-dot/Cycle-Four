@@ -33,13 +33,19 @@ static var _anim_mesh  : Array[WeakRef] = []
 static func apply(m: StandardMaterial3D, faction_id: String, animate: bool = true) -> StandardMaterial3D:
 	match faction_id:
 		"architects":
-			m.roughness = 0.22
-			m.metallic = 0.30
-			m.metallic_specular = 0.7
+			## Playtest 2026-07-02 round 4: "too much grid — I'd like a more polished surface
+			## with sleek geometry." No pattern texture at all: identity comes from POLISH —
+			## near-mirror roughness, strong specular + rim highlights, and a faint uniform
+			## inner warmth (lit-from-within marble) instead of etched seams.
+			m.roughness = 0.12
+			m.metallic = 0.35
+			m.metallic_specular = 0.85
 			m.rim_enabled = true
-			m.rim = 0.35
-			m.rim_tint = 0.6
-			_emit(m, _tex("seams"), Color(1.00, 0.82, 0.38), 0.9)
+			m.rim = 0.55
+			m.rim_tint = 0.45
+			m.emission_enabled = true
+			m.emission = Color(1.00, 0.82, 0.38)
+			m.emission_energy_multiplier = 0.12   ## a glow you sense, not a line you see
 		"bloom":
 			m.roughness = 0.90
 			m.metallic = 0.0

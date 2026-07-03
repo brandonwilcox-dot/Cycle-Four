@@ -34,6 +34,42 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-03 — SCHEDULED ROUND 4: Architect polish, relief bump, Commander-mech proposal
+
+Scheduled overnight run (user set it for 12:01 AM). **Round-3 playtest results CONFIRMED by
+the user:** hills properly lit (normals fix) ✓; F1 towers carved from a single marble block ✓;
+F3 Bloom growth sway ✓; creep-pattern localization apparent ✓. Terrain still reads flat.
+
+- **Architect surfaces: POLISH, not grid** (user: "still too much of a grid pattern — I'd
+  like a more polished surface with sleek geometry"). `SubstrateMaterials` architects branch
+  reworked: the seam-lattice emission TEXTURE is GONE from structure bodies; identity now
+  comes from near-mirror polish (roughness 0.12, metallic 0.35, specular 0.85, rim 0.55) plus
+  a faint UNIFORM inner amber warmth (emission 0.12, no pattern — lit-from-within marble).
+  apply() contract intact (tint mechanics unaffected; unit hit-flash still works off the base
+  emission). Ground creep untouched (already Commander-localized).
+- **Terrain relief +50%**: ground shader `height_amp` 14 → 21 (hills now shade correctly, so
+  more relief is safe; paths/claims stay flat).
+- **Commander mech direction proposal — `planning/commander-mech-directions.md`** (proposal
+  only; current shared mech remains until the user picks). Codex-grounded (05 cultures /
+  08 substrates / 11.3 visual identities), honoring the user's seeds (Aeon-sleek Architects,
+  crab/insect Bloom, spider/octopus Mesh). Options: Architects **A1 Needle** (hovering
+  polished spire + floating halo/wing-blades) ★, A2 Cathedral Strider (slender biped),
+  A3 Attended Monolith (rejected — overlaps Mesh drone language); Bloom **B1 Broodmother**
+  (six-legged crab, asymmetric crusher + manipulator claws, breathing spore polyps) ★,
+  B2 Mantis Cultivator, B3 Tide Beetle; Mesh **M1 Weaver** (eight-legged spider, emissive
+  joint nodes, signal pulsing around the body) ★, M2 Signal Kraken (hovering tentacled
+  bell — the aspirational pick), M3 Marionette (detached floating limbs — future flourish).
+  Each option: silhouette, canon citation, primitive parts list, animation hooks, effort.
+  **Recommended set: A1 + B1 + M1** (three fully distinct silhouettes + motion languages,
+  all landable in one session with the existing multi-part/shared-material technique).
+  Open question flagged for the user: A1 hovers — if "mech" strictly means legs, use A2.
+
+**Verified:** MCP boot zero errors / no new warnings; both exes re-exported 2026-07-03.
+**Next:** user picks mech directions → implement; then remaining board: V6 asset-pack
+decision, F1 gameplay terrain, J1 full wave-system parity.
+
+---
+
 ## Session 2026-07-02 (7) — PLAYTEST ROUND 3: terrain normals, MARBLE OBELISK, bloom sway, localized creep
 
 - **[BUG FIX] "The grid floats above the ground with a shadow under it."** Root cause: the
