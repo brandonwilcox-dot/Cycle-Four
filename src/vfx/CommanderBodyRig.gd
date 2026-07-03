@@ -1,0 +1,256 @@
+## CommanderBodyRig.gd — the faction Commander mechs (planning/commander-mech-directions.md,
+## recommended trio approved 2026-07-03). One rig per Commander: builds the faction body onto
+## the Commander's `_body` MeshInstance3D and owns its idle/movement animation. Cosmetic only.
+##
+##   architects — A1 "The Needle":     hovering polished spire, floating halo + wing-blades,
+##                                     under-glow disc. Glides; never touches the ground.
+##   bloom      — B1 "The Broodmother": wide six-legged crab; crusher + manipulator claws,
+##                                     breathing spore polyps, eye stalks. Tripod gait.
+##   mesh       — M1 "The Weaver":     near-black core on eight thin legs, electric-blue
+##                                     joint nodes with a signal pulsing around the body.
+##   (anything else)                   the previous shared mech, kept as the fallback.
+##
+## Structural parts share the Commander's substrate material (tints/substrate apply body-wide);
+## small glow decor (halo, disc, polyps, joint nodes) get their own emissive materials.
+## The rig exposes body_lift / pip_position / bar_y so the Commander places its overlays.
+## Per project convention, callers PRELOAD this script.
+extends Node3D
+
+const AMBER : Color = Color(1.00, 0.82, 0.38)
+const BIO_GREEN : Color = Color(0.45, 1.00, 0.50)
+const SIGNAL_BLUE : Color = Color(0.35, 0.75, 1.00)
+
+var body_lift    : float = 42.0                    ## Y of the hull centre
+var pip_position : Vector3 = Vector3(6.0, 69.0, 0.0)
+var bar_y        : float = 82.0
+
+var _faction : String = ""
+var _body    : MeshInstance3D = null
+var _mat     : Material = null
+var _t       : float = 0.0
+
+## A1 animated refs.
+var _halo   : MeshInstance3D = null
+var _blades : Array[MeshInstance3D] = []
+var _disc_mat : StandardMaterial3D = null
+## B1 animated refs.
+var _legs   : Array[MeshInstance3D] = []   ## leg roots (B1: 6, M1: 8 pivots)
+var _polyp_mats : Array[StandardMaterial3D] = []
+## M1 animated refs.
+var _node_mats : Array[StandardMaterial3D] = []
+
+func setup(faction: String, body: MeshInstance3D, mat: Material) -> void:
+	_faction = faction
+	_body = body
+	_mat = mat
+	match faction:
+		"architects":
+			_build_needle()
+		"bloom":
+			_build_broodmother()
+		"mesh":
+			_build_weaver()
+		_:
+			_build_fallback_mech()
+
+## -- shared part helpers ---------------------------------------------------------------
+
+func _part(mesh: Mesh, pos: Vector3, mat: Material, rot_deg: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var mi : MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.position = pos
+	if rot_deg != Vector3.ZERO:
+		mi.rotation_degrees = rot_deg
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_body.add_child(mi)
+	return mi
+
+func _box(x: float, y: float, z: float) -> BoxMesh:
+	var b : BoxMesh = BoxMesh.new()
+	b.size = Vector3(x, y, z)
+	return b
+
+func _sphere(r: float, h: float = -1.0) -> SphereMesh:
+	var s : SphereMesh = SphereMesh.new()
+	s.radius = r
+	s.height = h if h > 0.0 else r * 2.0
+	return s
+
+func _capsule(r: float, h: float) -> CapsuleMesh:
+	var c : CapsuleMesh = CapsuleMesh.new()
+	c.radius = r
+	c.height = h
+	return c
+
+func _glow_mat(col: Color, energy: float) -> StandardMaterial3D:
+	var m : StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = col
+	m.emission_enabled = true
+	m.emission = col
+	m.emission_energy_multiplier = energy
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return m
+
+## -- A1: The Needle (architects) -------------------------------------------------------
+## A slender polished spire that HOVERS — base ~6 px off the ground. Floating halo and
+## wing-blades; a soft amber glow disc beneath. Aeon-sleek: nothing stomps.
+
+func _build_needle() -> void:
+	body_lift    = 34.0
+	pip_position = Vector3(0.0, 34.0 + 34.0, 0.0)
+	bar_y        = 34.0 + 44.0
+	var spire : CylinderMesh = CylinderMesh.new()
+	spire.top_radius = 5.0
+	spire.bottom_radius = 12.0
+	spire.height = 56.0
+	_body.mesh = spire
+	_part(_sphere(6.5, 13.0), Vector3(0.0, 31.0, 0.0), _mat)                 ## crown
+	var halo_mesh : TorusMesh = TorusMesh.new()
+	halo_mesh.inner_radius = 13.0
+	halo_mesh.outer_radius = 16.0
+	_halo = _part(halo_mesh, Vector3(0.0, 39.0, 0.0), _glow_mat(AMBER, 1.1))
+	for side in [-1.0, 1.0]:
+		var blade : MeshInstance3D = _part(_box(4.0, 30.0, 10.0),
+			Vector3(-4.0, 4.0, side * 20.0), _mat, Vector3(0.0, 0.0, side * 12.0))
+		_blades.append(blade)
+	var disc : CylinderMesh = CylinderMesh.new()
+	disc.top_radius = 11.0
+	disc.bottom_radius = 11.0
+	disc.height = 2.0
+	_disc_mat = _glow_mat(AMBER, 0.9)
+	var d : MeshInstance3D = _part(disc, Vector3(0.0, -30.0, 0.0), _disc_mat)
+	d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+## -- B1: The Broodmother (bloom) --------------------------------------------------------
+## Wide low crab: domed carapace on six stepping legs; one crusher claw, one slender
+## manipulator (the engineering limb); spore polyps breathing on the shell.
+
+func _build_broodmother() -> void:
+	body_lift    = 26.0
+	pip_position = Vector3(0.0, 26.0 + 22.0, 0.0)
+	bar_y        = 26.0 + 34.0
+	_body.mesh = _sphere(24.0, 30.0)   ## squashed dome carapace
+	## Six legs, yawed around the shell, angled out-and-down to plant on the ground.
+	for i in 6:
+		var yaw : float = 30.0 + 60.0 * float(i)
+		var pivot : MeshInstance3D = _part(_capsule(3.5, 30.0),
+			Vector3(cos(deg_to_rad(yaw)) * 20.0, -6.0, sin(deg_to_rad(yaw)) * 20.0),
+			_mat, Vector3(0.0, -yaw, 62.0))
+		_legs.append(pivot)
+	## Crusher claw (starboard) + jaw wedge.
+	_part(_box(15.0, 9.0, 12.0), Vector3(21.0, -8.0, 10.0), _mat)
+	_part(_box(9.0, 5.0, 10.0), Vector3(29.0, -11.0, 10.0), _mat, Vector3(0.0, 0.0, -14.0))
+	## Manipulator (port) — slender engineering limb.
+	_part(_capsule(2.2, 20.0), Vector3(22.0, -6.0, -10.0), _mat, Vector3(0.0, 0.0, 75.0))
+	## Spore polyps on the shell — each breathes on its own phase (driven in _process).
+	for p in [Vector3(-10.0, 13.0, 8.0), Vector3(-14.0, 11.0, -6.0), Vector3(-4.0, 15.0, -2.0)]:
+		var pm : StandardMaterial3D = _glow_mat(BIO_GREEN, 0.9)
+		var polyp : MeshInstance3D = _part(_sphere(4.5), p, pm)
+		polyp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_polyp_mats.append(pm)
+	## Eye stalks.
+	for side in [-1.0, 1.0]:
+		_part(_capsule(1.4, 10.0), Vector3(18.0, 8.0, side * 5.0), _mat, Vector3(0.0, 0.0, 55.0))
+
+## -- M1: The Weaver (mesh) --------------------------------------------------------------
+## A compact near-black core slung between eight thin angular legs; an electric-blue node
+## at every knee, with the signal pulsing around the body in sequence. Sensor stalk raised.
+
+func _build_weaver() -> void:
+	body_lift    = 22.0
+	pip_position = Vector3(6.0, 22.0 + 26.0, 0.0)
+	bar_y        = 22.0 + 36.0
+	_body.mesh = _box(20.0, 12.0, 16.0)
+	_part(_box(14.0, 8.0, 12.0), Vector3(0.0, -8.0, 0.0), _mat)   ## underslung node housing
+	for i in 8:
+		var yaw : float = 22.5 + 45.0 * float(i)
+		var dir : Vector3 = Vector3(cos(deg_to_rad(yaw)), 0.0, sin(deg_to_rad(yaw)))
+		## Upper segment: out and slightly up from the hull edge.
+		var upper : MeshInstance3D = _part(_box(22.0, 3.0, 3.0),
+			Vector3(dir.x * 18.0, 2.0, dir.z * 18.0), _mat, Vector3(0.0, -yaw, 18.0))
+		_legs.append(upper)
+		## Knee node + lower segment hang off the upper segment's far end (local +X).
+		var nm : StandardMaterial3D = _glow_mat(SIGNAL_BLUE, 0.8)
+		var knee : MeshInstance3D = MeshInstance3D.new()
+		knee.mesh = _sphere(2.6)
+		knee.position = Vector3(12.0, 0.0, 0.0)
+		knee.material_override = nm
+		knee.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		upper.add_child(knee)
+		_node_mats.append(nm)
+		var lower : MeshInstance3D = MeshInstance3D.new()
+		lower.mesh = _box(3.0, 24.0, 3.0)
+		lower.position = Vector3(12.0, -11.0, 0.0)
+		lower.rotation_degrees = Vector3(0.0, 0.0, -12.0)
+		lower.material_override = _mat
+		lower.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		upper.add_child(lower)
+	## Sensor stalk.
+	_part(_box(2.0, 18.0, 2.0), Vector3(6.0, 13.0, 0.0), _mat)
+	var tip : MeshInstance3D = _part(_sphere(2.4), Vector3(6.0, 23.0, 0.0), _glow_mat(SIGNAL_BLUE, 1.4))
+	tip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+## -- Fallback: the previous shared mech (unknown faction) --------------------------------
+
+func _build_fallback_mech() -> void:
+	body_lift    = 42.0
+	pip_position = Vector3(6.0, 42.0 + 27.0, 0.0)
+	bar_y        = 42.0 + 40.0
+	_body.mesh = _box(26.0, 24.0, 30.0)
+	_part(_box(11.0, 30.0, 12.0), Vector3(2.0, -27.0, 9.5), _mat)
+	_part(_box(11.0, 30.0, 12.0), Vector3(2.0, -27.0, -9.5), _mat)
+	_part(_box(18.0, 9.0, 26.0), Vector3(0.0, -15.0, 0.0), _mat)
+	_part(_box(13.0, 11.0, 14.0), Vector3(-2.0, 13.0, 21.0), _mat)
+	_part(_box(13.0, 11.0, 14.0), Vector3(-2.0, 13.0, -21.0), _mat)
+	_part(_sphere(7.5, 15.0), Vector3(6.0, 17.0, 0.0), _mat)
+	_part(_box(30.0, 7.0, 7.0), Vector3(12.0, 11.0, 21.0), _mat)
+	_part(_box(2.4, 24.0, 2.4), Vector3(-9.0, 22.0, -8.0), _mat)
+
+## -- animation ---------------------------------------------------------------------------
+
+func _process(delta: float) -> void:
+	_t += delta
+	if _body == null:
+		return
+	var parent : Node = get_parent()
+	var moving : bool = parent != null and parent.has_method("is_moving") and bool(parent.call("is_moving"))
+	match _faction:
+		"architects":
+			## Hover bob; halo spins; the body leans into travel; wing-blades trail.
+			_body.position.y = body_lift + sin(_t * 1.2 * TAU * 0.2) * 2.5
+			if _halo != null:
+				_halo.rotation.y += delta * 0.8
+			var lean_target : float = -0.10 if moving else 0.0
+			_body.rotation.z = lerpf(_body.rotation.z, lean_target, minf(1.0, delta * 4.0))
+			for i in _blades.size():
+				var trail : float = (-8.0 if moving else -4.0) + sin(_t * 1.5 + float(i) * PI) * 1.5
+				_blades[i].position.x = lerpf(_blades[i].position.x, trail, minf(1.0, delta * 3.0))
+			if _disc_mat != null:
+				_disc_mat.emission_energy_multiplier = 0.8 + 0.3 * sin(_t * 2.2)
+		"bloom":
+			## Carapace breathes; polyps pulse out of phase; legs step in tripod groups.
+			var breath : float = 1.0 + 0.02 * sin(_t * 1.4)
+			_body.scale = Vector3(breath, 1.0 / breath, breath)
+			for i in _polyp_mats.size():
+				_polyp_mats[i].emission_energy_multiplier = 0.7 + 0.5 * sin(_t * 1.8 + float(i) * 2.1)
+			var step_amp : float = 0.14 if moving else 0.015
+			for i in _legs.size():
+				var phase : float = 0.0 if i % 2 == 0 else PI   ## tripod: alternate legs anti-phase
+				_legs[i].rotation.x = sin(_t * 6.5 + phase) * step_amp
+		"mesh":
+			## Signal travels the joint nodes around the body; legs flow in tetrapod groups
+			## while moving, micro-twitch at rest (the skitter DNA).
+			var head : float = fmod(_t * 0.9, 1.0) * float(_node_mats.size())
+			for i in _node_mats.size():
+				var d : float = absf(float(i) - head)
+				d = minf(d, float(_node_mats.size()) - d)   ## wrap distance around the ring
+				_node_mats[i].emission_energy_multiplier = 0.5 + 2.0 * maxf(0.0, 1.0 - d)
+			for i in _legs.size():
+				if moving:
+					var phase : float = 0.0 if (i % 4) < 2 else PI   ## tetrapod flow
+					_legs[i].rotation.x = sin(_t * 9.0 + phase + float(i) * 0.35) * 0.10
+				else:
+					_legs[i].rotation.x = sin(_t * 2.0 + float(i) * 1.7) * 0.02
+		_:
+			pass   ## fallback mech is static (as before)

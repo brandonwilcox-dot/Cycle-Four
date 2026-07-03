@@ -34,6 +34,35 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-03 (2) — FACTION COMMANDER MECHS: Needle / Broodmother / Weaver — COMPILE+RUNTIME VERIFIED
+
+User approved the recommended trio from `planning/commander-mech-directions.md`. New
+**`src/vfx/CommanderBodyRig.gd`** — one rig per Commander, builds the faction body onto the
+Commander's `_body` and owns idle/movement animation (polls `Commander.is_moving()`):
+- **Architects — A1 "The Needle"**: hovering polished spire (base ~6 px off the ground),
+  crown, spinning floating halo, two wing-blades that trail behind when moving, pulsing
+  under-glow disc. Hover bob; leans into travel. Nothing stomps.
+- **Bloom — B1 "The Broodmother"**: wide domed carapace on SIX capsule legs (tripod stepping
+  gait when moving, micro-shift at rest), asymmetric crusher + slender manipulator claws,
+  three spore polyps breathing out of phase, eye stalks. Carapace breathes (scale).
+- **Mesh — M1 "The Weaver"**: near-black core + underslung housing on EIGHT two-segment
+  legs with emissive knee nodes — **the signal visibly travels the ring of nodes around the
+  body**; tetrapod leg flow when moving, micro-twitch at rest; sensor stalk with lit tip.
+- Unknown faction → the previous shared mech (static fallback).
+Commander.gd: mech-build block + helpers + BODY_LIFT const replaced by rig delegation; the
+rig reports `body_lift` / `pip_position` / `bar_y` so the pip + HP bar sit correctly per
+silhouette; new `is_moving()` accessor. Structural parts share the substrate material
+(tints/faction skin apply body-wide); glow decor (halo/disc/polyps/nodes) has its own mats.
+
+**Verified:** MCP run through the Academy scenario with the Needle live and animating 60s+,
+zero errors / no new warnings. Both exes re-exported 2026-07-03 (08:02).
+**Playtest:** F1 Needle (hover, halo, blade trail), F3 Broodmother (tripod gait, breathing
+polyps), F2 Weaver (signal ring, leg flow); check HP bar/pip placement on each; enemy
+Commander is unaffected (enemies have no Commander). Tune: part sizes/gait speeds in
+CommanderBodyRig (all named constants/inline values, per-faction blocks).
+
+---
+
 ## Session 2026-07-03 — SCHEDULED ROUND 4: Architect polish, relief bump, Commander-mech proposal
 
 Scheduled overnight run (user set it for 12:01 AM). **Round-3 playtest results CONFIRMED by

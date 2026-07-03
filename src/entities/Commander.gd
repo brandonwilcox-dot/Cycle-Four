@@ -15,6 +15,7 @@ const Combat = preload("res://src/combat/Combat.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
+const _BODY_RIG  = preload("res://src/vfx/CommanderBodyRig.gd")
 
 const VISION_RADIUS         : int   = 3
 const SENSOR_RADIUS         : int   = 9
@@ -40,7 +41,6 @@ const MAX_HEALTH       : float = 300.0
 const HEALTH_BAR_W     : float = 40.0
 const ENGINEER_LINE_COLOR : Color = Color(0.40, 1.00, 0.70, 0.90)   ## engineering beam tint
 const CELL_SIZE_PX     : float = 64.0
-const BODY_LIFT        : float = 42.0   ## torso centre — the Commander is a GIANT MECH now
 const SELECT_RING_COLOR : Color = Color(0.40, 1.00, 0.55, 0.90)
 
 var _map_grid       : Node      = null
@@ -54,6 +54,7 @@ var _rank_chevrons  : Node      = null   ## deferred
 
 ## 3D visual.
 var _body        : MeshInstance3D = null
+var _body_rig    : Node3D = null   ## faction mech builder/animator (CommanderBodyRig)
 var _hp_fill     : MeshInstance3D = null
 var _hp_mat      : StandardMaterial3D = null
 var _select_ring : MeshInstance3D = null
@@ -167,6 +168,10 @@ func set_selected(value: bool) -> void:
 
 func is_selected() -> bool:
 	return _selected
+
+## True while executing move orders — the body rig reads this to drive gaits.
+func is_moving() -> bool:
+	return not _move_queue.is_empty() and not _dead
 
 func move_command(world_pos: Vector2, append: bool) -> void:
 	if not append:
@@ -422,10 +427,6 @@ func get_sensor_radius() -> float:
 func _build_visual() -> void:
 	## Gold hero body — taller/brighter than units so it reads as the player.
 	_body = MeshInstance3D.new()
-	var torso : BoxMesh = BoxMesh.new()
-	torso.size = Vector3(26.0, 24.0, 30.0)
-	_body.mesh = torso
-	_body.position = Vector3(0.0, BODY_LIFT, 0.0)
 	_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var bmat : StandardMaterial3D = StandardMaterial3D.new()
 	bmat.albedo_color = Color(1.0, 0.82, 0.18)
@@ -433,20 +434,13 @@ func _build_visual() -> void:
 	_SUBSTRATE.apply(bmat, FactionManager.active_faction)
 	_body.material_override = bmat
 	add_child(_body)
-	## Playtest 2026-07-02: GIANT MECH silhouette — legs, pelvis, torso, pauldrons, head,
-	## shoulder cannon, comms mast. All parts share bmat (substrate); +X = facing. Positions
-	## are torso-relative; leg bottoms land on the ground (BODY_LIFT is the torso centre).
-	_mech_part(bmat, _mech_box(11.0, 30.0, 12.0), Vector3(2.0, -27.0, 9.5))    ## legs
-	_mech_part(bmat, _mech_box(11.0, 30.0, 12.0), Vector3(2.0, -27.0, -9.5))
-	_mech_part(bmat, _mech_box(18.0, 9.0, 26.0), Vector3(0.0, -15.0, 0.0))     ## pelvis
-	_mech_part(bmat, _mech_box(13.0, 11.0, 14.0), Vector3(-2.0, 13.0, 21.0))   ## pauldrons
-	_mech_part(bmat, _mech_box(13.0, 11.0, 14.0), Vector3(-2.0, 13.0, -21.0))
-	var head_mesh : SphereMesh = SphereMesh.new()
-	head_mesh.radius = 7.5
-	head_mesh.height = 15.0
-	_mech_part(bmat, head_mesh, Vector3(6.0, 17.0, 0.0))                       ## sensor head
-	_mech_part(bmat, _mech_box(30.0, 7.0, 7.0), Vector3(12.0, 11.0, 21.0))     ## shoulder cannon
-	_mech_part(bmat, _mech_box(2.4, 24.0, 2.4), Vector3(-9.0, 22.0, -8.0))     ## comms mast
+	## 2026-07-03: faction Commander mechs (approved trio — planning/commander-mech-directions.md).
+	## The rig builds the body (Needle / Broodmother / Weaver / fallback mech) onto _body and
+	## owns its animation; it reports the lift + overlay heights for this silhouette.
+	_body_rig = _BODY_RIG.new()
+	add_child(_body_rig)
+	_body_rig.call("setup", FactionManager.active_faction, _body, bmat)
+	_body.position = Vector3(0.0, float(_body_rig.get("body_lift")), 0.0)
 
 	## Centre pip — a small white cap on top.
 	var pip : MeshInstance3D = MeshInstance3D.new()
@@ -454,7 +448,7 @@ func _build_visual() -> void:
 	sp.radius = 6.0
 	sp.height = 12.0
 	pip.mesh = sp
-	pip.position = Vector3(6.0, BODY_LIFT + 27.0, 0.0)   ## atop the mech's sensor head
+	pip.position = _body_rig.get("pip_position")   ## atop this silhouette's head/crown
 	pip.material_override = _unlit(Color(1, 1, 1, 0.95))
 	add_child(pip)
 
@@ -475,7 +469,7 @@ func _build_visual() -> void:
 	_refresh_range_rings()
 
 	## Billboard health bar above the body.
-	var bar_y : float = BODY_LIFT + 40.0
+	var bar_y : float = float(_body_rig.get("bar_y"))
 	_make_bar(Color(0.12, 0.12, 0.12), bar_y, HEALTH_BAR_W)
 	_hp_fill = _make_bar(Color(0.30, 0.95, 0.40), bar_y + 0.1, HEALTH_BAR_W)
 	_hp_mat = _hp_fill.material_override as StandardMaterial3D
@@ -504,19 +498,6 @@ func _set_ring_radius(ring: MeshInstance3D, radius_px: float) -> void:
 	if tm != null:
 		tm.outer_radius = radius_px
 		tm.inner_radius = maxf(0.0, radius_px - 5.0)
-
-func _mech_part(mat: Material, mesh: Mesh, pos: Vector3) -> void:
-	var mi : MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.position = pos
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	_body.add_child(mi)
-
-func _mech_box(x: float, y: float, z: float) -> BoxMesh:
-	var b : BoxMesh = BoxMesh.new()
-	b.size = Vector3(x, y, z)
-	return b
 
 func _unlit(col: Color) -> StandardMaterial3D:
 	var m : StandardMaterial3D = StandardMaterial3D.new()
