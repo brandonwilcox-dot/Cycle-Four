@@ -81,16 +81,20 @@ func _animate(delta: float) -> void:
 				_anim_t += delta * 2.0
 				_mesh.position.y = _GAIT_REST_Y + 1.2 + sin(_anim_t * TAU * 0.5) * 0.8
 			"bloom":
-				_anim_t += delta * 4.0
-				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 3.0
-				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.07
+				_anim_t += delta * 3.6
+				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 5.5
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.16
+				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.09
 			"mesh":
-				_anim_t += delta * 10.0
-				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 1.2
-				_mesh.rotation.z = sin(_anim_t * TAU) * 0.035
+				_anim_t += delta * 11.0
+				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 2.6
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.07
+				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 1.5
 	else:
 		_mesh.position.y = lerpf(_mesh.position.y, _GAIT_REST_Y, minf(1.0, delta * _GAIT_SETTLE))
+		_mesh.position.z = lerpf(_mesh.position.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.rotation.z = lerpf(_mesh.rotation.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
+		_mesh.rotation.y = lerpf(_mesh.rotation.y, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 
 func update(delta: float) -> void:
 	if data == null:

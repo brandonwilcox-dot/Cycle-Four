@@ -121,6 +121,11 @@ func _build_needle() -> void:
 	_disc_mat = _glow_mat(AMBER, 0.9)
 	var d : MeshInstance3D = _part(disc, Vector3(0.0, -30.0, 0.0), _disc_mat)
 	d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	## Seraphim tech underscore (playtest 2026-07-03): one thin light-channel up the spire —
+	## sleek and polished, but unmistakably engineered.
+	var line : MeshInstance3D = _part(_box(1.4, 42.0, 2.2), Vector3(10.0, -4.0, 0.0),
+		_glow_mat(Color(1.0, 0.92, 0.75), 1.3))
+	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 ## -- B1: The Broodmother (bloom) --------------------------------------------------------
 ## Wide low crab: domed carapace on six stepping legs; one crusher claw, one slender
@@ -230,14 +235,19 @@ func _process(delta: float) -> void:
 				_disc_mat.emission_energy_multiplier = 0.8 + 0.3 * sin(_t * 2.2)
 		"bloom":
 			## Carapace breathes; polyps pulse out of phase; legs step in tripod groups.
+			## Playtest 2026-07-03: locomotion was imperceptible — the body now visibly
+			## bobs and pitches with the stride, and the legs swing much harder.
 			var breath : float = 1.0 + 0.02 * sin(_t * 1.4)
 			_body.scale = Vector3(breath, 1.0 / breath, breath)
 			for i in _polyp_mats.size():
 				_polyp_mats[i].emission_energy_multiplier = 0.7 + 0.5 * sin(_t * 1.8 + float(i) * 2.1)
-			var step_amp : float = 0.14 if moving else 0.015
+			var step_amp : float = 0.32 if moving else 0.02
 			for i in _legs.size():
 				var phase : float = 0.0 if i % 2 == 0 else PI   ## tripod: alternate legs anti-phase
-				_legs[i].rotation.x = sin(_t * 6.5 + phase) * step_amp
+				_legs[i].rotation.x = sin(_t * 7.5 + phase) * step_amp
+			var bob_target : float = body_lift + (absf(sin(_t * 3.75)) * 3.5 if moving else 0.0)
+			_body.position.y = lerpf(_body.position.y, bob_target, minf(1.0, delta * 10.0))
+			_body.rotation.z = lerpf(_body.rotation.z, (sin(_t * 3.75) * 0.05 if moving else 0.0), minf(1.0, delta * 8.0))
 		"mesh":
 			## Signal travels the joint nodes around the body; legs flow in tetrapod groups
 			## while moving, micro-twitch at rest (the skitter DNA).
@@ -249,8 +259,11 @@ func _process(delta: float) -> void:
 			for i in _legs.size():
 				if moving:
 					var phase : float = 0.0 if (i % 4) < 2 else PI   ## tetrapod flow
-					_legs[i].rotation.x = sin(_t * 9.0 + phase + float(i) * 0.35) * 0.10
+					_legs[i].rotation.x = sin(_t * 10.0 + phase + float(i) * 0.35) * 0.24
 				else:
-					_legs[i].rotation.x = sin(_t * 2.0 + float(i) * 1.7) * 0.02
+					_legs[i].rotation.x = sin(_t * 2.0 + float(i) * 1.7) * 0.03
+			## Playtest 2026-07-03: the chassis now visibly scuttles — quick shallow bounce.
+			var scuttle : float = body_lift + (absf(sin(_t * 10.0)) * 2.2 if moving else 0.0)
+			_body.position.y = lerpf(_body.position.y, scuttle, minf(1.0, delta * 12.0))
 		_:
 			pass   ## fallback mech is static (as before)

@@ -34,6 +34,45 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-03 (3) — GAIT VISIBILITY FIX + SupCom AESTHETIC ANCHORS + FACTION PREVIEW SCREEN
+
+Round-5 playtest response. **New durable art direction (user, after SupCom:FA review):**
+Architects = **SERAPHIM** (sleek/polished/chrome, few jagged angles, a thin light-channel as
+the technological underscore); Mesh = **CYBRAN** (angular/spiky/insectoid, Mesh's near-black +
+electric-blue palette); Bloom = **AEON + BIOLOGICAL** (rounded sleek forms overgrown with
+tendrils/roots/buds). Recorded here + in memory — applies to all future art work.
+
+- **[BUG-ish FIX] Bloom/Mesh locomotion invisible** ("models are static and glide"): the V4
+  gaits existed but amplitudes were imperceptible at RTS zoom. Unit/FriendlyUnit: Bloom lope
+  bob 4→7.5 px + pitch 0.07→0.16 + new yaw waddle; Mesh skitter bob 1.4→3.2 + roll 0.07 +
+  new lateral shimmy; settle now re-seats all axes. **Commander rigs:** Broodmother now bobs
+  + pitches with the stride (legs 0.14→0.32 rad); Weaver chassis visibly scuttles (legs
+  0.10→0.24). Needle unchanged (hover is its language).
+- **UnitBodies redesigned to the anchors:** Architects = smooth chrome core + long capsule
+  fuselage + canopy + swept fin + warm light-channel (glow accents now supported via
+  `_glow_part`, own materials, tint-immune decor). Bloom = rounded saucer + dome with THREE
+  trailing root-tendrils ending in glowing buds. Mesh = angular chassis + upper deck +
+  mandible prongs + four splayed spike legs + rear spikes + one hot blue sensor eye.
+  Needle got its Seraphim light-channel up the spire.
+- **NEW: Faction Preview screen** (user: "generate previews of the units… a menu option to
+  customize your faction"): `scenes/ui/FactionPreview.tscn` + `src/ui/FactionPreview.gd`,
+  reached via a new **Faction Preview** button on the Title screen. A slow-turntable stage
+  under the real atmosphere showing each faction's **Commander (live rig idle animations —
+  Needle hover/halo, Broodmother breathing polyps, Weaver signal ring) + LINE/RUNNER/BRUTE
+  archetypes** in real roster colors + substrate, with Label3D captions. Faction buttons +
+  Back. **This screen is the designated future home of cosmetic customization (core/15).**
+- SupCom fandom wiki blocked automated fetch (402); aesthetics confirmed via search
+  (StrategyWiki + community sources) + established knowledge.
+
+**Verified:** FactionPreview scene ran clean via MCP (zero errors); Battle3D paths unchanged
+except gait constants. Both exes re-exported 2026-07-03 (09:10). **Playtest:** Title →
+Faction Preview (cycle all three), then in-battle Bloom/Mesh unit motion (should be
+unmistakable now), new unit silhouettes in combat, Broodmother/Weaver stride.
+Tune: gait numbers in Unit/FriendlyUnit/_animate + CommanderBodyRig; body proportions in
+UnitBodies; stage layout in FactionPreview.
+
+---
+
 ## Session 2026-07-03 (2) — FACTION COMMANDER MECHS: Needle / Broodmother / Weaver — COMPILE+RUNTIME VERIFIED
 
 User approved the recommended trio from `planning/commander-mech-directions.md`. New

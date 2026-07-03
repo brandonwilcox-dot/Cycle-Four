@@ -235,17 +235,21 @@ func _animate(delta: float) -> void:
 			"architects":   ## glide — a calm engineered hover, no footfall
 				_anim_t += delta * 2.0
 				_mesh.position.y = BODY_LIFT + 1.5 + sin(_anim_t * TAU * 0.5) * 1.0
-			"bloom":        ## lope — heavy organic bound with body roll
-				_anim_t += delta * 4.0
-				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 4.0
-				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.07
-			"mesh":         ## skitter — fast, shallow, twitchy
-				_anim_t += delta * 10.0
-				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 1.4
-				_mesh.rotation.z = sin(_anim_t * TAU) * 0.035
+			"bloom":        ## lope — heavy organic bound with pitch + waddle (playtest: was invisible)
+				_anim_t += delta * 3.6
+				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 7.5
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.16
+				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.09
+			"mesh":         ## skitter — fast shallow bounce + lateral shimmy (playtest: was invisible)
+				_anim_t += delta * 11.0
+				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 3.2
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.07
+				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 1.8
 	else:
 		_mesh.position.y = lerpf(_mesh.position.y, BODY_LIFT, minf(1.0, delta * _GAIT_SETTLE))
+		_mesh.position.z = lerpf(_mesh.position.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.rotation.z = lerpf(_mesh.rotation.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
+		_mesh.rotation.y = lerpf(_mesh.rotation.y, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 	## Hit flash: the substrate emission flares on damage and re-settles.
 	if _hit_flash > 0.0 and _base_emission > 0.0 and _mat != null:
 		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)

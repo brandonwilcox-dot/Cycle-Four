@@ -12,6 +12,7 @@
 extends Control
 
 const BATTLE_SCENE   : String = "res://scenes/main/Battle3D.tscn"   ## 3D battle (promoted from scenes/test; 2D Battle.tscn kept as fallback)
+const PREVIEW_SCENE  : String = "res://scenes/ui/FactionPreview.tscn"
 const SETTINGS_PATH : String = "user://settings.cfg"
 
 const COL_BG       : Color = Color(0.05, 0.05, 0.08, 1.0)
@@ -78,6 +79,10 @@ func _build_menu() -> void:
 	_continue_btn.disabled = not SaveManager.has_save()
 	_continue_btn.pressed.connect(_on_continue_pressed)
 	vbox.add_child(_continue_btn)
+
+	var preview_btn := _menu_button("Faction Preview")
+	preview_btn.pressed.connect(_on_preview_pressed)
+	vbox.add_child(preview_btn)
 
 	var options_btn := _menu_button("Options")
 	options_btn.pressed.connect(_on_options_pressed)
@@ -169,6 +174,9 @@ func _on_continue_pressed() -> void:
 		return
 	SaveManager.load_game()
 	SceneManager.change_to(BATTLE_SCENE)
+
+func _on_preview_pressed() -> void:
+	SceneManager.change_to(PREVIEW_SCENE)
 
 func _on_options_pressed() -> void:
 	_menu_root.hide()
