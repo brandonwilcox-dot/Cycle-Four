@@ -128,7 +128,10 @@ only on fire). New items surfaced:
   no Begin-Waves economy loop). Same-day mitigation: burst cadence (0.5s in-wave), bigger waves
   (10 + 3/wave, cap 48), real lulls (22s), Begin Waves button wired to call the wave early. The FIX
   is porting the real wave system into Battle3D — schedule as its own arc (couples with H4 scaling
-  and the B assault arc).
+  and the B assault arc). **2026-07-02 partial (J1-lite):** pairs/tick, roster tiers by wave,
+  archetype rotation, +HP/+armor scaling, boss Alphas every 5 waves. **2026-07-03: the full fix is
+  ABSORBED into `planning/units-land-plan.md` phase U5** (roster-driven waves + per-faction wave
+  targeting from `docs/codex/Units_Land.md` §5) — track it there.
 - **J2 — Two-tier fog — SHIPPED same day (V2b).** User design directive: explored ≠ watched. Live
   line-of-sight pools around Commander/FOB/towers/garrisons/friendly units; explored-but-unwatched
   ground falls back to a dim desaturated "memory" (claims/paths legible, shadowed); unexplored stays

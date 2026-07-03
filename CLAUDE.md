@@ -34,6 +34,33 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-03 (4) — LAND-UNIT WORK PLAN REFACTORED FROM Units_Land.md (planning only, no code)
+
+The user authored **`Units_Land.md`** (land-unit design codex: garrison-tether "node" identity,
+6-role rosters per faction, sub-path heresy modifier layer, per-faction wave targeting) in the
+design repo; copied here to its suggested path **`docs/codex/Units_Land.md`**. Reconciled it
+against corpus + code and wrote **`planning/units-land-plan.md`** — the new unit work plan:
+
+- **Phases U0–U5:** U0 schema (`UnitData.role/tier/sub_path_lock/modifier_slots`, `UnitModifier`
+  resource, per-faction tether radii) → U1 node identity (Architect compound timer / Bloom
+  mature+connect / Mesh overlap-share+reroute — replaces kill-XP garrison leveling) → U2 T1
+  roster (9 units, Line Holders = existing `*_t1.tres` as balance anchors; lands the old
+  "garrison unit-type selection" backlog item) → U5 enemy waves (ABSORBS backlog J1: roster-driven
+  waves + faction wave targeting) → U3 T2/T3 + shields → U4 heresy modifiers (terrain-bond /
+  wreckage-absorb / dream-stabilize; the Option B seam — NEVER captioned in-game).
+- **Recommended order U0→U1→U2→U5→U3→U4;** F1 (gameplay terrain) rises in priority — it
+  activates Bloom hover, Mesh terrain-LOS, and terrain-bond.
+- **§9 answers:** tether EXISTS (`FriendlyUnit.MAX_LEASH`); detection EXISTS → Mesh Deceiver
+  un-stretched; node timers + modifier slots + shields = new work; economy asymmetry supported
+  (energy/schematics naming wins over the spec's Mass/Energy); Dominance Meter = stub hook only.
+- **⚠ ONE DECISION FOR THE USER before U2:** core/17 has ONE named unit/tier (Drone/Sporeling/…)
+  vs the spec's SIX roles/faction. Proposed merge in the plan §0: core/17 names+cadence+T2-commit
+  kept, named units = the Line-Holder/Heavy/T3 roles, new roles added beside them. Confirm/override.
+- Missing routing docs flagged (`Soul.md`, Tower/Garrison codex, `Leftpinkytoe.md` exist nowhere).
+- Backlog J1 entry cross-referenced to U5. No engine code touched; no export needed.
+
+---
+
 ## Session 2026-07-03 (3) — GAIT VISIBILITY FIX + SupCom AESTHETIC ANCHORS + FACTION PREVIEW SCREEN
 
 Round-5 playtest response. **New durable art direction (user, after SupCom:FA review):**
