@@ -34,6 +34,45 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 (5) — PLAYTEST FIXES: bases anchor spawns, abilities → 1-4, wave overhaul (J1-lite)
+
+Direct response to the user's pre-playtest notes:
+
+**1. Enemy bases anchor EVERY spawn (was: one hardcoded demo base at the west end).**
+`Battle3D._spawn_enemy_bases(owner_fac)` replaces the Stage-2f leftover: one destructible base
+per spawn, placed two path-steps inside its mouth (spawn_id `spawn_<i>`). Spawned after
+`_setup_waves` (needs spawn cells) on start / Academy commit / dev-skip / deploy (owner
+faction's bases on deploys). **Destroying a base SEALS its spawn** — no more waves or
+telegraphy from that mouth (`_dead_spawns`); **capture now requires ALL bases down**
+(`_live_bases`), with a "N remain" toast per kill and "the field is yours" on the home map.
+Known gap (pre-existing): base-destroyed state still not persisted in the 3D dev snapshot.
+
+**2. Commander abilities Q/W/E/R → 1/2/3/4** (Q/E are camera yaw, WASD pan): InputMap bindings
+(AbilityController), unlock toast letters, AbilityBar KEY_LABELS, ESC-help text.
+
+**3. Wave overhaul (J1-lite — the placeholder driver graduates):**
+- **Pairs, not a trickle**: each spawn tick fields TWO units (single units were free kills).
+- **Real roster variety**: waves load the actual faction `.tres` units — **t1 → t2 at wave 5 →
+  t3 at wave 9** — from the territory owner's faction on deploys, else `WaveTableBuilder.
+  enemy_of(player)` (pillar A: waves engage the triangle). Substrate skins + gaits keyed to
+  faction come along free.
+- **Archetype variety** within each wave: line / **runner** (fast, fragile, 0.8×) / **brute**
+  (slow, 2× HP, 1.25×) rotation.
+- **Progressive difficulty**: +10% HP and +0.4 armor per wave on top of tier jumps.
+- **Boss every 5th wave**: the wave opens with a faction **Alpha** — 8× HP, slow, +4 armor,
+  1.8× scale — announced as "something LARGE approaches."
+- Hardcoded mesh "Raider" `_enemy_data()` deleted; telegraphy rings now color by the actual
+  wave faction and skip sealed spawns.
+
+**Verified:** MCP boot → Academy scenarios exercising the roster-spawn path, zero errors, zero
+new warnings (fixed an int-division warning the first draft introduced). Both exes re-exported
+2026-07-02 (20:10). **Playtest:** bases sit at every spawn mouth (NOT the west field); kill one
+→ that mouth goes dark + "N remain"; abilities on 1-4; wave pairs/variety/scaling; wave 5 Alpha;
+tune `_make_enemy_data` multipliers + BOSS_EVERY. Full WaveManager parity (previews, Begin-Waves
+economy, composition tables) remains backlog J1.
+
+---
+
 ## Session 2026-07-02 (4) — VISUAL TRACK WRAP: V6-lite — units aren't cubes, terrain + water, rising construction
 
 User directive: wrap the visuals; deferred bits + terrain/water + "tired of cubes attacking

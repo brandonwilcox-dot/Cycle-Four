@@ -480,7 +480,7 @@ func _unlock_slot(slot: int) -> void:
 	var ab = _get_ability(slot)
 	EventBus.ability_unlocked.emit(slot, ab.id if ab != null else &"")
 	EventBus.notification_pushed.emit(
-		"Ability unlocked: %s  [%s]" % [ab.display_name if ab != null else "?", ["Q","W","E","R"][slot]],
+		"Ability unlocked: %s  [%s]" % [ab.display_name if ab != null else "?", ["1","2","3","4"][slot]],
 		"normal"
 	)
 
@@ -561,10 +561,11 @@ func _get_ability(slot: int):
 
 func _register_input_actions() -> void:
 	var bindings : Array = [
-		[&"ability_1", KEY_Q],
-		[&"ability_2", KEY_W],
-		[&"ability_3", KEY_E],
-		[&"ability_4", KEY_R],
+		## Playtest 2026-07-02: moved off Q/W/E/R — those are camera keys (WASD pan, Q/E yaw).
+		[&"ability_1", KEY_1],
+		[&"ability_2", KEY_2],
+		[&"ability_3", KEY_3],
+		[&"ability_4", KEY_4],
 	]
 	for binding in bindings:
 		var action  : StringName = binding[0]

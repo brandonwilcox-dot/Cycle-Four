@@ -12,7 +12,7 @@ extends Control
 
 const SLOT_SIZE   : float = 52.0
 const SLOT_GAP    : float = 8.0
-const KEY_LABELS  : Array = ["Q", "W", "E", "R"]
+const KEY_LABELS  : Array = ["1", "2", "3", "4"]   ## Q/W/E/R belong to the camera
 const SLOT_COLORS : Array = [
 	Color(1.00, 0.92, 0.30, 1.0),   ## Lance — gold
 	Color(0.40, 0.80, 1.00, 1.0),   ## Suppression Field — cyan

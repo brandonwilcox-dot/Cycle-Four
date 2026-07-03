@@ -24,8 +24,9 @@ const GAME_OVER_SCENE   = preload("res://scenes/ui/GameOverScreen.tscn")
 const ACADEMY_SCENE     = preload("res://scenes/main/Academy.tscn")
 const TITLE_SCENE       = "res://scenes/ui/TitleScreen.tscn"
 const SETTINGS_PATH     = "user://settings.cfg"
-const CONTROLS_TEXT     = "LEFT-CLICK  select Commander / tower\nU  upgrade selected tower\nRIGHT-CLICK  move Commander (hold Shift to chain)\nB  build tower        G  build garrison\nBuild Wall button  (Architects only)\n\nPgUp  birds-eye view      PgDn  focus Commander\nWheel  zoom (out far = galaxy map)\nWASD  pan       Q / E  rotate\nMIDDLE-drag  free rotate\nDelete  reset view   Insert  save custom view\n\nGalaxy zoom: LEFT-CLICK a frontier node to deploy\nESC  this menu"
+const CONTROLS_TEXT     = "LEFT-CLICK  select Commander / tower\nU  upgrade selected tower\nRIGHT-CLICK  move Commander (hold Shift to chain)\nB  build tower        G  build garrison\n1 / 2 / 3 / 4  Commander abilities\nBuild Wall button  (Architects only)\n\nPgUp  birds-eye view      PgDn  focus Commander\nWheel  zoom (out far = galaxy map)\nWASD  pan       Q / E  rotate\nMIDDLE-drag  free rotate\nDelete  reset view   Insert  save custom view\n\nGalaxy zoom: LEFT-CLICK a frontier node to deploy\nESC  this menu"
 const MAP_GENERATOR     = preload("res://src/core/map/MapGenerator.gd")
+const WAVE_TABLE        = preload("res://src/core/waves/WaveTableBuilder.gd")
 ## A spread of tiers/branches/roles to show the 3D silhouettes differ.
 const DEMO_TOWERS : Array = [
 	[preload("res://resources/towers/architects_t1.tres"),  Vector2i(12, 12)],   ## T1 damage
@@ -91,6 +92,18 @@ const MAX_LIVE_ENEMIES : int = 48     ## hard cap on concurrent hostiles — nev
 const TELEGRAPH_SECS : float = 4.0
 var _telegraph_rings : Array[MeshInstance3D] = []
 var _telegraph_mats  : Array[StandardMaterial3D] = []
+
+## Playtest 2026-07-02 wave overhaul (J1-lite): units spawn in PAIRS, waves field the real
+## faction rosters (counter-faction at home, territory owner on deploys) with per-wave scaling
+## and archetype variety (line / runner / brute), and every BOSS_EVERY-th wave opens with an
+## Alpha. A destroyed enemy base SEALS its spawn: no more waves or telegraphy from that mouth.
+const BOSS_EVERY : int = 5
+const _FACTION_FILE_PREFIX : Dictionary = {"architects": "architect", "bloom": "bloom", "mesh": "mesh"}
+var _wave_spawn_count : int = 0          ## units spawned this wave (drives archetype rotation)
+var _boss_pending     : bool = false     ## boss wave: the first spawn of the wave is the Alpha
+var _dead_spawns      : Dictionary = {}  ## spawn index -> true (its base fell; mouth sealed)
+var _live_bases       : int = 0
+var _unit_tres_cache  : Dictionary = {}
 
 var _unit_layer  : Node3D = null
 var _spawn_cells : Array[Vector2i] = []
@@ -212,16 +225,22 @@ func _spawn_commander() -> void:
 	add_child(_commander)
 	_commander.call("set_selected", true)
 
-## Stage 2f: a destructible enemy base near the west spawn — fields mesh-faction defenders (real 3D
-## Units) that guard it; the Commander/FOB/towers can grind it down.
-func _spawn_enemy_base() -> void:
-	_spawn_enemy_base_at(Vector2i(6, 17), "mesh", &"demo_spawn")
-
-func _spawn_enemy_base_at(cell: Vector2i, faction: String, spawn_id: StringName) -> void:
-	var eb : Node = ENEMY_BASE_SCRIPT.new()
-	eb.call("setup", spawn_id, faction)
-	eb.call("place_at", _cell_center2(cell))
-	add_child(eb)
+## Conquest: one destructible base anchors EVERY spawn (playtest fix — the old Stage-2f demo
+## base sat hardcoded at the west end). Each is placed a couple of path-steps inside its spawn
+## mouth so it sits on-board; destroying it seals that spawn. Requires _spawn_cells (call after
+## _setup_waves / _collect_spawns).
+func _spawn_enemy_bases(owner_fac: String) -> void:
+	_dead_spawns.clear()
+	_live_bases = 0
+	for i in _spawn_cells.size():
+		var wp : Array = _map_grid.call("get_path_to_base", _spawn_cells[i])
+		if wp.is_empty():
+			continue
+		var eb : Node = ENEMY_BASE_SCRIPT.new()
+		eb.call("setup", StringName("spawn_%d" % i), owner_fac)
+		eb.call("place_at", wp[mini(2, wp.size() - 1)])
+		add_child(eb)
+		_live_bases += 1
 
 ## Stage 5: populate a galaxy + add the 3D GalaxyView. Zoom the camera OUT past the galaxy
 ## threshold (wheel) and the board shrinks away to reveal the 3D territory-node graph.
@@ -280,8 +299,11 @@ func _process(delta: float) -> void:
 		if get_tree().get_nodes_in_group("units").size() >= MAX_LIVE_ENEMIES:
 			return
 		_wave_timer = SPAWN_INTERVAL
-		_spawn_one_enemy()
-		_wave_left -= 1
+		for _i in 2:   ## playtest: units arrive in PAIRS — one at a time was free kills
+			if _wave_left <= 0:
+				break
+			_spawn_one_enemy()
+			_wave_left -= 1
 
 ## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
 ## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
@@ -651,7 +673,7 @@ func _on_academy_confirmed() -> void:
 		_academy_layer.queue_free()   ## frees the Academy (and its CanvasLayers) with it
 	_academy = null
 	_academy_layer = null
-	_spawn_enemy_base()   ## the conquest anchor arrives with the real game
+	_spawn_enemy_bases(_wave_faction())   ## the conquest anchors arrive with the real game
 	_reset_waves()        ## first real wave after the standard grace period
 	EventBus.notification_pushed.emit("Assignment confirmed. Hold the line, Commander.", "positive")
 
@@ -671,7 +693,7 @@ func _academy_dev_skip(faction_id: String, sub_path: String) -> void:
 	if not _battle_started:
 		_start_battle()
 	else:
-		_spawn_enemy_base()   ## skipped mid-scenario: the academy world lacks the conquest anchor
+		_spawn_enemy_bases(_wave_faction())   ## skipped mid-scenario: add the conquest anchors
 		_reset_waves()
 
 ## Continue: a save was loaded (faction/economy/galaxy already restored by SaveManager). Restore the
@@ -842,8 +864,6 @@ func _start_battle(restored: bool = false, academy: bool = false) -> void:
 	_setup_unit_layer()    ## must exist before garrisons _ready (their friendly units spawn here)
 	_spawn_base()
 	_spawn_commander()
-	if not academy:
-		_spawn_enemy_base()   ## Academy scenarios face only scripted spawns — the conquest anchor waits
 	if not restored:
 		## Clean playtest: NO demo towers/garrisons/walls. A fresh game starts empty — just the FOB,
 		## Commander, and one enemy base — so the player builds everything and saves contain only real
@@ -855,6 +875,8 @@ func _start_battle(restored: bool = false, academy: bool = false) -> void:
 			if md != null:
 				GalaxyManager.star_systems[GalaxyManager.active_node]["seed"] = int(md.map_seed)
 	_setup_waves()
+	if not academy:
+		_spawn_enemy_bases(_wave_faction())   ## Academy scenarios face only scripted spawns
 
 ## Friendly units (garrison defenders) live here; tagged "unit_layer" so a Building can resolve it
 ## by group (its hardcoded ../../UnitLayer path doesn't hold in the 3D scene layout).
@@ -947,7 +969,7 @@ func _rebuild_telegraph_rings() -> void:
 		torus.outer_radius = CELL * 1.15
 		ring.mesh = torus
 		var mat : StandardMaterial3D = StandardMaterial3D.new()
-		var col : Color = Vfx.faction_color(_enemy_data().faction_id)
+		var col : Color = Vfx.faction_color(_wave_faction())
 		mat.albedo_color = col
 		mat.emission_enabled = true
 		mat.emission = col
@@ -967,8 +989,8 @@ func _update_telegraphy() -> void:
 		var ring : MeshInstance3D = _telegraph_rings[i]
 		if not is_instance_valid(ring):
 			continue
-		ring.visible = active
-		if active:
+		ring.visible = active and not _dead_spawns.has(i)   ## sealed mouths stay dark
+		if ring.visible:
 			var urgency : float = 1.0 - _wave_timer / TELEGRAPH_SECS
 			_telegraph_mats[i].emission_energy_multiplier = \
 				0.8 + 0.8 * (0.5 + 0.5 * sin(Time.get_ticks_msec() / 1000.0 * TAU * (1.0 + urgency * 2.0)))
@@ -998,10 +1020,10 @@ func _try_deploy(world2: Vector2) -> void:
 	_reset_battlefield()                     ## fresh territory: clear forces, reset Commander to base
 	_restore_territory_development(GalaxyManager.star_systems[id].get("development", {}))   ## re-place saved dev
 	_deployed_node = id
-	## A fresh enemy base to destroy = the capture condition for this territory (skip if already captured).
+	## Fresh enemy bases to destroy = the capture condition for this territory (skip if captured).
 	if not _spawn_cells.is_empty() and GalaxyManager.star_systems[id].get("owner", "") != FactionManager.active_faction:
 		var owner_fac : String = str(GalaxyManager.star_systems[id].get("owner", "mesh"))
-		_spawn_enemy_base_at(_spawn_cells[0], owner_fac, StringName("deploy_%s" % id))
+		_spawn_enemy_bases(owner_fac if owner_fac in ["architects", "bloom", "mesh"] else "mesh")
 	if _galaxy_view.has_method("queue_redraw"):
 		_galaxy_view.call("queue_redraw")    ## recenter the graph on the new active node
 	_rig.call("snap_focus", Vector3(COLS * CELL * 0.5, 0.0, ROWS * CELL * 0.5), 1600.0)
@@ -1032,10 +1054,19 @@ func _reset_battlefield() -> void:
 		_commander.call("set_selected", true)
 
 ## Capture-on-clear: destroying the deployed territory's enemy base flips it to the player.
-func _on_enemy_base_destroyed(_spawn_id: StringName) -> void:
+func _on_enemy_base_destroyed(spawn_id: StringName) -> void:
 	_shake(0.5)   ## V4: a base falling is a big moment — everywhere, not just deploys
+	## Seal that spawn: no more waves or telegraphy from a fallen base's mouth.
+	var sid : String = String(spawn_id)
+	if sid.begins_with("spawn_"):
+		_dead_spawns[int(sid.trim_prefix("spawn_"))] = true
+	_live_bases = maxi(0, _live_bases - 1)
+	if _live_bases > 0:
+		EventBus.notification_pushed.emit("Enemy base destroyed — %d remain. Its spawn is sealed." % _live_bases, "positive")
+		return
 	if _deployed_node == "":
-		return   ## home/demo base — not a deploy target
+		EventBus.notification_pushed.emit("All enemy bases destroyed — the field is yours.", "positive")
+		return   ## home map — no capture target
 	var node_id : String = _deployed_node
 	_deployed_node = ""
 	GalaxyManager.capture_system(node_id, FactionManager.active_faction)
@@ -1168,12 +1199,19 @@ func _restore_territory_development(dev: Dictionary) -> void:
 
 ## Begin the next wave: size grows each wave; announce it.
 func _start_next_wave() -> void:
+	if _alive_spawn_cells().is_empty():
+		return   ## every base is down — the field is conquered, no more waves
 	_wave_num += 1
 	_wave_left = WAVE_SIZE_BASE + (_wave_num - 1) * 3
+	_wave_spawn_count = 0
+	_boss_pending = _wave_num % BOSS_EVERY == 0
 	_resting = false
 	_wave_timer = 0.0   ## first unit of the wave spawns right away
 	_hide_telegraphy()  ## the warning becomes the wave
-	EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles." % [_wave_num, _wave_left], "warning")
+	if _boss_pending:
+		EventBus.notification_pushed.emit("Wave %d — something LARGE approaches." % _wave_num, "warning")
+	else:
+		EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles." % [_wave_num, _wave_left], "warning")
 
 ## HUD "Begin Waves" button (→ WaveManager.begin_waves → wave_called_early): skip the rest of
 ## the current grace/lull and bring the wave now. No-op mid-wave or during Academy scenarios.
@@ -1201,22 +1239,82 @@ func _reset_waves() -> void:
 	_wave_timer = WAVE_GRACE
 
 func _spawn_one_enemy() -> void:
-	if _spawn_cells.is_empty() or _map_grid == null:
+	var alive : Array[Vector2i] = _alive_spawn_cells()
+	if alive.is_empty() or _map_grid == null:
 		return
-	var cell : Vector2i = _spawn_cells[_spawn_idx % _spawn_cells.size()]
+	var cell : Vector2i = alive[_spawn_idx % alive.size()]
 	_spawn_idx += 1
-	_spawn_enemy_from(cell)
+	var boss : bool = _boss_pending
+	_boss_pending = false   ## the Alpha leads its wave
+	_wave_spawn_count += 1
+	_spawn_enemy_from(cell, _make_enemy_data(boss))
 
-## Spawn a single enemy at a specific spawn cell (wave cadence + Academy scenarios share this).
-func _spawn_enemy_from(cell: Vector2i) -> void:
+## Spawn cells whose anchoring base still stands (a fallen base seals its mouth).
+func _alive_spawn_cells() -> Array[Vector2i]:
+	var out : Array[Vector2i] = []
+	for i in _spawn_cells.size():
+		if not _dead_spawns.has(i):
+			out.append(_spawn_cells[i])
+	return out
+
+## The faction this territory's waves field: the deployed node's owner, else the counter
+## to the player's faction (pillar A — waves engage the triangle).
+func _wave_faction() -> String:
+	if _deployed_node != "" and GalaxyManager.star_systems.has(_deployed_node):
+		var owner_id : String = str(GalaxyManager.star_systems[_deployed_node].get("owner", ""))
+		if owner_id in ["architects", "bloom", "mesh"]:
+			return owner_id
+	return WAVE_TABLE.enemy_of(FactionManager.active_faction)
+
+## Build this spawn's UnitData from the REAL faction roster (t1 → t2 at wave 5 → t3 at wave 9),
+## scaled by wave number, with archetype variety. Returns [UnitData, visual_scale].
+func _make_enemy_data(boss: bool) -> Array:
+	var fac  : String = _wave_faction()
+	var tier : int = clampi(1 + int(float(_wave_num - 1) / 4.0), 1, 3)   ## t2 at wave 5, t3 at wave 9
+	var ud   : UnitData = (_roster_unit(fac, tier).duplicate() as UnitData)
+	var w    : float = float(maxi(_wave_num - 1, 0))
+	ud.max_health *= 1.0 + 0.10 * w   ## progressive difficulty
+	ud.armor += w * 0.4
+	var vis : float = 1.0
+	if boss:
+		ud.unit_name = "%s Alpha" % fac.capitalize()
+		ud.max_health *= 8.0
+		ud.move_speed *= 0.6
+		ud.armor += 4.0
+		vis = 1.8
+	else:
+		match _wave_spawn_count % 4:
+			2:   ## runner — fast, fragile
+				ud.move_speed *= 1.45
+				ud.max_health *= 0.65
+				vis = 0.8
+			0:   ## brute — slow, heavy
+				ud.move_speed *= 0.7
+				ud.max_health *= 2.0
+				vis = 1.25
+	return [ud, vis]
+
+func _roster_unit(fac: String, tier: int) -> UnitData:
+	var key : String = "%s_t%d" % [_FACTION_FILE_PREFIX.get(fac, "mesh"), tier]
+	if not _unit_tres_cache.has(key):
+		_unit_tres_cache[key] = load("res://resources/units/%s.tres" % key)
+	return _unit_tres_cache[key]
+
+## Spawn a single enemy at a spawn cell (wave cadence + Academy scenarios share this).
+## payload = [UnitData, visual_scale]; empty → a plain roster t1 of the wave faction.
+func _spawn_enemy_from(cell: Vector2i, payload: Array = []) -> void:
 	if _map_grid == null or _unit_layer == null:
 		return
 	var wp : Array = _map_grid.call("get_path_to_base", cell)
 	if wp.is_empty():
 		return
+	if payload.is_empty():
+		payload = [(_roster_unit(_wave_faction(), 1).duplicate() as UnitData), 1.0]
 	var u : Node = UNIT_SCENE.instantiate()
-	u.call("setup", _enemy_data(), wp)
+	u.call("setup", payload[0], wp)
 	_unit_layer.add_child(u)
+	if float(payload[1]) != 1.0:
+		(u as Node3D).scale = Vector3.ONE * float(payload[1])
 
 ## Commander HP hit zero. In the Academy: revive in place (no retreat — keep observing). In the
 ## real game: forced retreat — the field clears, the wave cadence resets, and the Commander
@@ -1237,15 +1335,6 @@ func _on_commander_destroyed() -> void:
 	_commander.call("move_command", start2, false)   ## clear queued orders
 	_commander.call("revive")
 	EventBus.notification_pushed.emit("Commander down — forced to retreat. Revived at the FOB.", "warning")
-
-func _enemy_data() -> UnitData:
-	var ud : UnitData = UnitData.new()
-	ud.unit_name = "Raider"
-	ud.faction_id = "mesh"
-	ud.max_health = 60.0
-	ud.move_speed = 95.0
-	ud.color_hint = Color(0.85, 0.45, 0.95)
-	return ud
 
 ## Stage 2b demo: place converted Towers (built) along the path so they shoot the marching units —
 ## a mini 3D battle that exercises the real Tower logic + the 3D stat-driven silhouettes.
