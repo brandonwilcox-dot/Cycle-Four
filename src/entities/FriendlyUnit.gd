@@ -12,9 +12,9 @@ const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
+const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 
 const AGGRO_RADIUS    : float = 240.0
-const MAX_LEASH       : float = 220.0
 const BLOCK_RANGE     : float = 28.0
 const ARRIVE_DIST     : float = 4.0
 const PATROL_RADIUS        : float = 120.0
@@ -24,6 +24,9 @@ var data       : UnitData = null
 var _p          : Vector2  = Vector2.ZERO
 var _home       : Vector2  = Vector2.ZERO
 var _faction    : String   = ""
+## U0: per-faction tether radius (Architect wide / Bloom mid / Mesh short). The garrison
+## may re-scale it (U1: Bloom maturity growth) via set_leash().
+var _leash      : float    = 220.0
 var _current_health : float = 0.0
 var _attack_timer   : float = 0.0
 var _is_dead        : bool  = false
@@ -53,8 +56,13 @@ func _ready() -> void:
 		push_error("FriendlyUnit spawned without UnitData -- call setup() first.")
 		return
 	_faction = FactionManager.active_faction
+	_leash   = FACTION_PERKS.tether_radius(_faction)
 	position = WORLD3D.to3(_p, 0.0)
 	_build_visual()
+
+## U1 hook — garrisons re-scale the tether (e.g. Bloom maturity widens it).
+func set_leash(radius: float) -> void:
+	_leash = radius
 
 func _process(delta: float) -> void:
 	if _is_dead:
@@ -125,7 +133,7 @@ func _acquire_target() -> Node:
 		if enemy.has_method("is_detectable") and not enemy.call("is_detectable"):
 			continue
 		var epos : Vector2 = WORLD3D.node_plane(enemy)
-		if epos.distance_to(_home) > MAX_LEASH:
+		if epos.distance_to(_home) > _leash:
 			continue
 		var d : float = _p.distance_to(epos)
 		if d <= best_dist:
@@ -135,7 +143,7 @@ func _acquire_target() -> Node:
 		if not is_instance_valid(base):
 			continue
 		var bpos : Vector2 = WORLD3D.node_plane(base)
-		if bpos.distance_to(_home) > MAX_LEASH:
+		if bpos.distance_to(_home) > _leash:
 			continue
 		var bd : float = _p.distance_to(bpos)
 		if bd <= best_dist:
@@ -177,8 +185,8 @@ func _move_toward(point: Vector2, delta: float, clamp_leash: bool = true) -> voi
 		np = _p + dir.normalized() * step
 	if clamp_leash:
 		var from_home : Vector2 = np - _home
-		if from_home.length() > MAX_LEASH:
-			np = _home + from_home.normalized() * MAX_LEASH
+		if from_home.length() > _leash:
+			np = _home + from_home.normalized() * _leash
 	_set_plane(np)
 
 func _set_plane(p: Vector2) -> void:

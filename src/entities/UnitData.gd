@@ -11,6 +11,22 @@ class_name UnitData
 @export var faction_id: String = ""         ## "architects" | "bloom" | "mesh"
 @export var tier: int = 1                   ## Production tier 1-6
 
+## U0 (units-land-plan / docs/codex/Units_Land.md §3) — roster role. Line is the
+## per-faction T1 balance anchor, so existing .tres files default to it correctly.
+## Ordinals are saved into .tres files — append, never reorder.
+@export_enum("Line", "Scout", "AA", "Artillery", "Support", "Shield", "Assault", "Siege")
+var role: int = 0
+
+## U0 — sub-path gating (core/17: T1 shared, T2 is the sub-path commit point).
+## "" = available to every sub-path; else a FactionManager.SUB_PATHS id
+## ("standard" | "spiritual_tech" | "purist" | "assimilator" | "networked" | "dreamer").
+@export var sub_path_lock: String = ""
+
+## U0 — modifier slots (Units_Land §4). Orthodox units carry clean stat mods;
+## heretic sub-paths unlock one borrowed-mechanic modifier. Eligibility is enforced
+## by UnitModifier.is_eligible against the player's committed sub-path (U4 behavior).
+@export var modifier_slots: Array[UnitModifier] = []
+
 ## Combat stats
 @export var max_health: float = 100.0
 @export var move_speed: float = 80.0        ## pixels per second along path

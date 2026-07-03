@@ -34,6 +34,15 @@ const MESH_HIJACK_RADIUS    : float = 180.0  ## px; tower converts an enemy with
 const MESH_HIJACK_COOLDOWN  : float = 8.0    ## seconds between hijacks per tower
 const MESH_HIJACK_DURATION  : float = 6.0    ## the convert lasts this long, then the enemy reverts
 
+# -- U0 (units-land-plan): per-faction garrison tether radius (Units_Land §2 node identities) --
+# Architects wide (few durable units cover a big node), Bloom mid (grows with maturity in U1),
+# Mesh short (pushes dense overlapping nodes — overlap-share pays it back in U1).
+const TETHER_RADIUS : Dictionary = {
+	"architects": 300.0,
+	"bloom":      220.0,
+	"mesh":       150.0,
+}
+
 ## Construction-speed multiplier for the player's faction (Commander build rate).
 static func build_rate_mult(faction: String) -> float:
 	return ARCHITECT_BUILD_RATE_MULT if faction == "architects" else 1.0
@@ -41,3 +50,7 @@ static func build_rate_mult(faction: String) -> float:
 ## Structure max-health multiplier for the player's faction (towers + garrisons).
 static func health_mult(faction: String) -> float:
 	return ARCHITECT_HEALTH_MULT if faction == "architects" else 1.0
+
+## U0: tether (leash) radius for a faction's garrison units. U1 scales Bloom's with maturity.
+static func tether_radius(faction: String) -> float:
+	return float(TETHER_RADIUS.get(faction, 220.0))
