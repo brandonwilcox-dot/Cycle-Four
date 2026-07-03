@@ -30,6 +30,9 @@ uniform float noise_strength = 0.38;
 // water in the lowlands. Seeded per territory (MapGrid passes map_seed) so every world differs.
 // Paths / spawns / base / claimed ground stay FLAT — the game reads exactly as before.
 uniform float terrain_seed = 0.0;
+// The Commander claims/constructs as it moves: the creep PATTERN shows at full strength
+// only near it (the work in progress); settled territory keeps a faint trace (playtest).
+uniform vec2 commander_pos = vec2(-99999.0, -99999.0);
 uniform float height_amp : hint_range(0.0, 40.0) = 14.0;
 uniform float water_level : hint_range(0.0, 1.0) = 0.34;
 
@@ -75,7 +78,16 @@ void vertex() {
 	v_flat = 1.0 - td.b;   // paths/spawns/base flat; claiming does NOT flatten (water survives)
 	v_hn = fbm(wpos.xz * 0.006 + vec2(terrain_seed));
 	float relief = max(v_hn - water_level, 0.0);
-	VERTEX.y += relief * relief * height_amp * 3.0 * v_flat;
+	float amp = height_amp * 3.0 * v_flat;
+	VERTEX.y += relief * relief * amp;
+	// Recompute the normal from the height field (finite differences). Without this the
+	// displaced hills are lit as if flat — the grid seemed to float over a phantom shadow.
+	float e = 10.0;
+	float hx = max(fbm((wpos.xz + vec2(e, 0.0)) * 0.006 + vec2(terrain_seed)) - water_level, 0.0);
+	float hz = max(fbm((wpos.xz + vec2(0.0, e)) * 0.006 + vec2(terrain_seed)) - water_level, 0.0);
+	float dhx = (hx * hx - relief * relief) * amp / e;
+	float dhz = (hz * hz - relief * relief) * amp / e;
+	NORMAL = normalize(vec3(-dhx, 1.0, -dhz));
 }
 
 void fragment() {
@@ -118,7 +130,9 @@ void fragment() {
 			float pulse = smoothstep(0.80, 1.0, fract(wpos.x / (cell_size * 9.0) - TIME * 0.12));
 			pat = line * (0.20 + 1.05 * pulse);
 		}
-		emis = creep_accent * pat * creep;
+		// Active-work highlight: the pattern is the Commander's construction in progress.
+		float work = 0.15 + 0.85 * (1.0 - smoothstep(220.0, 480.0, distance(wpos.xz, commander_pos)));
+		emis = creep_accent * pat * creep * work;
 	}
 
 	// --- grid lines: a planning tool, not terrain — fade out as the camera pulls back
@@ -126,7 +140,8 @@ void fragment() {
 	float grid_fade = 1.0 - smoothstep(grid_near, grid_far, distance(cam, wpos));
 	vec2 gc = abs(fract(wpos.xz / cell_size) - 0.5);
 	float line = smoothstep(0.458, 0.486, max(gc.x, gc.y));
-	base *= 1.0 - line * 0.18 * grid_fade * (1.0 - water);
+	float flat_ground = 1.0 - smoothstep(0.02, 0.10, max(v_hn - water_level, 0.0) * v_flat);
+	base *= 1.0 - line * 0.18 * grid_fade * (1.0 - water) * flat_ground;
 
 	// --- water: pooled lowlands (visual only — the sim is untouched). Animated ripple with a
 	// faint emissive sparkle so it still reads inside the fog tiers. Claim-proof.

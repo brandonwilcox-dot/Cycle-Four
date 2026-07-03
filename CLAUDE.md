@@ -34,6 +34,36 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-02 (7) — PLAYTEST ROUND 3: terrain normals, MARBLE OBELISK, bloom sway, localized creep
+
+- **[BUG FIX] "The grid floats above the ground with a shadow under it."** Root cause: the
+  terrain vertex displacement never recomputed NORMALS — hills were lit as if flat, so the
+  grid riding them read as detached above a phantom shadow. Now the ground shader derives
+  normals from the height field (finite differences), and **grid lines only draw on flat
+  ground** (they fade off any relief) — the planning grid belongs to buildable land.
+- **Architect construction is a true MARBLE OBELISK now** (user: "solid block first, carved
+  away to reveal a tower — marble obelisks with firepower"): a fully OPAQUE polished-marble
+  block stands at placement; the laser ring descends and the block's remaining portion
+  shrinks top-down, revealing the finished tower underneath (which is final-quality from the
+  first moment — no transparency, no color lerp). Upgrade flourish = ring sweep only.
+- **Bloom growth sway**: young structures wiggle as they "find the sun" (two-axis sine sway
+  that fades as growth completes); rotation re-seats on completion.
+- **Mesh confirmed right** (drones kept as-is).
+- **Creep pattern localized to the working Commander** (user: "too pronounced… lines visible
+  as the Commander moves since it is constructing"): the substrate pattern glows at full
+  strength within ~220 px of the Commander, falling to a 15% trace beyond ~480 px. MapGrid
+  feeds `commander_pos` to the ground shader on the visibility tick. Settled territory keeps
+  the faction base TINT; the bright pattern is the work in progress.
+
+**Verified:** MCP boot clean, zero errors/new warnings. **RELEASE exe re-exported 2026-07-02
+(21:18) with round 3; the DEBUG exe was LOCKED (user playtesting the round-2 build since
+20:34) — re-export debug (`.\tools\export.ps1 -OnlyDebug`) once that window closes.**
+**Playtest:** hills read as lit hills (no floating grid); Architect build = opaque marble
+carving down; Bloom sway; creep pattern follows the Commander. Tune: shader `commander_pos`
+falloff (220/480), MARBLE_COL/roughness, sway amp/freq in ConstructionRig.
+
+---
+
 ## Session 2026-07-02 (6) — PLAYTEST ROUND 2: water fix, organic grid, GIANT MECH, faction construction
 
 - **[BUG FIX] Water vanished when the Commander revealed/claimed ground.** Root cause: the

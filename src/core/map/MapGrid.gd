@@ -677,7 +677,11 @@ func _recompute_visibility() -> void:
 		var r : float = 3.0 * CELL_SIZE
 		if commander.has_method("get_detector_radius"):
 			r = maxf(r, float(commander.call("get_detector_radius")))
-		_mark_circle(next, commander.call("plane_pos"), r)
+		var cpos : Vector2 = commander.call("plane_pos")
+		_mark_circle(next, cpos, r)
+		## The creep pattern shows full-strength only around the working Commander (shader).
+		if _ground_mat != null:
+			_ground_mat.set_shader_parameter("commander_pos", cpos)
 	for grp : String in VIS_GROUP_RADII:
 		for n in get_tree().get_nodes_in_group(grp):
 			if not (is_instance_valid(n) and n.has_method("plane_pos")):
