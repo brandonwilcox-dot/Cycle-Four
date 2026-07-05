@@ -18,7 +18,26 @@ const DETECT_RADIUS : float = 160.0
 const GARRISON_BASE_MAX         : int   = 3
 const GARRISON_PRODUCE_INTERVAL : float = 5.0
 const GARRISON_PATROL_THRESHOLD : int   = 2
-const GARRISON_XP_PER_LEVEL     : int   = 4
+
+## -- U1 node identity (units-land-plan / Units_Land §2): how a faction's garrison behaves
+##    over the life of the node. Replaces the old kill-XP leveling.
+##  Architects — COMPOUND: undamaged uptime ramps production speed; damage/losses reset the ramp.
+##  Bloom      — MATURE + CONNECT: node grows regen/damage/squad/tether over time; linked
+##               Bloom nodes (touching radii) amplify each other.
+##  Mesh       — OVERLAP + REROUTE: units inside ≥2 Mesh node radii fire faster; on node
+##               death, survivors re-tether to the nearest Mesh node.
+const ARCH_COMPOUND_FULL    : float = 360.0  ## seconds of clean uptime to reach full ramp
+const ARCH_COMPOUND_CD_CUT  : float = 0.45   ## production interval −45% at full ramp
+const ARCH_COMPOUND_KILL_T  : float = 2.0    ## each squad kill feeds the ramp a little
+const ARCH_DAMAGE_DECAY     : float = 0.4    ## garrison damage keeps only 40% of the ramp
+const ARCH_UNIT_LOSS_T      : float = 30.0   ## each tethered unit lost costs 30s of ramp
+const BLOOM_MATURE_FULL     : float = 300.0  ## seconds to full maturity
+const BLOOM_REGEN_HPS       : float = 3.0    ## unit regen at full maturity (HP/s, aura)
+const BLOOM_MATURE_DMG      : float = 0.25   ## +25% unit damage at full maturity
+const BLOOM_LINK_DMG        : float = 0.08   ## +8% unit damage per connected Bloom node
+const BLOOM_LINK_CAP        : int   = 3
+const BLOOM_TETHER_GROW     : float = 0.35   ## tether radius +35% at full maturity
+const MESH_OVERLAP_ROF      : float = 0.25   ## fire-rate share per extra overlapping node
 
 const RAID_MIN_SQUAD     : int   = 3
 const RAID_RANGE_CELLS   : int   = 10
@@ -45,8 +64,14 @@ var _unit_layer     : Node     = null
 var _map_grid       : Node     = null
 var _produce_timer  : float    = GARRISON_PRODUCE_INTERVAL
 var _my_units       : Array    = []
-var _level          : int      = 1
-var _kills          : int      = 0
+
+## U1 node state. _node_t is the identity clock: Architect compound ramp (decays on damage/
+## losses) or Bloom maturity (monotonic). Mesh nodes read the battlefield instead (overlap).
+var _faction        : String = ""
+var _node_t         : float  = 0.0
+var _links          : int    = 0      ## Bloom: connected nodes; Mesh: overlap shown on the bar
+var _node_peaked    : bool   = false  ## one-shot "ramp complete" notification
+var _node_bar       : MeshInstance3D = null
 
 ## Raid state.
 var _raiding           : bool    = false
@@ -117,7 +142,8 @@ func _ready() -> void:
 		push_error("Building: no BuildingData -- call setup() before adding to tree.")
 		return
 	position = WORLD3D.to3(_p, 0.0)
-	_max_health = MAX_HEALTH * FACTION_PERKS.health_mult(FactionManager.active_faction)
+	_faction = FactionManager.active_faction
+	_max_health = MAX_HEALTH * FACTION_PERKS.health_mult(_faction)
 	_built  = _restored
 	_health = _max_health if _built else START_HEALTH
 	if _restored:
@@ -130,6 +156,10 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not _built:
 		return
+	## U1: the node identity clock runs whenever the node is built.
+	_node_t = minf(_node_t + delta, maxf(ARCH_COMPOUND_FULL, BLOOM_MATURE_FULL))
+	if _faction == "bloom":
+		_apply_bloom_regen(delta)
 	## Resolve the friendly-unit layer lazily: the hardcoded ../../UnitLayer path doesn't hold in the
 	## 3D scene layout, so fall back to the "unit_layer" group once it exists.
 	if _unit_layer == null:
@@ -143,6 +173,7 @@ func _process(delta: float) -> void:
 		return
 	_produce_timer = _produce_interval()
 	_my_units = _my_units.filter(func(u): return is_instance_valid(u))
+	_apply_node_identity()
 	_update_raid()
 	var patrolling : bool = (not _raiding) and _my_units.size() >= GARRISON_PATROL_THRESHOLD
 	for u in _my_units:
@@ -158,18 +189,119 @@ func _spawn_defender() -> void:
 	_unit_layer.add_child(unit)
 	_my_units.append(unit)
 
+## -- U1 node identity engine --
+
+## Architect compound / Bloom maturity progress, 0..1.
+func _node_frac() -> float:
+	match _faction:
+		"architects": return clampf(_node_t / ARCH_COMPOUND_FULL, 0.0, 1.0)
+		"bloom":      return clampf(_node_t / BLOOM_MATURE_FULL, 0.0, 1.0)
+	return 0.0
+
+## Applied on the production tick (a few seconds) — auras are automatic, never micro'd.
+func _apply_node_identity() -> void:
+	match _faction:
+		"bloom":
+			_links = _count_bloom_links()
+			var dmg : float = 1.0 + BLOOM_MATURE_DMG * _node_frac() + BLOOM_LINK_DMG * float(_links)
+			var leash : float = FACTION_PERKS.tether_radius("bloom") * (1.0 + BLOOM_TETHER_GROW * _node_frac())
+			for u in _my_units:
+				u.set("damage_mult", dmg)
+				if u.has_method("set_leash"):
+					u.call("set_leash", leash)
+		"mesh":
+			var max_overlap : int = 0
+			for u in _my_units:
+				var n : int = _mesh_overlap_count(WORLD3D.node_plane(u))
+				max_overlap = maxi(max_overlap, n)
+				u.set("rof_mult", 1.0 / (1.0 + MESH_OVERLAP_ROF * float(n - 1)) if n >= 2 else 1.0)
+			_links = max_overlap
+	_update_node_bar()
+	if not _node_peaked and _node_frac() >= 1.0:
+		_node_peaked = true
+		match _faction:
+			"architects": EventBus.notification_pushed.emit("Garrison compound at peak efficiency.", "positive")
+			"bloom":      EventBus.notification_pushed.emit("Bloom node fully matured.", "positive")
+
+## Bloom regen aura — the maturing node heals its tethered units (and itself) every frame.
+func _apply_bloom_regen(delta: float) -> void:
+	var hps : float = BLOOM_REGEN_HPS * _node_frac()
+	if hps <= 0.0:
+		return
+	for u in _my_units:
+		if is_instance_valid(u) and u.has_method("heal"):
+			u.call("heal", hps * delta)
+	_health = minf(_max_health, _health + hps * 0.5 * delta)
+
+## Bloom connection bonus: other built Bloom garrisons whose tether radii touch this one's.
+func _count_bloom_links() -> int:
+	var reach : float = FACTION_PERKS.tether_radius("bloom") * 2.0
+	var n : int = 0
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b == self or not is_instance_valid(b):
+			continue
+		if b.has_method("is_built") and not b.call("is_built"):
+			continue
+		if _p.distance_to(WORLD3D.node_plane(b)) <= reach:
+			n += 1
+	return mini(n, BLOOM_LINK_CAP)
+
+## Mesh overlap: how many built Mesh garrison radii cover this plane point.
+func _mesh_overlap_count(at: Vector2) -> int:
+	var r : float = FACTION_PERKS.tether_radius("mesh")
+	var n : int = 0
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if not is_instance_valid(b):
+			continue
+		if b.has_method("is_built") and not b.call("is_built"):
+			continue
+		if at.distance_to(WORLD3D.node_plane(b)) <= r:
+			n += 1
+	return n
+
+## Squad kills still feed back — for Architects they nudge the compound ramp.
 func report_kill() -> void:
-	_kills += 1
-	if _kills >= GARRISON_XP_PER_LEVEL * _level:
-		_kills = 0
-		_level += 1
-		EventBus.notification_pushed.emit("Garrison advanced to level %d." % _level, "normal")
+	if _faction == "architects":
+		_node_t = minf(_node_t + ARCH_COMPOUND_KILL_T, ARCH_COMPOUND_FULL)
+
+## U1 punish — losing a tethered unit costs an Architect node part of its ramp.
+func report_unit_lost() -> void:
+	if _faction == "architects":
+		_node_t = maxf(0.0, _node_t - ARCH_UNIT_LOSS_T)
+
+## U5 wave-targeting will call this (Architect waves focus production). Damage to the
+## garrison is the other Architect compound punish.
+func take_damage(amount: float, _damage_type: int = -1) -> bool:
+	if not _built:
+		return false
+	_health -= amount
+	if _faction == "architects":
+		_node_t *= ARCH_DAMAGE_DECAY
+		_node_peaked = false
+	_refresh_build_visual()
+	if _health <= 0.0:
+		var cell : Vector2i = _map_grid.world_to_cell(_p) if _map_grid != null else Vector2i(-1, -1)
+		EventBus.building_destroyed.emit(data, cell)
+		EventBus.notification_pushed.emit("Garrison destroyed!", "alert")
+		destroy()
+		return true
+	return false
+
+## core/18 pacification hook — when the Dominance Meter lands, node activity reports here.
+func dominance_hook() -> void:
+	pass
 
 func _max_units() -> int:
-	return GARRISON_BASE_MAX + (_level - 1)
+	## Bloom nodes literally grow: +1 squad slot at half maturity, +1 at full.
+	if _faction == "bloom":
+		return GARRISON_BASE_MAX + (1 if _node_frac() >= 0.5 else 0) + (1 if _node_frac() >= 1.0 else 0)
+	return GARRISON_BASE_MAX
 
 func _produce_interval() -> float:
-	return maxf(2.0, GARRISON_PRODUCE_INTERVAL - 0.5 * float(_level - 1))
+	## Architect compound: production accelerates with clean uptime.
+	if _faction == "architects":
+		return GARRISON_PRODUCE_INTERVAL * (1.0 - ARCH_COMPOUND_CD_CUT * _node_frac())
+	return GARRISON_PRODUCE_INTERVAL
 
 ## -- C3: standing-order raids --
 
@@ -228,6 +360,8 @@ const OFFLINE_RAID_CYCLE : float = 30.0
 const OFFLINE_MAX_RAIDS  : int   = 20
 
 func simulate_offline_raids(seconds: float) -> int:
+	## U1: the node clock also advances offline (compound assumes clean uptime; Bloom matures).
+	_node_t = minf(_node_t + seconds, maxf(ARCH_COMPOUND_FULL, BLOOM_MATURE_FULL))
 	if _map_grid == null or _garrison_unit == null:
 		return 0
 	var raids   : int = clampi(int(seconds / OFFLINE_RAID_CYCLE), 0, OFFLINE_MAX_RAIDS)
@@ -253,7 +387,40 @@ func destroy() -> void:
 			FactionManager.get_primary_resource(),
 			-float(data.get("income_rate"))
 		)
+	## U1 — Mesh reroute-on-loss: survivors re-tether to the nearest Mesh node. "The network
+	## does not mourn. It reroutes." Other factions' survivors keep their old post and attrit.
+	if _faction == "mesh":
+		_reroute_survivors()
 	queue_free()
+
+func _reroute_survivors() -> void:
+	var best : Node = null
+	var best_d : float = INF
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b == self or not is_instance_valid(b) or not b.has_method("adopt_unit"):
+			continue
+		if b.has_method("is_built") and not b.call("is_built"):
+			continue
+		var d : float = _p.distance_to(WORLD3D.node_plane(b))
+		if d < best_d:
+			best   = b
+			best_d = d
+	if best == null:
+		return
+	var moved : int = 0
+	for u in _my_units:
+		if is_instance_valid(u):
+			best.call("adopt_unit", u)
+			moved += 1
+	_my_units.clear()
+	if moved > 0:
+		EventBus.notification_pushed.emit("Node lost — %d units rerouted." % moved, "normal")
+
+## U1 — receive a rerouted unit from a destroyed Mesh node.
+func adopt_unit(u: Node) -> void:
+	if u.has_method("retether"):
+		u.call("retether", _p, self)
+	_my_units.append(u)
 
 ## -- Visual (3D) --
 
@@ -305,11 +472,43 @@ func _build_visual() -> void:
 	_build_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_build_bar)
 
+	## U1 node-state bar — a thin faction-colored strip under the build bar. Architects: the
+	## compound ramp. Bloom: maturity. Mesh: overlap share (links/cap). Fills left→right.
+	_node_bar = MeshInstance3D.new()
+	var nqm : QuadMesh = QuadMesh.new()
+	nqm.size = Vector2(48.0, 2.5)
+	_node_bar.mesh = nqm
+	_node_bar.position = Vector3(0.0, _height + 12.5, 0.0)
+	var nmat : StandardMaterial3D = StandardMaterial3D.new()
+	nmat.albedo_color = _node_bar_color()
+	nmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	nmat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_node_bar.material_override = nmat
+	_node_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_node_bar.scale.x = 0.0
+	add_child(_node_bar)
+
 	_con_rig = _CON_RIG.new()
 	add_child(_con_rig)
 	_con_rig.call("setup", FactionManager.active_faction, _body_root, _body_mats, _height + 10.0, 36.0)
 
 	_refresh_build_visual()
+
+func _node_bar_color() -> Color:
+	match _faction:
+		"architects": return Color(1.0, 0.78, 0.35)   ## compound amber
+		"bloom":      return Color(0.55, 1.0, 0.55)   ## growth green
+		"mesh":       return Color(0.45, 0.85, 1.0)   ## network blue
+	return Color.WHITE
+
+func _update_node_bar() -> void:
+	if _node_bar == null:
+		return
+	var frac : float = _node_frac()
+	if _faction == "mesh":
+		frac = clampf(float(_links) / 3.0, 0.0, 1.0)
+	_node_bar.visible = _built and frac > 0.01
+	_node_bar.scale.x = frac
 
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const _CON_RIG   = preload("res://src/vfx/ConstructionRig.gd")

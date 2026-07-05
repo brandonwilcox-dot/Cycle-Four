@@ -27,6 +27,10 @@ var _faction    : String   = ""
 ## U0: per-faction tether radius (Architect wide / Bloom mid / Mesh short). The garrison
 ## may re-scale it (U1: Bloom maturity growth) via set_leash().
 var _leash      : float    = 220.0
+## U1 node-identity dials, driven by the home garrison each production tick (never by the
+## player — auras apply automatically in radius, per the anti-micro rules).
+var damage_mult : float    = 1.0   ## Bloom maturity/connection buff
+var rof_mult    : float    = 1.0   ## Mesh overlap targeting-share (<1.0 = faster fire)
 var _current_health : float = 0.0
 var _attack_timer   : float = 0.0
 var _is_dead        : bool  = false
@@ -63,6 +67,19 @@ func _ready() -> void:
 ## U1 hook — garrisons re-scale the tether (e.g. Bloom maturity widens it).
 func set_leash(radius: float) -> void:
 	_leash = radius
+
+## U1 — Bloom node regen aura ("living tech heals").
+func heal(amount: float) -> void:
+	if _is_dead or data == null or _current_health >= data.max_health:
+		return
+	_current_health = minf(data.max_health, _current_health + amount)
+	_update_health_visual()
+
+## U1 — Mesh reroute-on-loss: when the home garrison dies, surviving units re-tether to
+## the nearest Mesh node instead of orphaning ("lose a node, reroute").
+func retether(home_world: Vector2, garrison: Node) -> void:
+	_home     = home_world
+	_garrison = garrison
 
 func _process(delta: float) -> void:
 	if _is_dead:
@@ -114,7 +131,7 @@ func update(delta: float) -> void:
 		var dist : float = _p.distance_to(tpos)
 		if dist > BLOCK_RANGE:
 			_move_toward(tpos, delta)
-		if dist <= data.attack_range and _attack_timer >= data.attack_interval:
+		if dist <= data.attack_range and _attack_timer >= data.attack_interval * rof_mult:
 			_attack_timer = 0.0
 			_fire(target)
 	elif _has_raid:
@@ -156,7 +173,7 @@ func _fire(target: Node) -> void:
 		return
 	var dt : int = Combat.faction_damage_type(_faction)
 	Vfx.bolt(_p, WORLD3D.node_plane(target), dt)
-	var killed : bool = bool(target.call("take_damage", data.attack_damage, dt))
+	var killed : bool = bool(target.call("take_damage", data.attack_damage * damage_mult, dt))
 	if killed and is_instance_valid(_garrison) and _garrison.has_method("report_kill"):
 		_garrison.call("report_kill")
 
@@ -208,6 +225,9 @@ func _apply_damage(flat: float) -> void:
 	_update_health_visual()
 	if _current_health <= 0.0:
 		_is_dead = true
+		## U1: the Architect compound punish — losing a tethered unit costs the node its ramp.
+		if is_instance_valid(_garrison) and _garrison.has_method("report_unit_lost"):
+			_garrison.call("report_unit_lost")
 		queue_free()
 
 ## -- Visual (3D) --

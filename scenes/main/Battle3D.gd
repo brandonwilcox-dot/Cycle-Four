@@ -1115,7 +1115,8 @@ func _capture_buildings() -> Array:
 		var bd = b.get("data")
 		if bd == null or String(bd.resource_path).is_empty():
 			continue   ## runtime-built data (no path) isn't restorable — skip
-		out.append({"id": String(bd.resource_path), "cell": [int(cell.x), int(cell.y)], "level": int(b.get("_level"))})
+		## U1: garrisons persist their node clock (compound ramp / maturity) instead of the old level.
+		out.append({"id": String(bd.resource_path), "cell": [int(cell.x), int(cell.y)], "node_t": float(b.get("_node_t"))})
 	return out
 
 func _capture_walls() -> Array:
@@ -1173,8 +1174,10 @@ func _restore_territory_development(dev: Dictionary) -> void:
 			b.call("setup", bdata, true)   ## restored = built, income already in restored rates
 			b.call("place_at", _cell_center2(cell))
 			add_child(b)
-			if int(brec.get("level", 1)) > 1:
-				b.set("_level", int(brec.get("level", 1)))
+			## U1 node clock; legacy saves carried "level" — map each old level to 60s of uptime.
+			var node_t : float = float(brec.get("node_t", maxf(0.0, float(int(brec.get("level", 1)) - 1) * 60.0)))
+			if node_t > 0.0:
+				b.set("_node_t", node_t)
 			_building_cells[cell] = b
 			n_builds += 1
 	for wrec in dev.get("walls", []):

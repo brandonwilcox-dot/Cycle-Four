@@ -34,6 +34,42 @@ a whole-project compile check. See [[reference-cycle-four-release-export]].
 
 ---
 
+## Session 2026-07-05 — U0 + U1 SHIPPED: UNIT SCHEMA + FACTION NODE IDENTITY (units-land-plan)
+
+**U0 — schema foundations** (`72627e6`): new `src/entities/UnitModifier.gd` (Resource; Kind enum
+STAT/TERRAIN_BOND/WRECKAGE_ABSORB/DREAM_STABILIZE, sub-path eligibility, stat dials — behavior
+lands in U4). `UnitData` += `role` (Line default = existing .tres stay correct), `sub_path_lock`,
+`modifier_slots`. Per-faction tether in `FactionPerks.TETHER_RADIUS` (architects 300 / bloom 220 /
+mesh 150) replacing `FriendlyUnit.MAX_LEASH`; `set_leash()` hook.
+**⚠ Ops gotcha:** a NEW `class_name` used as a typed export breaks MCP runs until the editor
+rescans — fix: `godot --headless --path . --import` once (re-registers the global class cache).
+
+**U1 — node identity on garrisons** (this commit). Kill-XP leveling REMOVED; replaced by the three
+canon fantasies (Units_Land §2), all automatic in radius (anti-micro):
+- **Architects — COMPOUND:** clean-uptime clock (`_node_t`, full ramp 360s) cuts production
+  interval up to −45%; squad kills feed it (+2s). **Punish:** garrison damage keeps only 40% of
+  the ramp; each tethered unit lost −30s.
+- **Bloom — MATURE + CONNECT:** maturity (300s) scales a regen aura (units 3 HP/s at full, node
+  half rate), +25% unit damage, tether +35%, squad 3→5; **connection**: +8%/linked Bloom node
+  (radii touching, cap 3).
+- **Mesh — OVERLAP + REROUTE:** units inside ≥2 Mesh node radii fire faster (+25% RoF share per
+  extra node); on garrison death survivors **re-tether to the nearest Mesh node** (`adopt_unit`).
+- Node-state bar (thin faction-colored strip under the build bar): compound/maturity fraction,
+  Mesh = overlap share. One-shot "peak/matured" notifications.
+- `Building.take_damage()` NEW (U5 Architect waves will target production); `building_destroyed`
+  emitted with (data, cell). `dominance_hook()` stub for core/18.
+- FriendlyUnit: `damage_mult`/`rof_mult` dials, `heal()`, `retether()`, reports `report_unit_lost`.
+- **Save schema:** garrisons persist `node_t` (was `level`) in BOTH Battle3D + legacy 2D Battle;
+  legacy saves map level→(level−1)×60s. Offline sim advances the node clock.
+- Verified: Battle3D MCP boot clean (baseline warnings only); both exes re-exported (= full
+  compile check incl. 2D fallback). **Behavioral playtest pending** — see next-session checklist.
+
+**Playtest checklist (U1):** garrison bar fills; Architect production speeds up over ~6 min and
+resets when units die; Bloom units regen + node grows squad to 5; two overlapping Mesh nodes fire
+faster; selling a Mesh garrison reroutes its units to the neighbor.
+
+---
+
 ## Session 2026-07-03 (4) — LAND-UNIT WORK PLAN REFACTORED FROM Units_Land.md (planning only, no code)
 
 The user authored **`Units_Land.md`** (land-unit design codex: garrison-tether "node" identity,
