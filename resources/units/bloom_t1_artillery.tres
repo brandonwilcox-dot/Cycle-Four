@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Sporecaster"
+faction_id = "bloom"
+tier = 1
+role = 3
+max_health = 80.0
+move_speed = 40.0
+damage_on_arrival = 10.0
+armor = 0.0
+armor_type = 1
+attack_damage = 16.0
+attack_range = 320.0
+attack_interval = 2.2
+resource_reward = 6.0
+spawn_cost = {}
+cooldown = 14.0
+color_hint = Color(0.25, 0.7, 0.35, 1.0)
+evolve_threshold = 0.0
+ignores_terrain_penalty = true

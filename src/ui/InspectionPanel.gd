@@ -21,7 +21,9 @@ const DOCTRINE_DEFS : Array = [
 
 ## The tower currently inspected (null for buildings) — used by the targeting toggle.
 var _tower         : Node   = null
+var _building      : Node   = null   ## the garrison currently inspected (U2 production role)
 var _target_btn    : Button = null   ## cycles tower targeting priority; hidden for buildings
+var _role_btn      : Button = null   ## cycles garrison production role; hidden for towers
 var _sell_btn      : Button = null   ## sells tower or building
 var _upgrade_b_btn : Button = null   ## second branch (B) upgrade; hidden when no B branch
 var _doctrine_btns : Array[Button] = []   ## FOB doctrine buttons (shown only for the FOB)
@@ -38,6 +40,9 @@ func _ready() -> void:
 	_target_btn = Button.new()
 	_target_btn.pressed.connect(_on_target_pressed)
 	vbox.add_child(_target_btn)
+	_role_btn = Button.new()
+	_role_btn.pressed.connect(_on_role_pressed)
+	vbox.add_child(_role_btn)
 	_sell_btn = Button.new()
 	_sell_btn.text = "Sell"
 	_sell_btn.pressed.connect(_on_sell_pressed)
@@ -95,6 +100,8 @@ func open_tower(tower: Node, _can_afford: bool) -> void:
 	_target_btn.visible = tower.has_method("target_mode_name")
 	if _target_btn.visible:
 		_target_btn.text = "Target: %s" % tower.call("target_mode_name")
+	_building = null
+	_role_btn.visible = false
 	_sell_btn.visible = true
 	for b in _doctrine_btns:
 		b.visible = false
@@ -116,6 +123,11 @@ func open_building(building: Node) -> void:
 	_upgrade_b_btn.visible = false
 	_tower = null
 	_target_btn.visible = false   ## targeting is tower-only
+	## U2: garrison production-role cycle (Line / Scout / Artillery per faction roster).
+	_building = building
+	_role_btn.visible = building.has_method("cycle_production_role")
+	if _role_btn.visible:
+		_role_btn.text = "Produce: %s" % str(building.call("production_role_name"))
 	_sell_btn.visible = true
 	for b in _doctrine_btns:
 		b.visible = false
@@ -137,6 +149,8 @@ func open_fob(base: Node) -> void:
 	upgrade_btn.visible    = false
 	_upgrade_b_btn.visible = false
 	_target_btn.visible    = false
+	_building = null
+	_role_btn.visible      = false
 	_sell_btn.visible      = false   ## the FOB can't be sold
 	## Show the three doctrine options; mark the active one.
 	for i in _doctrine_btns.size():
@@ -176,6 +190,8 @@ func open_unit(unit: Node) -> void:
 	upgrade_btn.visible    = false
 	_upgrade_b_btn.visible = false
 	_target_btn.visible    = false
+	_building = null
+	_role_btn.visible      = false
 	_sell_btn.visible      = false
 	for b in _doctrine_btns:
 		b.visible = false
@@ -203,6 +219,8 @@ func open_commander(cmd: Node) -> void:
 	upgrade_btn.visible    = false
 	_upgrade_b_btn.visible = false
 	_target_btn.visible    = false
+	_building = null
+	_role_btn.visible      = false
 	_sell_btn.visible      = false
 	for b in _doctrine_btns:
 		b.visible = false
@@ -252,6 +270,12 @@ func _on_target_pressed() -> void:
 	if _tower != null and is_instance_valid(_tower) and _tower.has_method("cycle_target_mode"):
 		_tower.call("cycle_target_mode")
 		_target_btn.text = "Target: %s" % _tower.call("target_mode_name")
+
+## U2: cycles the inspected garrison's production role and refreshes the button label.
+func _on_role_pressed() -> void:
+	if _building != null and is_instance_valid(_building) and _building.has_method("cycle_production_role"):
+		_building.call("cycle_production_role")
+		_role_btn.text = "Produce: %s" % str(_building.call("production_role_name"))
 
 func _on_sell_pressed() -> void:
 	EventBus.panel_sell_requested.emit()

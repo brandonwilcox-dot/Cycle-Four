@@ -688,7 +688,11 @@ func _recompute_visibility() -> void:
 				continue
 			if n.has_method("is_built") and not bool(n.call("is_built")):
 				continue   ## construction ghosts have no eyes yet
-			_mark_circle(next, n.call("plane_pos"), float(VIS_GROUP_RADII[grp]))
+			var r : float = float(VIS_GROUP_RADII[grp])
+			## U2: scout units light farther than the squad default (detector_radius).
+			if grp == "friendly_units" and n.has_method("get_detector_radius"):
+				r = maxf(r, float(n.call("get_detector_radius")))
+			_mark_circle(next, n.call("plane_pos"), r)
 	if next != _visible:
 		_visible = next
 		_terrain_dirty = true

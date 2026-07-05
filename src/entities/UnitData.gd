@@ -66,3 +66,14 @@ var role: int = 0
 ## Ability system: units flagged true ignore stun and slow from ability effects.
 ## Set on heavy/lore-immune chassis (Mire-Beast, Bio-Titan, etc.).
 @export var status_immune: bool = false
+
+## U2 (units-land-plan) — role mechanics.
+## Mesh direct-fire constraint: cannot shoot past walls (raycast LOS; terrain occlusion
+## arrives with backlog F1).
+@export var requires_los: bool = false
+## Bloom hover/amphibious: inert until F1 gives terrain a movement penalty — wired now so
+## F1 activates it for free.
+@export var ignores_terrain_penalty: bool = false
+## Scout utility: >0 makes a friendly unit a stealth detector (joins the "detectors" group
+## with this radius — the reveal-tier contract).
+@export var detector_radius: float = 0.0

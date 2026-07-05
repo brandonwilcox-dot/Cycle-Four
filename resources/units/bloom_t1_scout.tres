@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Sporeling"
+faction_id = "bloom"
+tier = 1
+role = 1
+max_health = 50.0
+move_speed = 90.0
+damage_on_arrival = 4.0
+armor = 0.0
+armor_type = 1
+attack_damage = 0.0
+attack_range = 0.0
+resource_reward = 3.0
+spawn_cost = {}
+cooldown = 6.0
+color_hint = Color(0.55, 0.95, 0.55, 1.0)
+evolve_threshold = 0.0
+detector_radius = 260.0
+ignores_terrain_penalty = true

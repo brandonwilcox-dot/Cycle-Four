@@ -68,6 +68,31 @@ canon fantasies (Units_Land §2), all automatic in radius (anti-micro):
 resets when units die; Bloom units regen + node grows squad to 5; two overlapping Mesh nodes fire
 faster; selling a Mesh garrison reroutes its units to the neighbor.
 
+**U2 — T1 roster build-out (same session).** Roster-merge decision applied as proposed (core/17
+names + cadence kept; Units_Land roles added beside them; existing Constructor/Tendril/Shard stay
+the Line Holders / balance anchors). **Mobile AA DEFERRED** — no air layer exists yet; an AA unit
+with nothing to shoot is a trap pick (revisit with the air phase).
+- **Line re-tunes** (also enemy waves — same .tres): Constructor 110 HP / armor 4 / atk 9@160/0.9s;
+  Tendril armor 1 / hover / atk 8@140/1.0s; Shard atk **14@150/0.5s (highest T1 DPS)** +
+  `requires_los`.
+- **New units:** Architect **Surveyor** (scout/combat hybrid, detector 220), Bloom **Sporeling**
+  (pure sensing scout, non-combatant, detector 260, cheapest Bloom), Bloom **Sporecaster** (mobile
+  artillery 16@320/2.2s, speed 40 — lane-defense archetype), Mesh **Wisp** (stealth scout,
+  cheapest unit in the game, detector 240).
+- **Mechanics:** `UnitData` += requires_los / ignores_terrain_penalty / detector_radius. Mesh
+  direct-fire LOS = shot line must clear the "walls" group (terrain occlusion arrives with F1).
+  Bloom hover flag wired but inert until F1. Scout units join "detectors" AND light fog by their
+  detector radius (MapGrid). Leash constrains movement, not fire (artillery outranges the node).
+  Non-combatants never chase. Acquisition range = max(aggro, attack_range).
+- **Garrison role selection SHIPPED** (old P2 backlog item): InspectionPanel "Produce: <Role> —
+  <Unit>" cycle button on garrisons; role persisted per garrison (save field "role").
+- FriendlyRoster is now multi-role (`garrison_unit(faction, role)`, `roles_for`).
+- Verified: MCP boot clean; both exes re-exported 14:13.
+
+**Playtest checklist (U2):** cycle a garrison to Scout → unit lights more fog + reveals stealth;
+Bloom garrison to Artillery → long-range lobs from inside the node; Mesh units stop firing through
+an Architect wall (need repositioning); role choice survives save/Continue.
+
 ---
 
 ## Session 2026-07-03 (4) — LAND-UNIT WORK PLAN REFACTORED FROM Units_Land.md (planning only, no code)

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Wisp"
+faction_id = "mesh"
+tier = 1
+role = 1
+max_health = 40.0
+move_speed = 130.0
+damage_on_arrival = 3.0
+armor = 0.0
+armor_type = 2
+stealth = true
+attack_damage = 4.0
+attack_range = 120.0
+attack_interval = 1.0
+requires_los = true
+resource_reward = 2.0
+spawn_cost = {}
+cooldown = 4.0
+color_hint = Color(0.6, 0.85, 1.0, 1.0)
+detector_radius = 240.0

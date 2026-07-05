@@ -406,7 +406,8 @@ func _capture_buildings() -> Array:
 		var bd = b.get("data")
 		if bd == null or String(bd.resource_path).is_empty():
 			continue
-		out.append({"id": String(bd.resource_path), "cell": [int(cell.x), int(cell.y)], "node_t": float(b.get("_node_t"))})
+		out.append({"id": String(bd.resource_path), "cell": [int(cell.x), int(cell.y)],
+			"node_t": float(b.get("_node_t")), "role": str(b.get("_production_role"))})
 	return out
 
 ## [Persistence Step 3] Re-instantiates a territory's saved garrisons after its map + claims load.
@@ -422,17 +423,19 @@ func _restore_buildings(dev: Dictionary) -> void:
 		if bdata != null:
 			## U1 node clock; legacy saves carried "level" — map each old level to 60s of uptime.
 			var node_t : float = float(brec.get("node_t", maxf(0.0, float(int(brec.get("level", 1)) - 1) * 60.0)))
-			_restore_building(bdata, Vector2i(int(bcell[0]), int(bcell[1])), node_t)
+			_restore_building(bdata, Vector2i(int(bcell[0]), int(bcell[1])), node_t, str(brec.get("role", "line")))
 
 ## Places a building from explicit data/cell/node_t (no cost, no income re-add, no build-mode) —
 ## the restore counterpart to _place_building. Income is already in the restored territory_rates.
-func _restore_building(bdata: Resource, cell: Vector2i, node_t: float) -> void:
+func _restore_building(bdata: Resource, cell: Vector2i, node_t: float, role: String = "line") -> void:
 	var building : Node2D = BUILDING_SCENE.instantiate()
 	building.call("setup", bdata, true)
 	building_layer.add_child(building)
 	building.position = _cell_to_world(cell)
 	if node_t > 0.0:
 		building.set("_node_t", node_t)
+	if role != "line" and building.has_method("set_production_role"):
+		building.call("set_production_role", role)
 	_building_cells[cell] = building
 	_apply_structure_influence(cell)
 

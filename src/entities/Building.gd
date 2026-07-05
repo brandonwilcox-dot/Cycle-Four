@@ -65,6 +65,9 @@ var _map_grid       : Node     = null
 var _produce_timer  : float    = GARRISON_PRODUCE_INTERVAL
 var _my_units       : Array    = []
 
+## U2: which roster role this garrison produces ("line" default; cycled from the panel).
+var _production_role : String = "line"
+
 ## U1 node state. _node_t is the identity clock: Architect compound ramp (decays on damage/
 ## losses) or Bloom maturity (monotonic). Mesh nodes read the battlefield instead (overlap).
 var _faction        : String = ""
@@ -151,7 +154,24 @@ func _ready() -> void:
 	_build_visual()
 	_unit_layer    = get_node_or_null("../../UnitLayer")
 	_map_grid      = get_tree().get_first_node_in_group("map_grid")
-	_garrison_unit = FriendlyRosterScript.garrison_unit(FactionManager.active_faction)
+	_garrison_unit = FriendlyRosterScript.garrison_unit(_faction, _production_role)
+
+## -- U2: production role selection (cycled from the inspection panel; new spawns use it,
+##    existing squad members serve out their posting) --
+
+func set_production_role(role: String) -> void:
+	if role in FriendlyRosterScript.roles_for(_faction):
+		_production_role = role
+		_garrison_unit   = FriendlyRosterScript.garrison_unit(_faction, role)
+
+func cycle_production_role() -> void:
+	var roles : Array = FriendlyRosterScript.roles_for(_faction)
+	var idx : int = roles.find(_production_role)
+	set_production_role(roles[(idx + 1) % roles.size()])
+
+func production_role_name() -> String:
+	var unit_name : String = _garrison_unit.unit_name if _garrison_unit != null else "?"
+	return "%s — %s" % [_production_role.capitalize(), unit_name]
 
 func _process(delta: float) -> void:
 	if not _built:

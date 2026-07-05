@@ -61,8 +61,14 @@ func _ready() -> void:
 		return
 	_faction = FactionManager.active_faction
 	_leash   = FACTION_PERKS.tether_radius(_faction)
+	## U2: scout roles are stealth detectors (the "detectors" group contract).
+	if data.detector_radius > 0.0:
+		add_to_group("detectors")
 	position = WORLD3D.to3(_p, 0.0)
 	_build_visual()
+
+func get_detector_radius() -> float:
+	return data.detector_radius if data != null else 0.0
 
 ## U1 hook — garrisons re-scale the tether (e.g. Bloom maturity widens it).
 func set_leash(radius: float) -> void:
@@ -125,7 +131,8 @@ func update(delta: float) -> void:
 	if data == null:
 		return
 	_attack_timer += delta
-	var target : Node = _acquire_target()
+	## U2: non-combatants (pure scouts) never chase — they patrol and sense.
+	var target : Node = _acquire_target() if data.attack_damage > 0.0 else null
 	if target != null:
 		var tpos : Vector2 = WORLD3D.node_plane(target)
 		var dist : float = _p.distance_to(tpos)
@@ -143,16 +150,22 @@ func update(delta: float) -> void:
 
 func _acquire_target() -> Node:
 	var best      : Node = null
-	var best_dist : float  = AGGRO_RADIUS
+	## U2: artillery outranges the default aggro bubble — acquisition reaches to attack range.
+	var best_dist : float  = maxf(AGGRO_RADIUS, data.attack_range)
 	for enemy in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(enemy):
 			continue
 		if enemy.has_method("is_detectable") and not enemy.call("is_detectable"):
 			continue
 		var epos : Vector2 = WORLD3D.node_plane(enemy)
-		if epos.distance_to(_home) > _leash:
-			continue
 		var d : float = _p.distance_to(epos)
+		## The leash constrains MOVEMENT, not fire: a target is eligible inside the node's
+		## radius, or already inside this unit's own weapon range.
+		if epos.distance_to(_home) > _leash and d > data.attack_range:
+			continue
+		## U2 Mesh direct-fire: no shooting past walls.
+		if data.requires_los and not _has_los(epos):
+			continue
 		if d <= best_dist:
 			best      = enemy
 			best_dist = d
@@ -160,13 +173,26 @@ func _acquire_target() -> Node:
 		if not is_instance_valid(base):
 			continue
 		var bpos : Vector2 = WORLD3D.node_plane(base)
-		if bpos.distance_to(_home) > _leash:
-			continue
 		var bd : float = _p.distance_to(bpos)
+		if bpos.distance_to(_home) > _leash and bd > data.attack_range:
+			continue
+		if data.requires_los and not _has_los(bpos):
+			continue
 		if bd <= best_dist:
 			best      = base
 			best_dist = bd
 	return best
+
+## U2 — direct-fire LOS: the shot line must clear every wall (F1 will add terrain).
+const _LOS_BLOCK_RADIUS : float = 24.0
+func _has_los(tpos: Vector2) -> bool:
+	for w in get_tree().get_nodes_in_group("walls"):
+		if not is_instance_valid(w):
+			continue
+		var wpos : Vector2 = WORLD3D.node_plane(w)
+		if Geometry2D.get_closest_point_to_segment(wpos, _p, tpos).distance_to(wpos) < _LOS_BLOCK_RADIUS:
+			return false
+	return true
 
 func _fire(target: Node) -> void:
 	if not target.has_method("take_damage"):
