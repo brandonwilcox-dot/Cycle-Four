@@ -9,6 +9,35 @@ making any design decisions in code.
 
 ---
 
+## Session 2026-07-06 — U5 SHIPPED: FACTION WAVE TARGETING (units-land-plan; absorbs backlog J1)
+
+User confirmed the U0–U2 playtest is solid → proceeded to U5. **Waves now attack the way their
+faction thinks (Units_Land §5).** From wave `MISSION_FROM_WAVE = 3`, every third non-boss spawn
+carries its faction's mission; the rest (and all bosses) march the lanes so base pressure stays real:
+- **Architect waves — SABOTEURS** (`Unit.setup_as_saboteur`): march normally, but divert to any
+  BUILT garrison within 320px, melee it down (`Building.take_damage` from U1 — punishes the
+  Architect compound ramp on the defender's side too), then hunt the next or resume the march.
+- **Bloom waves — FLANKERS**: reuses the proven Phase-F flanker system (path to nearest claimed
+  cell via `get_path_to_nearest_claimed` → unclaim + economy penalty). First time wired into the
+  Battle3D driver.
+- **Mesh waves — HUNTERS** (`Unit.setup_as_hunter`): stalk the Commander cross-map (the player's
+  "most expensive asset"); melee lands through the existing `_engaged_friendly` grind. Falls back
+  to marching if no Commander. Punishes Commander over-reliance — feeds the bottleneck arc.
+- **Telegraphy:** wave announcements append the flavor from wave 3 ("They will target your
+  production." / "They hunger for your ground." / "They hunt your Commander.") — core/22-style
+  readable threat.
+- Balance goal (spec §5): turtling one fat node dies to Architect waves; spreading thin dies to
+  Bloom waves; a hero Commander dies to Mesh waves. Mission fraction (1/3) + start wave are the
+  tuning dials.
+- Scope note: enemy RANGED combat + roster-role enemy compositions (e.g. enemy Sporecasters
+  shelling) remain deferred — J1's last slice; missions carry the faction brain for now.
+- Verified: MCP boot clean (baseline warnings only); both exes exported 11:58. Wave-completion
+  cadence unaffected (spawn-budget based). **Playtest:** watch wave-3+ announcements; as
+  Architects expect garrison dives; confirm Bloom flankers unclaim ground; as any faction vs Mesh
+  keep the Commander screened.
+
+---
+
 ## Build / Export — keeping the .exe current
 
 The exported `.exe` does NOT auto-update. The Godot MCP `run_project` is a

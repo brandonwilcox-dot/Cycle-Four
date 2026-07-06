@@ -98,6 +98,10 @@ var _telegraph_mats  : Array[StandardMaterial3D] = []
 ## and archetype variety (line / runner / brute), and every BOSS_EVERY-th wave opens with an
 ## Alpha. A destroyed enemy base SEALS its spawn: no more waves or telegraphy from that mouth.
 const BOSS_EVERY : int = 5
+## U5 (units-land-plan): from this wave on, every third spawn carries its faction's mission —
+## Architect saboteurs (wreck garrisons), Bloom flankers (raid claimed ground), Mesh hunters
+## (stalk the Commander). Wave announcements telegraph the flavor.
+const MISSION_FROM_WAVE : int = 3
 const _FACTION_FILE_PREFIX : Dictionary = {"architects": "architect", "bloom": "bloom", "mesh": "mesh"}
 var _wave_spawn_count : int = 0          ## units spawned this wave (drives archetype rotation)
 var _boss_pending     : bool = false     ## boss wave: the first spawn of the wave is the Alpha
@@ -1216,10 +1220,18 @@ func _start_next_wave() -> void:
 	_resting = false
 	_wave_timer = 0.0   ## first unit of the wave spawns right away
 	_hide_telegraphy()  ## the warning becomes the wave
+	## U5 telegraphy: from MISSION_FROM_WAVE on, the announcement says HOW this faction
+	## attacks (Units_Land §5) — the player can read the threat and adapt.
+	var flavor : String = ""
+	if _wave_num >= MISSION_FROM_WAVE:
+		match _wave_faction():
+			"architects": flavor = " They will target your production."
+			"bloom":      flavor = " They hunger for your ground."
+			"mesh":       flavor = " They hunt your Commander."
 	if _boss_pending:
-		EventBus.notification_pushed.emit("Wave %d — something LARGE approaches." % _wave_num, "warning")
+		EventBus.notification_pushed.emit("Wave %d — something LARGE approaches.%s" % [_wave_num, flavor], "warning")
 	else:
-		EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles." % [_wave_num, _wave_left], "warning")
+		EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles.%s" % [_wave_num, _wave_left, flavor], "warning")
 
 ## HUD "Begin Waves" button (→ WaveManager.begin_waves → wave_called_early): skip the rest of
 ## the current grace/lull and bring the wave now. No-op mid-wave or during Academy scenarios.
@@ -1255,7 +1267,12 @@ func _spawn_one_enemy() -> void:
 	var boss : bool = _boss_pending
 	_boss_pending = false   ## the Alpha leads its wave
 	_wave_spawn_count += 1
-	_spawn_enemy_from(cell, _make_enemy_data(boss))
+	## U5: from wave 3, every third spawn carries its faction's mission (sabotage / raid /
+	## hunt); bosses and the rest march the lanes so base pressure stays real.
+	var mission : String = ""
+	if not boss and _wave_num >= MISSION_FROM_WAVE and _wave_spawn_count % 3 == 1:
+		mission = _wave_faction()
+	_spawn_enemy_from(cell, _make_enemy_data(boss), mission)
 
 ## Spawn cells whose anchoring base still stands (a fallen base seals its mouth).
 func _alive_spawn_cells() -> Array[Vector2i]:
@@ -1310,7 +1327,8 @@ func _roster_unit(fac: String, tier: int) -> UnitData:
 
 ## Spawn a single enemy at a spawn cell (wave cadence + Academy scenarios share this).
 ## payload = [UnitData, visual_scale]; empty → a plain roster t1 of the wave faction.
-func _spawn_enemy_from(cell: Vector2i, payload: Array = []) -> void:
+## mission (U5): "" = march; "architects" = saboteur, "bloom" = flanker, "mesh" = hunter.
+func _spawn_enemy_from(cell: Vector2i, payload: Array = [], mission: String = "") -> void:
 	if _map_grid == null or _unit_layer == null:
 		return
 	var wp : Array = _map_grid.call("get_path_to_base", cell)
@@ -1319,7 +1337,22 @@ func _spawn_enemy_from(cell: Vector2i, payload: Array = []) -> void:
 	if payload.is_empty():
 		payload = [(_roster_unit(_wave_faction(), 1).duplicate() as UnitData), 1.0]
 	var u : Node = UNIT_SCENE.instantiate()
-	u.call("setup", payload[0], wp)
+	match mission:
+		"architects":
+			u.call("setup_as_saboteur", payload[0], wp)
+		"mesh":
+			u.call("setup_as_hunter", payload[0], wp)
+		"bloom":
+			## Reuse the proven flanker system: path to the nearest claimed cell and raid it.
+			var flank : Array = _map_grid.call("get_path_to_nearest_claimed", cell)
+			if flank.is_empty():
+				u.call("setup", payload[0], wp)
+			else:
+				var last : Vector2 = flank[flank.size() - 1]
+				u.call("setup_as_flanker", payload[0], flank,
+					_map_grid.call("world_to_cell", last), _map_grid)
+		_:
+			u.call("setup", payload[0], wp)
 	_unit_layer.add_child(u)
 	if float(payload[1]) != 1.0:
 		(u as Node3D).scale = Vector3.ONE * float(payload[1])

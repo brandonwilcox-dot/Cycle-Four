@@ -71,6 +71,15 @@ const DEFENDER_LEASH : float    = 240.0
 var _is_defender     : bool     = false
 var _guard_home      : Vector2  = Vector2.ZERO
 
+## U5 — faction wave missions (Units_Land §5): waves attack the way their faction thinks.
+## Architect waves SABOTAGE production (divert to garrisons and wreck them); Mesh waves
+## HUNT the Commander (the player's most expensive asset); Bloom waves RAID territory
+## (the flanker system above). Assigned by Battle3D per spawn.
+const SABOTAGE_AGGRO : float = 320.0
+var _is_saboteur     : bool  = false
+var _sabotage_target : Node  = null
+var _is_hunter       : bool  = false
+
 func _ready() -> void:
 	add_to_group("units")
 	if data == null:
@@ -119,6 +128,12 @@ func _process(delta: float) -> void:
 	## Phase 3: base defenders guard their stronghold.
 	if _is_defender:
 		_defender_update(delta)
+		return
+	## U5 missions: saboteurs divert to production, hunters stalk the Commander. Either
+	## returns false when there's nothing to pursue — the unit resumes its march.
+	if _is_saboteur and _sabotage_update(delta):
+		return
+	if _is_hunter and _hunter_update(delta):
 		return
 	## Flankers: re-target if our claimed cell was already raided.
 	if _is_flanker and _target_cell != Vector2i(-1, -1) and _map_grid_ref != null:
@@ -193,6 +208,66 @@ func setup_as_defender(unit_data: UnitData, home_world: Vector2) -> void:
 	_is_defender = true
 	_guard_home  = home_world
 	_p           = home_world
+
+## U5 — Architect wave flavor: marches normally, but diverts to wreck any built garrison
+## it passes (production is the target, per Units_Land §5).
+func setup_as_saboteur(unit_data: UnitData, waypoints: Array) -> void:
+	setup(unit_data, waypoints)
+	_is_saboteur = true
+
+## U5 — Mesh wave flavor: stalks the Commander across the map (melee lands via the
+## existing _engaged_friendly grind once in range). Falls back to marching if no Commander.
+func setup_as_hunter(unit_data: UnitData, waypoints: Array) -> void:
+	setup(unit_data, waypoints)
+	_is_hunter = true
+
+func _sabotage_update(delta: float) -> bool:
+	if not is_instance_valid(_sabotage_target):
+		_sabotage_target = _nearest_garrison(SABOTAGE_AGGRO)
+	if _sabotage_target == null:
+		return false   ## no production in reach — keep marching
+	var tpos : Vector2 = WORLD3D.node_plane(_sabotage_target)
+	if _p.distance_to(tpos) > MELEE_ENGAGE_RANGE:
+		_move_free(tpos, delta)
+	else:
+		_melee_timer += delta
+		if _melee_timer >= MELEE_INTERVAL:
+			_melee_timer = 0.0
+			if not _pollen_active() and _sabotage_target.has_method("take_damage"):
+				if bool(_sabotage_target.call("take_damage", _melee_damage(), Combat.faction_damage_type(data.faction_id))):
+					_sabotage_target = null   ## wrecked — next target or resume the march
+	return true
+
+func _nearest_garrison(radius: float) -> Node:
+	var best   : Node  = null
+	var best_d : float = radius
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if not is_instance_valid(b):
+			continue
+		if b.has_method("is_built") and not bool(b.call("is_built")):
+			continue   ## construction ghosts aren't production yet
+		var d : float = _p.distance_to(WORLD3D.node_plane(b))
+		if d <= best_d:
+			best   = b
+			best_d = d
+	return best
+
+func _hunter_update(delta: float) -> bool:
+	var cmd : Node = get_tree().get_first_node_in_group("commander")
+	if cmd == null or not is_instance_valid(cmd):
+		return false
+	## Steering only — the melee itself lands through _engaged_friendly (commander group).
+	_move_free(WORLD3D.node_plane(cmd), delta)
+	return true
+
+## Unleashed straight-line movement (missions leave the carved paths, like defenders do).
+func _move_free(point: Vector2, delta: float) -> void:
+	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * delta
+	var dir  : Vector2 = point - _p
+	if dir.length() <= step:
+		_set_plane(point)
+	else:
+		_set_plane(_p + dir.normalized() * step)
 
 ## Reroute on EventBus.path_changed (mid-wave block).
 func reroute(map_grid: Node) -> void:
