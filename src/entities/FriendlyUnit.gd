@@ -35,12 +35,14 @@ var _current_health : float = 0.0
 var _attack_timer   : float = 0.0
 var _is_dead        : bool  = false
 var _mesh           : MeshInstance3D = null
+var _mat            : StandardMaterial3D = null   ## V4: for hit-flash
 var _hp_fill        : MeshInstance3D = null
 var _garrison       : Node    = null
 var _patrolling     : bool    = false
 var _patrol_angle   : float   = 0.0
 var _has_raid       : bool    = false
 var _raid_target    : Vector2 = Vector2.ZERO
+var _hit_flash      : float   = 0.0   ## V4: emission spike on damage
 
 func setup(unit_data: UnitData, home_world: Vector2, garrison: Node = null) -> void:
 	data      = unit_data
@@ -102,6 +104,10 @@ var _anim_t      : float = 0.0
 var _anim_last_p : Vector2 = Vector2(INF, INF)
 
 func _animate(delta: float) -> void:
+	## V4: hit-flash emission on damage
+	if _hit_flash > 0.0 and _mat != null:
+		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
+		_mat.emission_energy_multiplier = 0.5 * (1.0 + 2.5 * _hit_flash)   ## 0.5 is base emission for friendly units
 	if _mesh == null:
 		return
 	var moved : bool = _anim_last_p.is_finite() and _p.distance_squared_to(_anim_last_p) > 0.02
@@ -248,6 +254,7 @@ func _apply_damage(flat: float) -> void:
 	if _is_dead:
 		return
 	_current_health -= flat
+	_hit_flash = 1.0   ## V4: visual damage feedback
 	_update_health_visual()
 	if _current_health <= 0.0:
 		_is_dead = true
@@ -280,6 +287,7 @@ func _build_visual() -> void:
 		## don't need the shared breathe/scroll — their gait carries the life).
 		_SUBSTRATE.apply(m, data.faction_id, false)
 	_mesh.material_override = m
+	_mat = m   ## V4: for hit-flash
 	## V6-lite: per-faction composed silhouette (parts share the material → tints apply).
 	UNIT_BODIES.compose(_mesh, data.faction_id if data != null else "", 18.0, m)
 	add_child(_mesh)

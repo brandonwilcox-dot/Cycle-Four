@@ -32,6 +32,9 @@ var _max_health     : float = MAX_HEALTH
 var _current_health : float = MAX_HEALTH
 var _is_dead        : bool  = false
 var _hp_fill        : MeshInstance3D = null
+var _body_mat       : StandardMaterial3D = null   ## V4: for hit-flash
+var _base_mat_emission : float = 0.0   ## V4: for hit-flash
+var _hit_flash      : float = 0.0   ## V4: emission spike on damage
 
 var _faction       : String   = ""
 var _defender_unit : UnitData = null
@@ -59,6 +62,7 @@ func take_damage(amount: float, _damage_type: int = -1) -> bool:
 	if _is_dead:
 		return true
 	_current_health = maxf(0.0, _current_health - amount)
+	_hit_flash = 1.0   ## V4: visual damage feedback
 	_update_health_visual()
 	if _current_health <= 0.0:
 		_is_dead = true
@@ -71,6 +75,10 @@ func take_damage(amount: float, _damage_type: int = -1) -> bool:
 ## -- Phase 3: defender production --
 
 func _process(delta: float) -> void:
+	## V4: hit-flash emission on damage
+	if _hit_flash > 0.0 and _body_mat != null:
+		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
+		_body_mat.emission_energy_multiplier = _base_mat_emission * (1.0 + 2.5 * _hit_flash)
 	if _is_dead or _defender_unit == null:
 		return
 	_defenders = _defenders.filter(func(u): return is_instance_valid(u))
@@ -121,6 +129,8 @@ func _build_visual() -> void:
 	bmat.albedo_color = BODY_COLOR
 	_SUBSTRATE.apply(bmat, _faction)   ## V3: the base wears its owner faction's substrate
 	body.material_override = bmat
+	_body_mat = bmat   ## V4: for hit-flash
+	_base_mat_emission = bmat.emission_energy_multiplier if bmat.emission_enabled else 0.0   ## V4: for hit-flash
 	add_child(body)
 
 	## Bright core pip — marks it as the objective.

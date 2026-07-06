@@ -85,8 +85,10 @@ var _raid_target_world : Vector2  = Vector2.ZERO
 var _body_root : Node3D = null   ## body parts container
 var _con_rig   : Node3D = null   ## per-faction construction effect
 var _body_mats : Array[StandardMaterial3D] = []
+var _base_mats_emission : Array[float] = []   ## V4: base emission for each material (for hit-flash)
 var _build_bar : MeshInstance3D = null
 var _height    : float = 50.0
+var _hit_flash : float = 0.0   ## V4: emission spike on damage (decays in _process)
 
 func setup(building_data: Resource, restored: bool = false) -> void:
 	data = building_data
@@ -174,6 +176,13 @@ func production_role_name() -> String:
 	return "%s — %s" % [_production_role.capitalize(), unit_name]
 
 func _process(delta: float) -> void:
+	## V4: hit-flash emission on damage
+	if _hit_flash > 0.0:
+		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
+		for i in range(_body_mats.size()):
+			var m : StandardMaterial3D = _body_mats[i]
+			if m != null and i < _base_mats_emission.size():
+				m.emission_energy_multiplier = _base_mats_emission[i] * (1.0 + 2.5 * _hit_flash)
 	if not _built:
 		return
 	## U1: the node identity clock runs whenever the node is built.
@@ -295,6 +304,7 @@ func take_damage(amount: float, _damage_type: int = -1) -> bool:
 	if not _built:
 		return false
 	_health -= amount
+	_hit_flash = 1.0   ## V4: visual damage feedback
 	if _faction == "architects":
 		_node_t *= ARCH_DAMAGE_DECAY
 		_node_peaked = false
@@ -539,4 +549,5 @@ func _mat(col: Color) -> StandardMaterial3D:
 	m.albedo_color = col
 	_SUBSTRATE.apply(m, FactionManager.active_faction)
 	_body_mats.append(m)
+	_base_mats_emission.append(m.emission_energy_multiplier if m.emission_enabled else 0.0)   ## V4: for hit-flash
 	return m

@@ -23,7 +23,9 @@ var _is_dead    : bool    = false
 var _body_root : Node3D = null   ## body parts container
 var _con_rig   : Node3D = null   ## per-faction construction effect
 var _body_mats  : Array[StandardMaterial3D] = []
+var _base_mats_emission : Array[float] = []   ## V4: base emission for hit-flash
 var _build_bar  : MeshInstance3D = null
+var _hit_flash  : float = 0.0   ## V4: emission spike on damage
 
 func place_at(p: Vector2) -> void:
 	_p = p
@@ -40,6 +42,15 @@ func _ready() -> void:
 	_built      = false
 	_build_visual()
 	_refresh_build_visual()
+
+func _process(delta: float) -> void:
+	## V4: hit-flash emission on damage
+	if _hit_flash > 0.0:
+		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
+		for i in range(_body_mats.size()):
+			var m : StandardMaterial3D = _body_mats[i]
+			if m != null and i < _base_mats_emission.size():
+				m.emission_energy_multiplier = _base_mats_emission[i] * (1.0 + 2.5 * _hit_flash)
 
 func is_built() -> bool:
 	return _built
@@ -66,6 +77,7 @@ func take_damage(amount: float, _damage_type: int = -1) -> bool:
 	if _is_dead:
 		return true
 	_health = maxf(0.0, _health - amount)
+	_hit_flash = 1.0   ## V4: visual damage feedback
 	_refresh_build_visual()
 	if _health <= 0.0:
 		_is_dead = true
@@ -127,6 +139,7 @@ func _mat(col: Color) -> StandardMaterial3D:
 	m.albedo_color = col
 	_SUBSTRATE.apply(m, FactionManager.active_faction)
 	_body_mats.append(m)
+	_base_mats_emission.append(m.emission_energy_multiplier if m.emission_enabled else 0.0)   ## V4: for hit-flash
 	return m
 
 func _refresh_build_visual() -> void:
