@@ -78,7 +78,7 @@ preamble should be updated or those docs written.
 Each phase is session-sized-ish, MCP-verified, exported, committed — house rules apply
 (zero new errors; anti-micro acceptance criteria from spec §6 checked every phase).
 
-### U0 — Schema foundations (the spec's data model, no behavior yet)
+### U0 — Schema foundations — **SHIPPED 2026-07-05** (`72627e6`)
 1. `UnitData` gains: `role` (enum: SCOUT/LINE/AA/ARTILLERY/SUPPORT/SHIELD/ASSAULT/SIEGE),
    `tier`, `sub_path_lock` (which sub-path a T2+ unit belongs to, per core/17's commit point),
    `modifier_slots : Array[UnitModifier]`.
@@ -89,7 +89,7 @@ Each phase is session-sized-ish, MCP-verified, exported, committed — house rul
    mesh: short}` replacing the global `MAX_LEASH`; FriendlyUnit reads it.
 4. Anti-micro acceptance: nothing in U0 adds a player toggle.
 
-### U1 — Node identity: the three canon fantasies on the Garrison  ← THE PAYOFF PHASE
+### U1 — Node identity: the three canon fantasies on the Garrison — **SHIPPED 2026-07-05** (`885c2f4`, playtest-confirmed)
 Replaces kill-XP leveling with per-faction node state (`Building` + a small `NodeState`).
 - **Architects — Compound:** undamaged-uptime timer → production cooldown −X%/min and/or
   reinforcement cost decay, capped. Garrison damage or tethered-unit loss resets/decays the
@@ -104,7 +104,7 @@ Replaces kill-XP leveling with per-faction node state (`Building` + a small `Nod
 - Wave exploit windows (spec §2 punishes) verified in playtest: fresh Bloom nodes are
   attackable, Architect ramps resettable, lone Mesh pickets weak.
 
-### U2 — T1 roster build-out (9 units; Line Holders first as balance anchors)
+### U2 — T1 roster build-out — **SHIPPED 2026-07-05** (`63ef826`, playtest-confirmed; Mobile AA deferred — no air layer)
 - Line Holders = the existing `*_t1.tres`, re-tuned to spec dials (Architect high-armor wide;
   Bloom hover/amphibious mid w/ regen; Mesh highest-DPS/low-HP direct-fire). Every other T1
   balances against ITS OWN faction's Line Holder (spec §6), axis = value-per-node.
@@ -144,7 +144,9 @@ Replaces kill-XP leveling with per-faction node state (`Building` + a small `Nod
   Mesh default sub-path string `networked` — core/20's Mesh paths are Networked/Dreamer ✓;
   code already uses "networked" as Mesh default ✓ consistent.
 
-### U5 — Enemy-side integration (absorbs backlog J1)
+### U5 — Enemy-side integration (absorbs backlog J1) — **SHIPPED 2026-07-06** (`1f6ffda`)
+Missions + telegraphy landed (saboteurs / flankers / hunters, 1/3 of spawns from wave 3).
+Remaining J1 slice, deferred: enemy RANGED combat + roster-role enemy compositions.
 - Waves field the full role rosters (not just line/runner/brute synthesis).
 - **Faction wave TARGETING per spec §5:** Architect waves focus production (garrisons/economy),
   Bloom waves take territory (tethered zones/claims), Mesh waves hunt the single most
