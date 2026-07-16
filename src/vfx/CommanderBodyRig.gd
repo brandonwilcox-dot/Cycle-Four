@@ -79,8 +79,8 @@ func _try_build_gltf(faction: String) -> bool:
 	var model : Node3D = _ASSET.load_commander_model(faction)
 	if model == null:
 		return false
-	var scale : float = float(_ASSET.FACTION_COMMANDER_SCALE.get(faction, 20.0))
-	model.scale = Vector3(scale, scale, scale)
+	var mscale : float = float(_ASSET.FACTION_COMMANDER_SCALE.get(faction, 20.0))
+	model.scale = Vector3(mscale, mscale, mscale)
 	var yaw : float = float(_ASSET.FACTION_COMMANDER_YAW.get(faction, -90.0))
 	model.rotation_degrees = Vector3(0.0, yaw, 0.0)   ## model front -> +X forward (per faction)
 	_body.add_child(model)
@@ -91,7 +91,7 @@ func _try_build_gltf(faction: String) -> bool:
 	var mi : MeshInstance3D = _ASSET.find_mesh_instance(model)
 	if mi != null:
 		var ab : AABB = mi.get_aabb()
-		top = (ab.position.y + ab.size.y) * scale
+		top = (ab.position.y + ab.size.y) * mscale
 	pip_position = Vector3(0.0, top + 8.0, 0.0)
 	bar_y        = top
 	_anim = _ASSET.find_animation_player(model)
@@ -383,4 +383,4 @@ func _process(delta: float) -> void:
 			var scuttle : float = body_lift + (absf(sin(_t * 10.0)) * 2.2 if moving else 0.0)
 			_body.position.y = lerpf(_body.position.y, scuttle, minf(1.0, delta * 12.0))
 		_:
-			pass   ## fallback mech is static (as before)
+			pass   ## fallback mech is static (as bef
