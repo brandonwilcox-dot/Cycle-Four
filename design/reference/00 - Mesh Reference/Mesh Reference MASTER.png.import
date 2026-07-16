@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://i6bb581h4cq6"
-path="res://.godot/imported/Mesh Reference MASTER.png-84d7a11cf057215738e757294a9d457a.ctex"
+path="res://.godot/imported/Mesh Reference MASTER.png-614264dbace793fd80de0192ab27bf82.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/Mesh Reference MASTER.png"
-dest_files=["res://.godot/imported/Mesh Reference MASTER.png-84d7a11cf057215738e757294a9d457a.ctex"]
+source_file="res://design/reference/00 - Mesh Reference/Mesh Reference MASTER.png"
+dest_files=["res://.godot/imported/Mesh Reference MASTER.png-614264dbace793fd80de0192ab27bf82.ctex"]
 
 [params]
 

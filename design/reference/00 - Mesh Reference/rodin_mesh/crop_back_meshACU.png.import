@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dgy2pldcdfqvv"
-path="res://.godot/imported/crop_back_meshACU.png-c547e2bf7795f8393ad2204ca3c5b2e1.ctex"
+path="res://.godot/imported/crop_back_meshACU.png-319387d8f967d28008cbde5d5e36489c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/rodin_mesh/crop_back_meshACU.png"
-dest_files=["res://.godot/imported/crop_back_meshACU.png-c547e2bf7795f8393ad2204ca3c5b2e1.ctex"]
+source_file="res://design/reference/00 - Mesh Reference/rodin_mesh/crop_back_meshACU.png"
+dest_files=["res://.godot/imported/crop_back_meshACU.png-319387d8f967d28008cbde5d5e36489c.ctex"]
 
 [params]
 

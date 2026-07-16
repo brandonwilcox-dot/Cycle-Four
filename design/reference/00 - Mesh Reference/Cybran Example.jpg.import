@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cxdplgynvsvmi"
-path="res://.godot/imported/Cybran Example.jpg-40107dce53860d33cd55a9533f6fce41.ctex"
+path="res://.godot/imported/Cybran Example.jpg-349b9dab2a7d3ed766b8f94da65b3791.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/Cybran Example.jpg"
-dest_files=["res://.godot/imported/Cybran Example.jpg-40107dce53860d33cd55a9533f6fce41.ctex"]
+source_file="res://design/reference/00 - Mesh Reference/Cybran Example.jpg"
+dest_files=["res://.godot/imported/Cybran Example.jpg-349b9dab2a7d3ed766b8f94da65b3791.ctex"]
 
 [params]
 

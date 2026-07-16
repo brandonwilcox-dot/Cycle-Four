@@ -12,6 +12,7 @@ const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
+const ASSET_LOADER = preload("res://src/core/AssetLoader.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const BALANCE = preload("res://src/core/Balance.gd")
 
@@ -277,6 +278,19 @@ func _build_visual() -> void:
 	ring.material_override = _unlit(Color(0.85, 0.95, 1.0, 0.9))
 	add_child(ring)
 
+	## V6: GLTF model for this faction (keeps its own hi-fi materials). No-mesh pivot the
+	## gait animates; scaled model parented under it (gait offsets stay in world units).
+	if data != null and data.faction_id in ASSET_LOADER.FACTION_MODELS:
+		var gmodel = ASSET_LOADER.load_unit_model(data.faction_id, data.color_hint, false)
+		if gmodel != null:
+			_mesh = MeshInstance3D.new()
+			_mesh.position = Vector3(0.0, _GAIT_REST_Y, 0.0)
+			add_child(_mesh)
+			gmodel.position = Vector3.ZERO
+			_mesh.add_child(gmodel)
+			_mat = null   ## Rodin material kept; tint/hit-flash skipped for GLTF units (guarded)
+			return
+
 	## Body — small faction-colored box.
 	_mesh = MeshInstance3D.new()
 	_mesh.position = Vector3(0.0, 10.0, 0.0)
@@ -305,21 +319,4 @@ func _unlit(col: Color) -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	return m
 
-func _make_bar(col: Color, y: float, width: float) -> MeshInstance3D:
-	var q : MeshInstance3D = MeshInstance3D.new()
-	var qm : QuadMesh = QuadMesh.new()
-	qm.size = Vector2(width, 3.5)
-	q.mesh = qm
-	q.position = Vector3(0.0, y, 0.0)
-	var m : StandardMaterial3D = StandardMaterial3D.new()
-	m.albedo_color = col
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	q.material_override = m
-	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(q)
-	return q
-
-func _update_health_visual() -> void:
-	if _hp_fill != null and data != null and data.max_health > 0.0:
-		_hp_fill.scale.x = clampf(_current_health / data.max_health, 0.0, 1.0)
+func _make_bar(col: Color, y: f

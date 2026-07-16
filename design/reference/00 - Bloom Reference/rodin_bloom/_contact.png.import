@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://jmnsbbypd4d3"
-path="res://.godot/imported/_contact.png-ebf9525188432bb15c27b560b96f0fe8.ctex"
+path="res://.godot/imported/_contact.png-ef3690d2a1e30df113246c3bb201de65.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/rodin_in/_contact.png"
-dest_files=["res://.godot/imported/_contact.png-ebf9525188432bb15c27b560b96f0fe8.ctex"]
+source_file="res://design/reference/00 - Bloom Reference/rodin_bloom/_contact.png"
+dest_files=["res://.godot/imported/_contact.png-ef3690d2a1e30df113246c3bb201de65.ctex"]
 
 [params]
 

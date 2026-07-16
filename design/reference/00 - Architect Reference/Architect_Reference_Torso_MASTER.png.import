@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bbi5kaxy5hq8n"
-path="res://.godot/imported/crop_back.png-ce160f71b5f3dc5b8b6fc4a9b1ce8c16.ctex"
+uid="uid://cd341kkgbllf4"
+path="res://.godot/imported/Architect_Reference_Torso_MASTER.png-b9734251995b81a6d799626b1571c311.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/00 - Bloom Reference/rodin_bloom/crop_back.png"
-dest_files=["res://.godot/imported/crop_back.png-ce160f71b5f3dc5b8b6fc4a9b1ce8c16.ctex"]
+source_file="res://design/reference/00 - Architect Reference/Architect_Reference_Torso_MASTER.png"
+dest_files=["res://.godot/imported/Architect_Reference_Torso_MASTER.png-b9734251995b81a6d799626b1571c311.ctex"]
 
 [params]
 

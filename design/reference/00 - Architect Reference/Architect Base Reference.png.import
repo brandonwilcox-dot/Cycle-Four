@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://baitiadtlmidc"
-path="res://.godot/imported/Architect Base Reference.png-ba7dce1fe28b003c6ba0808ba62157ad.ctex"
+path="res://.godot/imported/Architect Base Reference.png-f6bb6bcaef2e75479dedc5ee488a47d7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/Architect Base Reference.png"
-dest_files=["res://.godot/imported/Architect Base Reference.png-ba7dce1fe28b003c6ba0808ba62157ad.ctex"]
+source_file="res://design/reference/00 - Architect Reference/Architect Base Reference.png"
+dest_files=["res://.godot/imported/Architect Base Reference.png-f6bb6bcaef2e75479dedc5ee488a47d7.ctex"]
 
 [params]
 

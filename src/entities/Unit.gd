@@ -584,22 +584,17 @@ func _build_visual() -> void:
 	_base_color = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
 
 	if data != null and data.faction_id in ASSET_LOADER.FACTION_MODELS:
-		## V6: Load GLTF model for this faction
+		## V6: GLTF model for this faction, keeping its own hi-fi materials. A no-mesh
+		## MeshInstance3D is the bob PIVOT the gait animates (in world units); the scaled
+		## model is parented under it so gait offsets aren't multiplied by the model scale.
 		var model = ASSET_LOADER.load_unit_model(data.faction_id, _base_color, false)
 		if model != null:
-			model.position = Vector3(0.0, BODY_LIFT, 0.0)
-			add_child(model)
-			## Find the mesh instance to apply material and hit-flash
-			_mesh = _find_mesh_in_model(model)
-			if _mesh != null:
-				_mat = StandardMaterial3D.new()
-				_mat.albedo_color = _base_color
-				_SUBSTRATE.apply(_mat, data.faction_id, false)
-				_base_emission = _mat.emission_energy_multiplier if _mat.emission_enabled else 0.0
-				if data.stealth:
-					_mat.albedo_color.a = 0.85
-					_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-				_mesh.material_override = _mat
+			_mesh = MeshInstance3D.new()
+			_mesh.position = Vector3(0.0, BODY_LIFT, 0.0)
+			add_child(_mesh)
+			model.position = Vector3.ZERO
+			_mesh.add_child(model)
+			_mat = null   ## Rodin material kept as-is; tint/hit-flash skipped for GLTF units (guarded)
 			return
 
 	## Fallback: use procedural bodies if GLTF load failed
@@ -680,3 +675,4 @@ func minimap_reveal() -> int:
 		return 0
 	var idx : int = cell.x + cell.y * md.dimensions.x
 	return 2 if md.get_meta_revealed(idx) else 0
+                                                                                  

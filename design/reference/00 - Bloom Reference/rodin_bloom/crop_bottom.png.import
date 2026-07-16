@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dgfpsmg3dad5i"
-path="res://.godot/imported/crop_bottom.png-637c0c392475a9c42be62be77f4cf2f9.ctex"
+path="res://.godot/imported/crop_bottom.png-e19e64f7bef9deaacc2a87376e9313cf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/rodin_in/crop_bottom.png"
-dest_files=["res://.godot/imported/crop_bottom.png-637c0c392475a9c42be62be77f4cf2f9.ctex"]
+source_file="res://design/reference/00 - Bloom Reference/rodin_bloom/crop_bottom.png"
+dest_files=["res://.godot/imported/crop_bottom.png-e19e64f7bef9deaacc2a87376e9313cf.ctex"]
 
 [params]
 

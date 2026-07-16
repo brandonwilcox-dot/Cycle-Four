@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://sjo7fl5jkngo"
-path="res://.godot/imported/Bloom Example 2.jpg-c408e0a45f8dadd6819a9ffcd63b9da2.ctex"
+path="res://.godot/imported/Bloom Example 2.jpg-17cc25a8d11f4d8d5be79dd4bb9babd5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/Bloom Example 2.jpg"
-dest_files=["res://.godot/imported/Bloom Example 2.jpg-c408e0a45f8dadd6819a9ffcd63b9da2.ctex"]
+source_file="res://design/reference/00 - Bloom Reference/Bloom Example 2.jpg"
+dest_files=["res://.godot/imported/Bloom Example 2.jpg-17cc25a8d11f4d8d5be79dd4bb9babd5.ctex"]
 
 [params]
 

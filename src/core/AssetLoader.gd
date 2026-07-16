@@ -3,9 +3,20 @@ extends RefCounted
 
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 
-## Enemy/friendly UNIT GLTF models. Empty by default so units render via the
-## verified procedural UnitBodies silhouettes; populate per-faction to override.
-const FACTION_MODELS = {}
+## Enemy/friendly UNIT GLTF models. Populate per-faction to override the procedural
+## UnitBodies silhouettes with a hand/AI-generated mesh (kept with its own materials).
+const FACTION_MODELS = {
+	"architects": "res://assets/models/units/architect_drone_hifi.glb",  ## Rodin hi-fi drone (V6 units)
+}
+
+## Per-faction UNIT import scale (Blender units -> game units) and facing yaw (deg about Y).
+## The Rodin drone is ~1.36u tall normalized; ×20 -> ~27 game units. Facing VERIFIED in play.
+const FACTION_UNIT_SCALE = {
+	"architects": 20.0,
+}
+const FACTION_UNIT_YAW = {
+	"architects": 0.0,   ## VERIFY in play; flip 90/180 if the drone flies sideways/backwards
+}
 
 ## Player COMMANDER GLTF models (hand-modeled, rigged, animated in Blender).
 ## Loaded by CommanderBodyRig; materials from the GLB are kept (chrome / bio / hot glow).
@@ -58,35 +69,15 @@ static func load_unit_model(faction_id: String, base_color: Color, apply_substra
 		push_error("AssetLoader: GLTF scene is not Node3D: %s" % model_path)
 		return null
 
-	var mesh_inst = _find_mesh_instance(model)
-	if mesh_inst != null:
-		var mat = StandardMaterial3D.new()
-		mat.albedo_color = base_color
-		if apply_substrate:
-			_SUBSTRATE.apply(mat, faction_id, false)
-		mesh_inst.material_override = mat
-	return model
+	var s : float = float(FACTION_UNIT_SCALE.get(faction_id, 12.0))
+	model.scale = Vector3(s, s, s)
+	model.rotation_degrees = Vector3(0.0, float(FACTION_UNIT_YAW.get(faction_id, 0.0)), 0.0)
 
-## Find the first AnimationPlayer in a loaded scene (or null).
-static func find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var result = find_animation_player(child)
-		if result != null:
-			return result
-	return null
-
-## Recursively find the first MeshInstance3D (public).
-static func find_mesh_instance(node: Node) -> MeshInstance3D:
-	return _find_mesh_instance(node)
-
-## Recursively find the first MeshInstance3D.
-static func _find_mesh_instance(node: Node) -> MeshInstance3D:
-	if node is MeshInstance3D:
-		return node
-	for child in node.get_children():
-		var result = _find_mesh_instance(child)
-		if result != null:
-			return result
-	return null
+	## Keep the model's own (Rodin) materials for close-zoom detail. Only flatten to a
+	## faction substrate tint when explicitly asked (apply_substrate = true).
+	if apply_substrate:
+		var mesh_inst = _find_mesh_instance(model)
+		if mesh_inst != null:
+			var mat = StandardMaterial3D.new()
+			mat.albedo_color = base_color
+		

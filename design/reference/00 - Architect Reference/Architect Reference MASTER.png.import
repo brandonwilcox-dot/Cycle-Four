@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dmj0qwesviuxc"
-path="res://.godot/imported/Architect Reference MASTER.png-0e898ac36b02ef40659984afe4d4d934.ctex"
+path="res://.godot/imported/Architect Reference MASTER.png-4417df5d7444f60e41044ec37255bed6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/Architect Reference MASTER.png"
-dest_files=["res://.godot/imported/Architect Reference MASTER.png-0e898ac36b02ef40659984afe4d4d934.ctex"]
+source_file="res://design/reference/00 - Architect Reference/Architect Reference MASTER.png"
+dest_files=["res://.godot/imported/Architect Reference MASTER.png-4417df5d7444f60e41044ec37255bed6.ctex"]
 
 [params]
 

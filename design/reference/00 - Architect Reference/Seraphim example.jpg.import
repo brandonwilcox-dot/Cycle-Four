@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bcu5uid4fpry4"
-path="res://.godot/imported/Seraphim example.jpg-5d020d4743736da1f20d839b3d0924b7.ctex"
+path="res://.godot/imported/Seraphim example.jpg-8981f6a4e456bb06befca51014d7c338.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/Seraphim example.jpg"
-dest_files=["res://.godot/imported/Seraphim example.jpg-5d020d4743736da1f20d839b3d0924b7.ctex"]
+source_file="res://design/reference/00 - Architect Reference/Seraphim example.jpg"
+dest_files=["res://.godot/imported/Seraphim example.jpg-8981f6a4e456bb06befca51014d7c338.ctex"]
 
 [params]
 

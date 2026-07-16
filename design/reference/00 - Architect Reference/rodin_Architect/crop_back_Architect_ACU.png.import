@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bnqa32f6olego"
-path="res://.godot/imported/crop_back_Architect_ACU.png-df1607afa2b51818387b43abbb37f9ae.ctex"
+path="res://.godot/imported/crop_back_Architect_ACU.png-011a178e3922eb54dbcfe81f7114872d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://design/reference/rodin_Architect/crop_back_Architect_ACU.png"
-dest_files=["res://.godot/imported/crop_back_Architect_ACU.png-df1607afa2b51818387b43abbb37f9ae.ctex"]
+source_file="res://design/reference/00 - Architect Reference/rodin_Architect/crop_back_Architect_ACU.png"
+dest_files=["res://.godot/imported/crop_back_Architect_ACU.png-011a178e3922eb54dbcfe81f7114872d.ctex"]
 
 [params]
 
