@@ -383,4 +383,4 @@ func _process(delta: float) -> void:
 			var scuttle : float = body_lift + (absf(sin(_t * 10.0)) * 2.2 if moving else 0.0)
 			_body.position.y = lerpf(_body.position.y, scuttle, minf(1.0, delta * 12.0))
 		_:
-			pass   ## fallback mech is static (as bef
+			pass   ## fallback mech is static (as before)
