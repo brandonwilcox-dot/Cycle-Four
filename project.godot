@@ -66,5 +66,4 @@ ui_accept={
 
 [rendering]
 
-renderer/rendering_method="forward_plus"
 environment/defaults/default_clear_color=Color(0.05, 0.05, 0.08, 1)

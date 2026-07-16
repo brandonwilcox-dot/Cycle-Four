@@ -9,6 +9,12 @@
       "env": {
         "GODOT_PATH": "D:/01 - Game Development Software/Godot_v4.6.1-stable_win64/Godot_v4.6.1-stable_win64.exe"
       }
+    },
+    "blender": {
+      "command": "C:\\Users\\Brand\\.local\\bin\\uvx.exe",
+      "args": [
+        "blender-mcp"
+      ]
     }
   }
 }

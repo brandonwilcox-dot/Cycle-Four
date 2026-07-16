@@ -14,6 +14,8 @@ const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
+const ASSET_LOADER = preload("res://src/core/AssetLoader.gd")
+const BALANCE = preload("res://src/core/Balance.gd")
 
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
@@ -149,7 +151,7 @@ func _process(delta: float) -> void:
 	var target    : Vector2 = _waypoints[_wp_index]
 	var to_target : Vector2 = target - _p
 	var dist      : float   = to_target.length()
-	var step      : float   = data.move_speed * _speed_multiplier * _pollen_slow() * delta
+	var step      : float   = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * delta
 	if dist <= step or dist <= ARRIVE_DIST:
 		_set_plane(target)
 		_wp_index += 1
@@ -262,7 +264,7 @@ func _hunter_update(delta: float) -> bool:
 
 ## Unleashed straight-line movement (missions leave the carved paths, like defenders do).
 func _move_free(point: Vector2, delta: float) -> void:
-	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * delta
+	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * delta
 	var dir  : Vector2 = point - _p
 	if dir.length() <= step:
 		_set_plane(point)
@@ -462,7 +464,7 @@ func _nearest_player_target() -> Node:
 	return best
 
 func _move_toward_guard(point: Vector2, delta: float) -> void:
-	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * delta
+	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * delta
 	var dir  : Vector2 = point - _p
 	var np   : Vector2
 	if dir.length() <= step:
@@ -569,24 +571,50 @@ func _evolve() -> void:
 
 ## -- Visual (3D) --
 
+func _find_mesh_in_model(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node
+	for child in node.get_children():
+		var result = _find_mesh_in_model(child)
+		if result != null:
+			return result
+	return null
+
 func _build_visual() -> void:
 	_base_color = Color(1.0, 0.35, 0.1) if _is_flanker else (data.color_hint if data else Color.GRAY)
 
+	if data != null and data.faction_id in ASSET_LOADER.FACTION_MODELS:
+		## V6: Load GLTF model for this faction
+		var model = ASSET_LOADER.load_unit_model(data.faction_id, _base_color, false)
+		if model != null:
+			model.position = Vector3(0.0, BODY_LIFT, 0.0)
+			add_child(model)
+			## Find the mesh instance to apply material and hit-flash
+			_mesh = _find_mesh_in_model(model)
+			if _mesh != null:
+				_mat = StandardMaterial3D.new()
+				_mat.albedo_color = _base_color
+				_SUBSTRATE.apply(_mat, data.faction_id, false)
+				_base_emission = _mat.emission_energy_multiplier if _mat.emission_enabled else 0.0
+				if data.stealth:
+					_mat.albedo_color.a = 0.85
+					_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				_mesh.material_override = _mat
+			return
+
+	## Fallback: use procedural bodies if GLTF load failed
 	_mesh = MeshInstance3D.new()
 	_mesh.position = Vector3(0.0, BODY_LIFT, 0.0)
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_mat = StandardMaterial3D.new()
 	_mat.albedo_color = _base_color
 	if data != null:
-		## V3: enemies wear THEIR faction's substrate. animate=false — the unit drives its own
-		## emission (V4 hit flash below); structures get the shared breathe/scroll animation.
 		_SUBSTRATE.apply(_mat, data.faction_id, false)
 	_base_emission = _mat.emission_energy_multiplier if _mat.emission_enabled else 0.0
 	if data != null and data.stealth:
 		_mat.albedo_color.a = 0.85
 		_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_mesh.material_override = _mat
-	## V6-lite: per-faction composed silhouette (parts share _mat → tints apply body-wide).
 	UNIT_BODIES.compose(_mesh, data.faction_id if data != null else "", BODY_SIZE, _mat)
 	add_child(_mesh)
 

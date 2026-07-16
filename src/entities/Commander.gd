@@ -16,10 +16,15 @@ const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const _BODY_RIG  = preload("res://src/vfx/CommanderBodyRig.gd")
+const BALANCE    = preload("res://src/core/Balance.gd")
 
 const VISION_RADIUS         : int   = 3
 const SENSOR_RADIUS         : int   = 9
 const MOVE_BASE_SPEED       : float = 140.0
+## Deliberate, colossal-mech turning: the body swivels toward the heading at a limited
+## rate, and striding is gated until it is roughly aligned (torso leads, then legs stride).
+const TURN_RATE_DEG        : float = 80.0    ## yaw degrees per second
+const STRIDE_ALIGN_DEG     : float = 20.0    ## begin striding within this of the heading
 const RATE_PER_CLAIMED_CELL : float = 0.05
 const CELLS_PER_RANK        : int   = 25
 const SPEED_PER_RANK        : float = 0.05
@@ -46,6 +51,7 @@ const SELECT_RING_COLOR : Color = Color(0.40, 1.00, 0.55, 0.90)
 var _map_grid       : Node      = null
 var _p              : Vector2   = Vector2.ZERO
 var _move_queue     : Array[Vector2] = []
+var _is_striding    : bool      = false   ## actually translating (vs turning in place)
 var _selected       : bool      = false
 var _claimed_count  : int       = 0
 var _commander_rank : int       = 0
@@ -114,11 +120,30 @@ func _process(delta: float) -> void:
 	_try_engineering(delta)
 
 	if _move_queue.is_empty():
+		_is_striding = false
 		return
 	var target    : Vector2 = _move_queue[0]
 	var to_target : Vector2 = target - _p
 	var dist      : float   = to_target.length()
-	var step      : float   = _current_move_speed * delta
+
+	## Deliberate turn: swivel yaw toward the heading at a limited rate; only stride once
+	## roughly aligned (the torso leads the turn, then the legs take stride).
+	if to_target.length_squared() > 0.0001:
+		var desired : float = -atan2(to_target.y, to_target.x)
+		var err     : float = wrapf(desired - rotation.y, -PI, PI)
+		var turn    : float = deg_to_rad(TURN_RATE_DEG) * delta
+		if absf(err) <= turn:
+			rotation.y = desired
+		else:
+			rotation.y += signf(err) * turn
+		_is_striding = absf(wrapf(desired - rotation.y, -PI, PI)) < deg_to_rad(STRIDE_ALIGN_DEG)
+	else:
+		_is_striding = true
+
+	if not _is_striding:
+		return   ## finish squaring up / swivelling before moving
+
+	var step : float = _current_move_speed * BALANCE.MOVE_SCALE * delta
 	if dist <= step:
 		_set_plane(target)
 		_move_queue.pop_front()
@@ -127,13 +152,11 @@ func _process(delta: float) -> void:
 	_claim_around()
 	_reveal_around()
 
-## Set plane position, sync transform, face travel direction.
+## Set plane position + sync transform. Facing is handled in _process (smooth turn), so
+## this no longer snaps rotation.
 func _set_plane(p: Vector2) -> void:
-	var d : Vector2 = p - _p
 	_p = p
 	global_position = WORLD3D.to3(_p, 0.0)
-	if d.length_squared() > 0.0001:
-		rotation.y = -atan2(d.y, d.x)
 
 ## -- Input --
 
@@ -172,6 +195,11 @@ func is_selected() -> bool:
 ## True while executing move orders — the body rig reads this to drive gaits.
 func is_moving() -> bool:
 	return not _move_queue.is_empty() and not _dead
+
+## True only while actually translating (aligned to the heading) — the rig plays Walk vs
+## Idle off this, so a pure in-place turn keeps the squared stance until it strides.
+func is_striding() -> bool:
+	return _is_striding and not _dead
 
 func move_command(world_pos: Vector2, append: bool) -> void:
 	if not append:
@@ -300,8 +328,22 @@ func _try_primary_attack() -> void:
 	if _ability_controller != null and _ability_controller.is_overdrive_active:
 		dmg *= _ability_controller.overdrive_damage_mult
 	var dt : int = Combat.faction_damage_type(FactionManager.active_faction)
-	Vfx.muzzle(_p, dt)
-	Vfx.bolt(_p, WORLD3D.node_plane(target), dt)   ## 3D tracer (replaces the old 2D shot flash)
+	var tpos : Vector2 = WORLD3D.node_plane(target)
+	## Fire a tracer from each cannon arm (the rig exposes muzzle offsets); to_global folds in the
+	## Commander's facing so the blast leaves the arm cannons, not center mass. Fall back to center.
+	var mz : Array = []
+	if _body_rig != null:
+		var mv : Variant = _body_rig.get("muzzles")
+		if mv is Array:
+			mz = mv
+	if not mz.is_empty():
+		for m in mz:
+			var mp : Vector2 = WORLD3D.to2(to_global(m))
+			Vfx.muzzle(mp, dt)
+			Vfx.bolt(mp, tpos, dt)
+	else:
+		Vfx.muzzle(_p, dt)
+		Vfx.bolt(_p, tpos, dt)   ## 3D tracer (replaces the old 2D shot flash)
 	target.take_damage(dmg, dt)
 	EventBus.commander_attacked.emit()
 	if _ability_controller != null:

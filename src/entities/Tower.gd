@@ -84,6 +84,7 @@ var _hijack_timer  : float = 2.0
 
 ## 3D visual nodes.
 var _turret    : Node3D = null
+var _muzzles   : Array[Vector3] = []   ## per-barrel tip, in TURRET-local space (fire origin per cannon)
 var _body_root : Node3D = null   ## body parts container (construction rig scales/tints it)
 var _con_rig   : Node3D = null   ## per-faction construction effect (grow / carve / assemble)
 var _recoil    : float = 0.0   ## V4: 1.0 on fire → decays; turret kicks back along the barrels
@@ -188,9 +189,16 @@ func _try_attack() -> void:
 		var dt : int = int(data.damage_type)
 		var tpos : Vector2 = WORLD3D.node_plane(target)
 		_aim_target_angle = (tpos - _p).angle()
-		## Cosmetic tracer/muzzle (2D Vfx no-ops in the 3D world; 3D VFX arrives in Stage 4).
-		Vfx.muzzle(_p, dt)
-		Vfx.bolt(_p, tpos, dt)
+		## Cosmetic tracer/muzzle — fire one from each barrel tip (upgraded towers have 2+ cannons),
+		## transforming each turret-local muzzle to world plane so the blast leaves the cannon, not center.
+		if _turret != null and not _muzzles.is_empty():
+			for mloc in _muzzles:
+				var mp : Vector2 = WORLD3D.to2(_turret.to_global(mloc))
+				Vfx.muzzle(mp, dt)
+				Vfx.bolt(mp, tpos, dt)
+		else:
+			Vfx.muzzle(_p, dt)
+			Vfx.bolt(_p, tpos, dt)
 		_recoil = 1.0   ## V4: turret kick (re-seats in _update_aim)
 		var killed : bool = target.take_damage(effective_damage, dt)
 		if killed:
@@ -447,6 +455,7 @@ func _on_claimed_ground() -> bool:
 
 func _build_visual() -> void:
 	_body_mats.clear()
+	_muzzles.clear()
 	## V4 rising construction: every body part lives under _body_root, which scales up in Y
 	## with build progress (the Commander raises the structure out of the ground).
 	_body_root = Node3D.new()
@@ -498,6 +507,7 @@ func _build_visual() -> void:
 		barrel.position = Vector3(body_r * 0.5 + blen * 0.5, 0.0, off)   ## +X, base near body
 		barrel.material_override = _mat(col.darkened(0.35))
 		_turret.add_child(barrel)
+		_muzzles.append(Vector3(body_r * 0.5 + blen, 0.0, off))   ## barrel tip (far end) — each fires its own tracer
 
 	## Core gem — damage-type tinted, emissive (matches the tracer).
 	var core : MeshInstance3D = MeshInstance3D.new()

@@ -9,6 +9,7 @@ class_name Convoy
 extends Node3D
 
 const WORLD3D = preload("res://src/core/World3D.gd")
+const BALANCE = preload("res://src/core/Balance.gd")
 
 const CONVOY_BASE_SPEED    : float = 90.0
 const SPEED_PER_RANK       : float = 0.05
@@ -75,7 +76,7 @@ func _process(delta: float) -> void:
 	var target : Vector2 = route_world[_waypoint_index]
 	var to_target : Vector2 = target - _p
 	var dist : float = to_target.length()
-	var step : float = _current_speed * delta
+	var step : float = _current_speed * BALANCE.MOVE_SCALE * delta
 	if dist <= step:
 		_set_plane(target)
 		_on_waypoint_reached()

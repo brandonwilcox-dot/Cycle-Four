@@ -13,6 +13,7 @@ const WORLD3D = preload("res://src/core/World3D.gd")
 const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
+const BALANCE = preload("res://src/core/Balance.gd")
 
 const AGGRO_RADIUS    : float = 240.0
 const BLOCK_RANGE     : float = 28.0
@@ -225,7 +226,7 @@ func clear_raid() -> void:
 	_has_raid = false
 
 func _move_toward(point: Vector2, delta: float, clamp_leash: bool = true) -> void:
-	var step : float = data.move_speed * delta
+	var step : float = data.move_speed * BALANCE.MOVE_SCALE * delta
 	var dir  : Vector2 = point - _p
 	var np   : Vector2
 	if dir.length() <= step:

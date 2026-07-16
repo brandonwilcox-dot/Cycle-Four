@@ -20,9 +20,24 @@ const AMBER : Color = Color(1.00, 0.82, 0.38)
 const BIO_GREEN : Color = Color(0.45, 1.00, 0.50)
 const SIGNAL_BLUE : Color = Color(0.35, 0.75, 1.00)
 
+const _ASSET = preload("res://src/core/AssetLoader.gd")
+
+## Hand-modeled GLTF path (Blender). When a faction has a rigged commander model
+## it replaces the procedural build; the walk animation is driven by movement.
+var _use_gltf  : bool             = false
+var _gltf_root : Node3D           = null
+var _anim      : AnimationPlayer  = null
+var _walk_name : String           = ""
+var _idle_name : String           = ""
+const WALK_SPEED_SCALE : float = 0.75   ## lumbering cadence for a colossal mech
+const ANIM_BLEND       : float = 0.35   ## crossfade time (squares up on stop)
+
 var body_lift    : float = 42.0                    ## Y of the hull centre
 var pip_position : Vector3 = Vector3(6.0, 69.0, 0.0)
 var bar_y        : float = 82.0
+## Cannon-tip fire origins in the COMMANDER's local frame (+X forward, ±Z lateral, +Y up).
+## The Commander transforms these by its facing to spawn one tracer per cannon arm.
+var muzzles      : Array[Vector3] = []
 
 var _faction : String = ""
 var _body    : MeshInstance3D = null
@@ -43,15 +58,114 @@ func setup(faction: String, body: MeshInstance3D, mat: Material) -> void:
 	_faction = faction
 	_body = body
 	_mat = mat
-	match faction:
-		"architects":
-			_build_needle()
-		"bloom":
-			_build_broodmother()
-		"mesh":
-			_build_weaver()
-		_:
-			_build_fallback_mech()
+	## Prefer a hand-modeled rigged GLTF when one exists for this faction.
+	if not _try_build_gltf(faction):
+		match faction:
+			"architects":
+				_build_needle()
+			"bloom":
+				_build_broodmother()
+			"mesh":
+				_build_weaver()
+			_:
+				_build_fallback_mech()
+	_compute_muzzles()
+
+## -- GLTF commander (hand-modeled in Blender) -----------------------------------------
+## Loads the rigged model as a child of _body, scaled to game units and oriented so its
+## front (Godot -Z) points along the Commander's forward (+X). Sets overlay heights and
+## grabs the AnimationPlayer so movement can drive the walk cycle.
+func _try_build_gltf(faction: String) -> bool:
+	var model : Node3D = _ASSET.load_commander_model(faction)
+	if model == null:
+		return false
+	var scale : float = float(_ASSET.FACTION_COMMANDER_SCALE.get(faction, 20.0))
+	model.scale = Vector3(scale, scale, scale)
+	var yaw : float = float(_ASSET.FACTION_COMMANDER_YAW.get(faction, -90.0))
+	model.rotation_degrees = Vector3(0.0, yaw, 0.0)   ## model front -> +X forward (per faction)
+	_body.add_child(model)
+	_gltf_root = model
+	body_lift = 0.0                                     ## feet at ground (model local y=0)
+	## Place overlays from the model's actual height (works for tall biped + low crab/spider).
+	var top : float = 70.0
+	var mi : MeshInstance3D = _ASSET.find_mesh_instance(model)
+	if mi != null:
+		var ab : AABB = mi.get_aabb()
+		top = (ab.position.y + ab.size.y) * scale
+	pip_position = Vector3(0.0, top + 8.0, 0.0)
+	bar_y        = top
+	_anim = _ASSET.find_animation_player(model)
+	if _anim != null:
+		for n in _anim.get_animation_list():
+			var a : Animation = _anim.get_animation(n)
+			if a != null:
+				a.loop_mode = Animation.LOOP_LINEAR
+			var low : String = n.to_lower()
+			if "walk" in low:
+				_walk_name = n
+			elif "idle" in low:
+				_idle_name = n
+		if _walk_name == "" and _anim.get_animation_list().size() > 0:
+			_walk_name = _anim.get_animation_list()[0]
+		if _idle_name == "":
+			_idle_name = _walk_name
+	_use_gltf = true
+	return true
+
+## Crossfade Walk (while striding) <-> Idle (squared stance when stopped/turning).
+func _drive_gltf() -> void:
+	if _anim == null:
+		return
+	var parent : Node = get_parent()
+	## Stride only when actually translating (Commander.is_striding); a pure in-place
+	## turn keeps the Idle stance so the mech squares up and swivels before walking.
+	var striding : bool = parent != null and parent.has_method("is_striding") and bool(parent.call("is_striding"))
+	var want : String = _walk_name if striding else _idle_name
+	if want == "":
+		return
+	if _anim.current_animation != want:
+		_anim.play(want, ANIM_BLEND)
+	_anim.speed_scale = WALK_SPEED_SCALE if striding else 1.0
+
+## -- muzzle points ----------------------------------------------------------------------
+## Derive two symmetric cannon-arm fire origins from the built body's bounds, expressed in the
+## Commander's local frame (+X forward, ±Z lateral). Works for the GLB biped (arm cannons) and
+## the procedural bodies alike; the Commander re-orients them by its facing when it fires.
+func _compute_muzzles() -> void:
+	muzzles.clear()
+	var mi : MeshInstance3D = null
+	if _use_gltf and _gltf_root != null:
+		mi = _ASSET.find_mesh_instance(_gltf_root)
+	elif _body != null and _body.mesh != null:
+		mi = _body
+	if mi == null:
+		return
+	var ref : Node = get_parent()   ## the Commander node — muzzles live in its local frame
+	if ref == null or not (ref is Node3D) or not mi.is_inside_tree():
+		return
+	var la : AABB = _local_aabb_of(mi, ref as Node3D)
+	var c  : Vector3 = la.position + la.size * 0.5
+	var fwd : float = c.x + la.size.x * 0.5 * 0.7    ## out toward the front face
+	var hgt : float = c.y + la.size.y * 0.5 * 0.15   ## a touch above centre (shoulder/arm height)
+	var lat : float = la.size.z * 0.5 * 0.62         ## split to the left/right arms
+	muzzles = [Vector3(fwd, hgt, lat), Vector3(fwd, hgt, -lat)]
+
+## AABB of mesh instance `mi`, re-expressed in `ref`'s local space (all 8 corners transformed).
+func _local_aabb_of(mi: MeshInstance3D, ref: Node3D) -> AABB:
+	var ab : AABB = mi.get_aabb()
+	var xf : Transform3D = ref.global_transform.affine_inverse() * mi.global_transform
+	var out : AABB = AABB()
+	for i in 8:
+		var corner : Vector3 = ab.position + Vector3(
+			ab.size.x if (i & 1) else 0.0,
+			ab.size.y if (i & 2) else 0.0,
+			ab.size.z if (i & 4) else 0.0)
+		var p : Vector3 = xf * corner
+		if i == 0:
+			out = AABB(p, Vector3.ZERO)
+		else:
+			out = out.expand(p)
+	return out
 
 ## -- shared part helpers ---------------------------------------------------------------
 
@@ -217,6 +331,9 @@ func _build_fallback_mech() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	if _body == null:
+		return
+	if _use_gltf:
+		_drive_gltf()
 		return
 	var parent : Node = get_parent()
 	var moving : bool = parent != null and parent.has_method("is_moving") and bool(parent.call("is_moving"))
