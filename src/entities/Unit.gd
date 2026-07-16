@@ -675,4 +675,3 @@ func minimap_reveal() -> int:
 		return 0
 	var idx : int = cell.x + cell.y * md.dimensions.x
 	return 2 if md.get_meta_revealed(idx) else 0
-                                                                                  

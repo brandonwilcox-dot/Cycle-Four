@@ -319,4 +319,21 @@ func _unlit(col: Color) -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	return m
 
-func _make_bar(col: Color, y: f
+func _make_bar(col: Color, y: float, width: float) -> MeshInstance3D:
+	var q : MeshInstance3D = MeshInstance3D.new()
+	var qm : QuadMesh = QuadMesh.new()
+	qm.size = Vector2(width, 3.5)
+	q.mesh = qm
+	q.position = Vector3(0.0, y, 0.0)
+	var m : StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = col
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	q.material_override = m
+	q.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(q)
+	return q
+
+func _update_health_visual() -> void:
+	if _hp_fill != null and data != null and data.max_health > 0.0:
+		_hp_fill.scale.x = clampf(_current_health / data.max_health, 0.0, 1.0)

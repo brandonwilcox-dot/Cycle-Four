@@ -80,4 +80,30 @@ static func load_unit_model(faction_id: String, base_color: Color, apply_substra
 		if mesh_inst != null:
 			var mat = StandardMaterial3D.new()
 			mat.albedo_color = base_color
-		
+			_SUBSTRATE.apply(mat, faction_id, false)
+			mesh_inst.material_override = mat
+	return model
+
+## Find the first AnimationPlayer in a loaded scene (or null).
+static func find_animation_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node
+	for child in node.get_children():
+		var result = find_animation_player(child)
+		if result != null:
+			return result
+	return null
+
+## Recursively find the first MeshInstance3D (public).
+static func find_mesh_instance(node: Node) -> MeshInstance3D:
+	return _find_mesh_instance(node)
+
+## Recursively find the first MeshInstance3D.
+static func _find_mesh_instance(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node
+	for child in node.get_children():
+		var result = _find_mesh_instance(child)
+		if result != null:
+			return result
+	return null
