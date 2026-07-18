@@ -8,6 +8,7 @@ const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const FACTION_MODELS = {
 	"architects": "res://assets/models/units/architect_drone_hifi.glb",  ## Rodin hi-fi drone (V6 units)
 	"bloom": "res://assets/models/units/bloom_drone_hifi.glb",            ## Rodin organic spore-pod
+	"mesh": "res://assets/models/units/mesh_drone_hifi.glb",              ## Rodin angular Cybran drone
 }
 
 ## Per-faction UNIT import scale (Blender units -> game units) and facing yaw (deg about Y).
@@ -15,10 +16,12 @@ const FACTION_MODELS = {
 const FACTION_UNIT_SCALE = {
 	"architects": 20.0,
 	"bloom": 18.0,        ## ~1.61u tall -> ~29 game units
+	"mesh": 20.0,         ## ~1.32u tall -> ~26 game units
 }
 const FACTION_UNIT_YAW = {
 	"architects": 0.0,   ## VERIFY in play; flip 90/180 if the drone flies sideways/backwards
 	"bloom": 0.0,        ## organic pod is roughly radial; facing low-risk
+	"mesh": 0.0,         ## VERIFY in play; flip 90/180 if it faces off-axis
 }
 
 ## Player COMMANDER GLTF models (hand-modeled, rigged, animated in Blender).
