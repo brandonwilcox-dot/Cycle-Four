@@ -11,6 +11,7 @@ extends Node3D
 const ATMOSPHERE  = preload("res://src/core/BattleAtmosphere.gd")
 const SUBSTRATE   = preload("res://src/vfx/SubstrateMaterials.gd")
 const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
+const ASSET_LOADER = preload("res://src/core/AssetLoader.gd")
 const CMD_RIG     = preload("res://src/vfx/CommanderBodyRig.gd")
 const TITLE_SCENE : String = "res://scenes/ui/TitleScreen.tscn"
 
@@ -91,11 +92,22 @@ func _show_faction(idx: int) -> void:
 		holder.position = Vector3(float(entry[1]), 0.0, 0.0)
 		holder.scale = Vector3.ONE * float(entry[2])
 		_stage.add_child(holder)
+		var col : Color = ud.color_hint if ud != null else Color.WHITE
+		## Prefer the real GLTF drone (as in battle) — faction-tinted, keeps its Rodin detail.
+		if fac in ASSET_LOADER.FACTION_MODELS:
+			var model : Node3D = ASSET_LOADER.load_unit_model(fac, col, false)
+			if model != null:
+				model.position = Vector3(0.0, 14.0, 0.0)
+				ASSET_LOADER.prepare_unit_material(model, col)
+				holder.add_child(model)
+				_label(holder, str(entry[0]), 44.0)
+				continue
+		## Fallback: procedural composed silhouette.
 		var body : MeshInstance3D = MeshInstance3D.new()
 		body.position = Vector3(0.0, 17.0, 0.0)
 		body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		var m : StandardMaterial3D = StandardMaterial3D.new()
-		m.albedo_color = ud.color_hint if ud != null else Color.WHITE
+		m.albedo_color = col
 		SUBSTRATE.apply(m, fac, false)
 		body.material_override = m
 		UNIT_BODIES.compose(body, fac, 24.0, m)
