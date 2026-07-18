@@ -24,6 +24,28 @@ const FACTION_UNIT_YAW = {
 	"mesh": 0.0,         ## VERIFY in play; flip 90/180 if it faces off-axis
 }
 
+## How far a GLTF unit's albedo is pulled toward its faction color (0 = pure Rodin texture,
+## 1 = flat faction color). Subtle so the model detail survives.
+const UNIT_TINT_STRENGTH : float = 0.28
+
+## Duplicate a loaded GLTF model's material so it can be tinted + flashed per-instance
+## (shared resources would flash every unit at once). Keeps the Rodin textures, nudges
+## albedo toward the faction color, and guarantees an emission channel (white @ 0 energy
+## when the model has none) so damage hit-flash is visible. Returns the material, or null.
+static func prepare_unit_material(model: Node3D, faction_color: Color) -> StandardMaterial3D:
+	var mi := _find_mesh_instance(model)
+	if mi == null:
+		return null
+	var src : Material = mi.get_active_material(0)
+	var mat : StandardMaterial3D = src.duplicate() if src is StandardMaterial3D else StandardMaterial3D.new()
+	mat.albedo_color = mat.albedo_color.lerp(faction_color, UNIT_TINT_STRENGTH)
+	if not mat.emission_enabled:
+		mat.emission_enabled = true
+		mat.emission = Color.WHITE
+		mat.emission_energy_multiplier = 0.0   ## invisible at rest; hit-flash raises it
+	mi.material_override = mat
+	return mat
+
 ## Player COMMANDER GLTF models (hand-modeled, rigged, animated in Blender).
 ## Loaded by CommanderBodyRig; materials from the GLB are kept (chrome / bio / hot glow).
 const FACTION_COMMANDER_MODELS = {

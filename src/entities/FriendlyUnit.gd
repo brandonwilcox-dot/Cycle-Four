@@ -38,6 +38,7 @@ var _attack_timer   : float = 0.0
 var _is_dead        : bool  = false
 var _mesh           : MeshInstance3D = null
 var _mat            : StandardMaterial3D = null   ## V4: for hit-flash
+var _base_emission  : float = 0.0                 ## resting emission; hit-flash adds to it
 var _hp_fill        : MeshInstance3D = null
 var _garrison       : Node    = null
 var _patrolling     : bool    = false
@@ -101,6 +102,7 @@ func _process(delta: float) -> void:
 
 const _GAIT_REST_Y : float = 10.0
 const _GAIT_SETTLE : float = 8.0
+const HIT_FLASH_BOOST : float = 2.5   ## emission added at peak of a damage flash
 
 var _anim_t      : float = 0.0
 var _anim_last_p : Vector2 = Vector2(INF, INF)
@@ -109,7 +111,7 @@ func _animate(delta: float) -> void:
 	## V4: hit-flash emission on damage
 	if _hit_flash > 0.0 and _mat != null:
 		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
-		_mat.emission_energy_multiplier = 0.5 * (1.0 + 2.5 * _hit_flash)   ## 0.5 is base emission for friendly units
+		_mat.emission_energy_multiplier = _base_emission + HIT_FLASH_BOOST * _hit_flash
 	if _mesh == null:
 		return
 	var moved : bool = _anim_last_p.is_finite() and _p.distance_squared_to(_anim_last_p) > 0.02
@@ -288,7 +290,9 @@ func _build_visual() -> void:
 			add_child(_mesh)
 			gmodel.position = Vector3.ZERO
 			_mesh.add_child(gmodel)
-			_mat = null   ## Rodin material kept; tint/hit-flash skipped for GLTF units (guarded)
+			## Per-instance material: keep Rodin textures, add subtle faction tint + flash channel.
+			_mat = ASSET_LOADER.prepare_unit_material(gmodel, data.color_hint)
+			_base_emission = _mat.emission_energy_multiplier if _mat != null else 0.0
 			return
 
 	## Body — small faction-colored box.
@@ -303,6 +307,7 @@ func _build_visual() -> void:
 		_SUBSTRATE.apply(m, data.faction_id, false)
 	_mesh.material_override = m
 	_mat = m   ## V4: for hit-flash
+	_base_emission = m.emission_energy_multiplier if m.emission_enabled else 0.0
 	## V6-lite: per-faction composed silhouette (parts share the material → tints apply).
 	UNIT_BODIES.compose(_mesh, data.faction_id if data != null else "", 18.0, m)
 	add_child(_mesh)

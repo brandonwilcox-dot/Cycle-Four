@@ -38,6 +38,7 @@ var _melee_timer : float = 0.0
 
 const BODY_SIZE  : float = 26.0   ## 3D body cube size (was a 24px square)
 const BODY_LIFT  : float = 14.0   ## mesh sits on the ground (half body + a touch)
+const HIT_FLASH_BOOST : float = 2.5   ## emission added at peak of a damage flash
 
 var _current_health   : float    = 0.0
 var _is_dead          : bool     = false
@@ -327,10 +328,11 @@ func _animate(delta: float) -> void:
 		_mesh.position.z = lerpf(_mesh.position.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.rotation.z = lerpf(_mesh.rotation.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.rotation.y = lerpf(_mesh.rotation.y, 0.0, minf(1.0, delta * _GAIT_SETTLE))
-	## Hit flash: the substrate emission flares on damage and re-settles.
-	if _hit_flash > 0.0 and _base_emission > 0.0 and _mat != null:
+	## Hit flash: emission flares on damage and re-settles. Additive so it works both for
+	## substrate-lit procedural bodies and GLTF units whose resting emission may be 0.
+	if _hit_flash > 0.0 and _mat != null:
 		_hit_flash = maxf(0.0, _hit_flash - delta * 4.0)
-		_mat.emission_energy_multiplier = _base_emission * (1.0 + 2.5 * _hit_flash)
+		_mat.emission_energy_multiplier = _base_emission + HIT_FLASH_BOOST * _hit_flash
 
 func set_debuff(speed_mult: float) -> void:
 	if data != null and data.status_immune:
@@ -594,7 +596,9 @@ func _build_visual() -> void:
 			add_child(_mesh)
 			model.position = Vector3.ZERO
 			_mesh.add_child(model)
-			_mat = null   ## Rodin material kept as-is; tint/hit-flash skipped for GLTF units (guarded)
+			## Per-instance material: keep Rodin textures, add subtle faction tint + a flash channel.
+			_mat = ASSET_LOADER.prepare_unit_material(model, _base_color)
+			_base_emission = _mat.emission_energy_multiplier if _mat != null else 0.0
 			return
 
 	## Fallback: use procedural bodies if GLTF load failed
