@@ -39,13 +39,44 @@ const OBSERVED_SATURATION : float = 0.35
 const OBSERVED_DRAIN_RATE : float = 0.45   ## saturation/sec toward observed
 const OBSERVED_RECOVER_RATE : float = 0.25 ## saturation/sec back to the normal grade
 
+## E1 biome light grades (environment-skinning-plan.md): keyed by MapGrid's biome index.
+## [key_color, key_energy, ambient_color, fog_color]
+const BIOME_LIGHT : Array = [
+	[Color(1.00, 0.93, 0.82), 1.15, Color(0.38, 0.45, 0.58), Color(0.10, 0.14, 0.22)],  ## verdant (baseline)
+	[Color(1.00, 0.86, 0.70), 1.05, Color(0.46, 0.42, 0.40), Color(0.14, 0.12, 0.11)],  ## ashen — dusty, warm-grey
+	[Color(0.90, 0.95, 1.00), 1.20, Color(0.36, 0.44, 0.64), Color(0.09, 0.13, 0.26)],  ## crystal — cold, clear
+	[Color(1.00, 0.82, 0.62), 1.10, Color(0.48, 0.40, 0.34), Color(0.15, 0.11, 0.08)],  ## rust — low amber sun
+]
+
+## Volumetric fog (E1): faint light-shafted haze at tactical pitch. Density is an
+## EXTINCTION PER UNIT — at pixel scale (fog length 4000) it must be tiny: 0.008 made an
+## opaque wall (optical depth 32 — the 2026-07-19 "map all hidden" bug). 0.0001 ≈ 15%
+## haze at tactical distance. Perf dial: set VOLUMETRIC false first if frames dip.
+const VOLUMETRIC          : bool = true
+const VOLUMETRIC_DENSITY  : float = 0.0001
+const VOLUMETRIC_LENGTH   : float = 4000.0   ## pixel scale — covers the tactical camera band
+
 var _env : Environment = null
 var _rig : Node = null   ## camera_rig group — fog fades out at galaxy zoom so the graph stays clear
+var _key : DirectionalLight3D = null
 
 func _ready() -> void:
 	name = "Atmosphere"
+	add_to_group("atmosphere")
 	_build_lights()
 	_build_environment()
+
+## E1: grade the light rig for the territory's biome (called by MapGrid on map refresh).
+func set_biome(idx: int) -> void:
+	var b : Array = BIOME_LIGHT[clampi(idx, 0, BIOME_LIGHT.size() - 1)]
+	if _key != null:
+		_key.light_color = b[0]
+		_key.light_energy = b[1]
+	if _env != null:
+		_env.ambient_light_color = b[2]
+		_env.fog_light_color = b[3]
+		if VOLUMETRIC:
+			_env.volumetric_fog_albedo = b[3].lightened(0.35)
 
 func _build_lights() -> void:
 	var key : DirectionalLight3D = DirectionalLight3D.new()
@@ -56,7 +87,9 @@ func _build_lights() -> void:
 	key.shadow_enabled = true
 	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DIST
 	key.directional_shadow_blend_splits = true
+	key.light_volumetric_fog_energy = 1.0   ## E1: the key carves shafts through the haze
 	add_child(key)
+	_key = key
 
 	var fill : DirectionalLight3D = DirectionalLight3D.new()
 	fill.name = "FillLight"
@@ -94,6 +127,15 @@ func _build_environment() -> void:
 	_env.fog_sky_affect = 0.0
 	_env.fog_aerial_perspective = 0.5
 
+	## E1 volumetric haze: soft light shafts at tactical pitch (fades with the exp fog).
+	if VOLUMETRIC:
+		_env.volumetric_fog_enabled = true
+		_env.volumetric_fog_density = VOLUMETRIC_DENSITY
+		_env.volumetric_fog_length = VOLUMETRIC_LENGTH
+		_env.volumetric_fog_albedo = FOG_COLOR.lightened(0.35)
+		_env.volumetric_fog_emission_energy = 0.0
+		_env.volumetric_fog_sky_affect = 0.0
+
 	_env.ssao_enabled = true
 	_env.ssao_radius = SSAO_RADIUS
 	_env.ssao_intensity = SSAO_INTENSITY
@@ -118,8 +160,12 @@ func _process(delta: float) -> void:
 		_rig = get_tree().get_first_node_in_group("camera_rig")
 		if _rig == null:
 			return
-	var target : float = 0.0 if bool(_rig.call("is_galaxy_zoom")) else FOG_DENSITY
+	var galaxy : bool = bool(_rig.call("is_galaxy_zoom"))
+	var target : float = 0.0 if galaxy else FOG_DENSITY
 	_env.fog_density = move_toward(_env.fog_density, target, FOG_FADE_RATE * delta)
+	if VOLUMETRIC:
+		var vt : float = 0.0 if galaxy else VOLUMETRIC_DENSITY
+		_env.volumetric_fog_density = move_toward(_env.volumetric_fog_density, vt, VOLUMETRIC_DENSITY * 1.5 * delta)
 	## V5.2 Ancient observation: color drains while a watcher is on the field, returns after.
 	var observed : bool = get_tree().get_first_node_in_group("ancients") != null
 	var sat_target : float = OBSERVED_SATURATION if observed else GRADE_SATURATION

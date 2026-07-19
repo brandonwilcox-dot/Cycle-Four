@@ -77,3 +77,29 @@ var role: int = 0
 ## Scout utility: >0 makes a friendly unit a stealth detector (joins the "detectors" group
 ## with this radius — the reveal-tier contract).
 @export var detector_radius: float = 0.0
+
+## U3 (units-land-plan) — T2/T3 shared systems. All auras apply automatically in radius
+## (anti-micro §6); a value of 0 means "this unit is not that kind of emitter".
+## Shield emitter (Bloom Mobile Shield / Architect Support-Shield Hybrid): grants tethered
+## allies a damage-absorbing shield buffer of `provides_shield` HP within `shield_radius`.
+@export var provides_shield: float = 0.0
+@export var shield_radius: float = 0.0
+## Regeneration aura (Bloom Regeneration Support — "living tech heals, it doesn't get fixed"):
+## heals allied friendly units `regen_aura` HP/s within `regen_radius`. Distinct from the
+## Bloom NODE regen (that's the garrison's maturity aura); this one is mobile and unit-driven.
+@export var regen_aura: float = 0.0
+@export var regen_radius: float = 0.0
+## Adaptive Assault (Bloom T3 — the maturation fantasy in one unit): gains a small PERMANENT
+## stat buff (+adapt_per_wave to damage & health, fraction) each wave it survives, capped at
+## `adapt_cap` stacks. Extends the evolve scaffolding without replacing it.
+@export var adapt_per_wave: float = 0.0
+@export var adapt_cap: int = 0
+## Mesh Siege on-death trick (one legible idea): an EMP pulse that stuns enemies within
+## `emp_radius` for `emp_stun` seconds when the unit dies. Surfaced VISUALLY, not via a wiki.
+@export var emp_on_death: bool = false
+@export var emp_radius: float = 0.0
+@export var emp_stun: float = 0.0
+## Mesh Deceiver (stealth decoy vs the reveal-tier system): while alive and undetected, cloaks
+## allied friendly units within `cloak_radius` — non-detector enemies can't acquire them.
+@export var cloak_ally: bool = false
+@export var cloak_radius: float = 0.0

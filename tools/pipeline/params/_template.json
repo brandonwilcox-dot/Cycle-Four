@@ -1,0 +1,58 @@
+{
+  "asset_id": "<faction>_<unit>_<variation>_<piece>",
+  "proven": false,
+  "mode": "B",
+  "faction": "architects | bloom | mesh",
+  "unit": "commander | line | scout | artillery",
+  "variation": 1,
+  "variation_name": "",
+  "slot": "head | torso | arm_l | arm_r | legs | extra  (Mode B only)",
+  "display_name": "",
+  "output_file": "",
+  "destination": "assets/models/parts/<faction>/<unit>/<slot>/  OR  assets/models/units/",
+  "wip_dir": "art/pipeline/<faction>/<unit>/var<variation>/",
+
+  "concept": {
+    "faction_anchor": "architects: Seraphim — sleek polished chrome, few jagged angles, thin light-channel | mesh: Cybran — angular spiky insectoid, near-black + electric blue | bloom: Aeon+biological — rounded sleek forms overgrown with tendrils/roots/buds",
+    "unit_role_phrase": "",
+    "variation_adjectives": "",
+    "negative_terms": "no text, no base plate, no weapons unless specified, no humanoid face",
+    "prompt": "",
+    "reference_images": []
+  },
+
+  "generation": {
+    "tool": "hyper3d_text",
+    "attempts": [],
+    "approved_attempt": null
+  },
+
+  "budgets": {
+    "tris": 12000,
+    "file_mb": 1.0,
+    "texture_px": 1024
+  },
+
+  "mesh": { "final_tris": null, "uv_repacked": null, "rebaked": null },
+
+  "rig": {
+    "required": false,
+    "clip_names": ["Idle", "Walk"],
+    "max_bones": 60
+  },
+
+  "engine": {
+    "asset_loader_scale": null,
+    "asset_loader_yaw": null,
+    "slot_anchor_offset": null,
+    "cosmetic_part_scale": null,
+    "variations_parts_entry": ""
+  },
+
+  "gates": {
+    "g1_concept": null, "g2_silhouette": null, "g3_mesh_qa": null,
+    "g4_lookdev": null, "g5_in_engine": null, "g6_contract": null, "g7_signoff": null
+  },
+
+  "notes": ""
+}

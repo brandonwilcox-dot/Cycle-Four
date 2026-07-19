@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Compiler"
+faction_id = "architects"
+tier = 3
+role = 6
+max_health = 320.0
+move_speed = 50.0
+damage_on_arrival = 30.0
+armor = 7.0
+armor_type = 0
+attack_damage = 24.0
+attack_range = 200.0
+attack_interval = 0.9
+resource_reward = 24.0
+spawn_cost = {}
+cooldown = 240.0
+color_hint = Color(0.3, 0.6, 1.0, 1.0)
+status_immune = true

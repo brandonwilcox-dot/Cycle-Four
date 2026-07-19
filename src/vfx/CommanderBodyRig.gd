@@ -21,6 +21,11 @@ const BIO_GREEN : Color = Color(0.45, 1.00, 0.50)
 const SIGNAL_BLUE : Color = Color(0.35, 0.75, 1.00)
 
 const _ASSET = preload("res://src/core/AssetLoader.gd")
+const _COSMETICS = preload("res://src/core/cosmetics/Cosmetics.gd")
+const WORLD3D = preload("res://src/core/World3D.gd")
+
+## Body scale for cosmetic part anchors (commander stands ~70 game units).
+const COSMETIC_PART_SCALE : float = 60.0
 
 ## Hand-modeled GLTF path (Blender). When a faction has a rigged commander model
 ## it replaces the procedural build; the walk animation is driven by movement.
@@ -31,6 +36,31 @@ var _walk_name : String           = ""
 var _idle_name : String           = ""
 const WALK_SPEED_SCALE : float = 0.75   ## lumbering cadence for a colossal mech
 const ANIM_BLEND       : float = 0.35   ## crossfade time (squares up on stop)
+
+## Torso aim-twist (GLTF rigs): the upper body tracks the Commander's aim/build target
+## up to ±45° off the leg line, so it can fire/build off-axis without turning in place.
+const TORSO_TWIST_MAX  : float = 0.7853981  ## 45° each way (90° total range)
+const TORSO_TWIST_RATE : float = 3.0        ## rad/s toward the target offset
+const TORSO_TWIST_SIGN : float = 1.0        ## flip to -1.0 if the twist tracks mirrored
+var _skel      : Skeleton3D = null
+var _torso_idx : int = -1
+var _torso_rest : Quaternion = Quaternion.IDENTITY
+var _twist     : float = 0.0
+
+## Charged-shot glow (GLTF rigs): fins + cannon lights ramp while the heavy shot winds up.
+var _fins_mat        : StandardMaterial3D = null
+var _fins_base_e     : float = 1.0
+var _cannon_mat      : StandardMaterial3D = null
+var _cannon_base_e   : float = 1.0
+var _charge_level    : float = 0.0   ## 0..1 windup (set_charge)
+var _flash           : float = 0.0   ## discharge flash, decays in _process
+## Engineering scan (GLTF rigs): fins wobble + pulse while the build beam rasters.
+var _fins_mi         : MeshInstance3D = null
+var _fins_center     : Vector3 = Vector3.ZERO   ## fins AABB centre, fins-local
+var _fins_idx        : int = -1
+var _fins_rest       : Quaternion = Quaternion.IDENTITY
+var _scan_active     : bool = false
+var _scan_phase      : float = 0.0
 
 var body_lift    : float = 42.0                    ## Y of the hull centre
 var pip_position : Vector3 = Vector3(6.0, 69.0, 0.0)
@@ -69,7 +99,22 @@ func setup(faction: String, body: MeshInstance3D, mat: Material) -> void:
 				_build_weaver()
 			_:
 				_build_fallback_mech()
+	_apply_cosmetics(faction)
 	_compute_muzzles()
+
+## Player customization (Cosmetics.gd — user://cosmetics.json). The rig is PLAYER-side
+## only (enemies have no Commander), so this never touches enemy readability.
+## Custom primary tints the body; glow recolors the procedural emission; authored parts
+## attach at their anchors (a non-stock torso replaces the GLTF body).
+func _apply_cosmetics(faction: String) -> void:
+	if _COSMETICS.uses_custom_colors(faction, "commander"):
+		if _use_gltf and _gltf_root != null:
+			_COSMETICS.tint_model(_gltf_root,
+				_COSMETICS.primary_color(faction, "commander", Color.WHITE))
+		elif _mat is StandardMaterial3D:
+			_COSMETICS.style_material(_mat as StandardMaterial3D, faction, "commander")
+	if _body != null:
+		_COSMETICS.attach_parts(_body, faction, "commander", COSMETIC_PART_SCALE, _gltf_root)
 
 ## -- GLTF commander (hand-modeled in Blender) -----------------------------------------
 ## Loads the rigged model as a child of _body, scaled to game units and oriented so its
@@ -109,8 +154,136 @@ func _try_build_gltf(faction: String) -> bool:
 			_walk_name = _anim.get_animation_list()[0]
 		if _idle_name == "":
 			_idle_name = _walk_name
+	## Torso twist: grab the skeleton + torso bone (not animated by Walk/Idle, so a
+	## per-frame pose write persists cleanly on top of the leg animation).
+	_skel = model.find_child("Skeleton3D", true, false) as Skeleton3D
+	if _skel != null:
+		_torso_idx = _skel.find_bone("torso")
+		if _torso_idx >= 0:
+			_torso_rest = _skel.get_bone_rest(_torso_idx).basis.get_rotation_quaternion()
+	## Charged-shot glow materials (duplicated so ramping never touches shared resources).
+	var fins_mi : MeshInstance3D = model.find_child("Fins", true, false) as MeshInstance3D
+	if fins_mi != null:
+		_fins_mi = fins_mi
+		var fa : AABB = fins_mi.get_aabb()
+		_fins_center = fa.position + fa.size * 0.5
+		if fins_mi.get_active_material(0) is StandardMaterial3D:
+			_fins_mat = (fins_mi.get_active_material(0) as StandardMaterial3D).duplicate()
+			_fins_base_e = _fins_mat.emission_energy_multiplier
+			fins_mi.material_override = _fins_mat
+	if _skel != null:
+		_fins_idx = _skel.find_bone("fins")
+		if _fins_idx >= 0:
+			_fins_rest = _skel.get_bone_rest(_fins_idx).basis.get_rotation_quaternion()
+			## Pre-express the measured fin edges in fins-bone-local space so the live
+			## bone pose (scan wobble / torso twist) carries the beam emitters with it.
+			var inv_rest : Transform3D = _skel.get_bone_global_rest(_fins_idx).affine_inverse()
+			_edge_local.clear()
+			for seg in FIN_EDGES_MODEL:
+				_edge_local.append([inv_rest * seg[0], inv_rest * seg[1]])
+	var can_mats : Array[MeshInstance3D] = []
+	for nm in ["Cannon_L", "Cannon_R"]:
+		var cmi : MeshInstance3D = model.find_child(nm, true, false) as MeshInstance3D
+		if cmi != null:
+			can_mats.append(cmi)
+	if not can_mats.is_empty() and can_mats[0].get_active_material(0) is StandardMaterial3D:
+		_cannon_mat = (can_mats[0].get_active_material(0) as StandardMaterial3D).duplicate()
+		_cannon_base_e = _cannon_mat.emission_energy_multiplier
+		for cmi in can_mats:
+			cmi.material_override = _cannon_mat
 	_use_gltf = true
 	return true
+
+## Charged-shot windup 0..1: fins blaze up, cannon side-lights brighten with them.
+func set_charge(t: float) -> void:
+	_charge_level = clampf(t, 0.0, 1.0)
+
+## The charged volley just fired — spike the glow hard, then decay (see _update_glow).
+func discharge() -> void:
+	_flash = 1.0
+
+## Engineering scan state: `phase` is the raster cycle 0..1 (wraps); drives the fins wobble.
+func set_scan(active: bool, phase: float) -> void:
+	_scan_active = active
+	_scan_phase = phase
+
+## Fin leading-edge segments, measured from the Cathedral fins geometry in Blender
+## (armature/model space, pre-scale; glTF axes: x lateral, y up, z forward).
+## Each entry is [edge_bottom, edge_top] — the beam sheet emits along this edge.
+const FIN_EDGES_MODEL : Array = [
+	[Vector3(0.590, 1.800, 0.120), Vector3(0.348, 2.574, -0.105)],    ## left fin
+	[Vector3(-0.588, 1.800, 0.120), Vector3(-0.346, 2.574, -0.105)],  ## right fin
+]
+var _edge_local : Array = []   ## FIN_EDGES_MODEL re-expressed fins-bone-local (setup)
+
+## World-space fin leading edges, following the LIVE fins bone pose (scan wobble,
+## torso twist, walk motion). Returns [[bot,top],[bot,top]] or [] when unavailable.
+func fin_edges() -> Array:
+	if _skel == null or _fins_idx < 0 or _edge_local.is_empty():
+		return []
+	var bone_xf : Transform3D = _skel.global_transform * _skel.get_bone_global_pose(_fins_idx)
+	var out : Array = []
+	for seg in _edge_local:
+		out.append([bone_xf * seg[0], bone_xf * seg[1]])
+	return out
+
+## World-space emitter points — one on EACH fin (upper-outer region of the pair),
+## so the construction beams triangulate onto the scanned structure.
+func fins_points() -> Array:
+	if _fins_mi != null and _fins_mi.is_inside_tree():
+		var fa : AABB = _fins_mi.get_aabb()
+		var c : Vector3 = fa.position + fa.size * 0.5
+		var lat : float = fa.size.x * 0.35          ## out toward each fin blade
+		var up  : float = fa.position.y + fa.size.y * 0.72   ## upper span of the fins
+		var xf : Transform3D = _fins_mi.global_transform
+		return [xf * Vector3(c.x + lat, up, c.z),
+				xf * Vector3(c.x - lat, up, c.z)]
+	var parent : Node = get_parent()
+	if parent is Node3D:
+		var p : Vector3 = (parent as Node3D).global_position + Vector3(0, 45.0, 0)
+		return [p, p]
+	return [global_position, global_position]
+
+## Merge every glow source into the fins/cannon materials + drive the fins scan wobble.
+func _update_glow(delta: float) -> void:
+	_flash = maxf(0.0, _flash - delta * 2.2)
+	var scan_pulse : float = 0.0
+	if _scan_active:
+		scan_pulse = 0.5 * (1.0 - cos(_scan_phase * TAU))
+	if _fins_mat != null:
+		_fins_mat.emission_energy_multiplier = _fins_base_e * \
+			(1.0 + 3.5 * _charge_level + 0.9 * scan_pulse + 6.0 * _flash)
+	if _cannon_mat != null:
+		_cannon_mat.emission_energy_multiplier = _cannon_base_e * \
+			(1.0 + 1.5 * _charge_level + 4.0 * _flash)
+	## Fins wobble: a slow sweeping nod while scanning, a sharp kick on discharge.
+	if _skel != null and _fins_idx >= 0:
+		var pitch : float = 0.0
+		var yaw   : float = 0.0
+		if _scan_active:
+			pitch = sin(_scan_phase * TAU) * 0.14
+			yaw   = sin(_scan_phase * TAU * 0.5) * 0.06
+		pitch += -0.22 * _flash   ## recoil snap on the heavy shot
+		_skel.set_bone_pose_rotation(_fins_idx,
+			_fins_rest * Quaternion(Vector3(1, 0, 0), pitch) * Quaternion(Vector3(0, 0, 1), yaw))
+
+## Upper-body aim tracking: ease the torso bone toward the Commander's aim offset.
+func _update_torso_twist(delta: float) -> void:
+	if _skel == null or _torso_idx < 0:
+		return
+	var parent : Node = get_parent()
+	var want : float = 0.0
+	if parent is Node3D and parent.has_method("aim_point"):
+		var aim : Vector2 = parent.call("aim_point")
+		if aim.is_finite():
+			var to : Vector2 = aim - WORLD3D.node_plane(parent)
+			if to.length_squared() > 1.0:
+				var desired : float = -atan2(to.y, to.x)
+				var offset  : float = wrapf(desired - (parent as Node3D).rotation.y, -PI, PI)
+				want = clampf(offset, -TORSO_TWIST_MAX, TORSO_TWIST_MAX)
+	_twist = move_toward(_twist, want, TORSO_TWIST_RATE * delta)
+	_skel.set_bone_pose_rotation(_torso_idx,
+		_torso_rest * Quaternion(Vector3.UP, _twist * TORSO_TWIST_SIGN))
 
 ## Crossfade Walk (while striding) <-> Idle (squared stance when stopped/turning).
 func _drive_gltf() -> void:
@@ -133,15 +306,29 @@ func _drive_gltf() -> void:
 ## the procedural bodies alike; the Commander re-orients them by its facing when it fires.
 func _compute_muzzles() -> void:
 	muzzles.clear()
+	var ref : Node = get_parent()   ## the Commander node — muzzles live in its local frame
+	if ref == null or not (ref is Node3D):
+		return
+	## GLTF rig: fire from the actual cannon blade TIPS (forward-lowest point of each
+	## cannon mesh's bounds in the Commander's frame) so tracers leave the muzzles.
+	if _use_gltf and _gltf_root != null:
+		for nm in ["Cannon_L", "Cannon_R"]:
+			var cmi : MeshInstance3D = _gltf_root.find_child(nm, true, false) as MeshInstance3D
+			if cmi == null or not cmi.is_inside_tree():
+				continue
+			var ca : AABB = _local_aabb_of(cmi, ref as Node3D)
+			muzzles.append(Vector3(
+				ca.position.x + ca.size.x,          ## forward-most (+X = facing)
+				ca.position.y + ca.size.y * 0.12,   ## near the low tip
+				ca.position.z + ca.size.z * 0.5))   ## each cannon centers on its own arm
+		if not muzzles.is_empty():
+			return
 	var mi : MeshInstance3D = null
 	if _use_gltf and _gltf_root != null:
 		mi = _ASSET.find_mesh_instance(_gltf_root)
 	elif _body != null and _body.mesh != null:
 		mi = _body
-	if mi == null:
-		return
-	var ref : Node = get_parent()   ## the Commander node — muzzles live in its local frame
-	if ref == null or not (ref is Node3D) or not mi.is_inside_tree():
+	if mi == null or not mi.is_inside_tree():
 		return
 	var la : AABB = _local_aabb_of(mi, ref as Node3D)
 	var c  : Vector3 = la.position + la.size * 0.5
@@ -334,6 +521,8 @@ func _process(delta: float) -> void:
 		return
 	if _use_gltf:
 		_drive_gltf()
+		_update_torso_twist(delta)
+		_update_glow(delta)
 		return
 	var parent : Node = get_parent()
 	var moving : bool = parent != null and parent.has_method("is_moving") and bool(parent.call("is_moving"))

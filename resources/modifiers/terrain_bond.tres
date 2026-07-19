@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitModifier" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitModifier.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "terrain_bond"
+display_name = "Rooted"
+kind = 1
+eligible_sub_paths = Array[String](["spiritual_tech"])
+health_mult = 1.0
+damage_mult = 1.2
+speed_mult = 1.0
+armor_bonus = 3.0
+cost_mult = 1.0
+effect_radius = 0.0

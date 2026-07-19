@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Mire-Beast"
+faction_id = "bloom"
+tier = 3
+role = 6
+max_health = 300.0
+move_speed = 48.0
+damage_on_arrival = 30.0
+armor = 4.0
+armor_type = 1
+attack_damage = 22.0
+attack_range = 170.0
+attack_interval = 1.0
+resource_reward = 24.0
+spawn_cost = {}
+cooldown = 240.0
+color_hint = Color(0.28, 0.7, 0.4, 1.0)
+status_immune = true
+ignores_terrain_penalty = true
+adapt_per_wave = 0.06
+adapt_cap = 6

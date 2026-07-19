@@ -162,12 +162,12 @@ func _ready() -> void:
 ##    existing squad members serve out their posting) --
 
 func set_production_role(role: String) -> void:
-	if role in FriendlyRosterScript.roles_for(_faction):
+	if role in FriendlyRosterScript.roles_for(_faction, FactionManager.active_sub_path):
 		_production_role = role
 		_garrison_unit   = FriendlyRosterScript.garrison_unit(_faction, role)
 
 func cycle_production_role() -> void:
-	var roles : Array = FriendlyRosterScript.roles_for(_faction)
+	var roles : Array = FriendlyRosterScript.roles_for(_faction, FactionManager.active_sub_path)
 	var idx : int = roles.find(_production_role)
 	set_production_role(roles[(idx + 1) % roles.size()])
 

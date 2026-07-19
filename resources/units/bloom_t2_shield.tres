@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Carapace"
+faction_id = "bloom"
+tier = 2
+role = 5
+max_health = 200.0
+move_speed = 50.0
+damage_on_arrival = 10.0
+armor = 3.0
+armor_type = 1
+attack_damage = 0.0
+resource_reward = 12.0
+spawn_cost = {}
+cooldown = 90.0
+color_hint = Color(0.3, 0.75, 0.5, 1.0)
+ignores_terrain_penalty = true
+provides_shield = 80.0
+shield_radius = 170.0

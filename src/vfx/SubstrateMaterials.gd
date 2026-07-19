@@ -59,6 +59,7 @@ static func apply(m: StandardMaterial3D, faction_id: String, animate: bool = tru
 			_emit(m, _tex("circuit"), Color(0.35, 0.75, 1.00), 1.3)
 			if animate:
 				_anim_mesh.append(weakref(m))
+	_apply_surface_detail(m, faction_id)
 	return m
 
 ## Drive the living substrates. Bloom bioluminescence breathes (slow, desynchronized —
@@ -86,7 +87,24 @@ static func _emit(m: StandardMaterial3D, tex: Texture2D, col: Color, energy: flo
 	m.uv1_triplanar = true
 	m.uv1_scale = Vector3.ONE * (1.0 / 44.0)   ## one pattern repeat ≈ 44 px of surface
 
-## -- code-generated pattern textures (cached; deterministic via PATTERN_SEED) --
+## Quiet micro-surface normals keep procedural primitives from reading as flat-colored plastic.
+## They share UV1 with the substrate treatment, so triplanar projection wraps every primitive.
+static func _apply_surface_detail(m: StandardMaterial3D, faction_id: String) -> void:
+	match faction_id:
+		"architects":
+			m.normal_scale = 0.16   ## polished stone/metal: sensed only in highlights
+			m.uv1_scale = Vector3.ONE * (1.0 / 28.0)
+		"bloom":
+			m.normal_scale = 0.55   ## soft cellular tissue
+		"mesh":
+			m.normal_scale = 0.32   ## restrained manufactured weave
+		_:
+			return
+	m.normal_enabled = true
+	m.normal_texture = _normal_tex(faction_id)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.uv1_triplanar = true
+
 
 static func _tex(kind: String) -> Texture2D:
 	if _tex_cache.has(kind):
@@ -99,10 +117,56 @@ static func _tex(kind: String) -> Texture2D:
 			_gen_veins(img)
 		"circuit":
 			_gen_circuit(img)
+	img.generate_mipmaps()
 	var tex : ImageTexture = ImageTexture.create_from_image(img)
 	_tex_cache[kind] = tex
 	return tex
 
+## Cached, deterministic tangent-space normals derived from faction-specific height fields.
+static func _normal_tex(faction_id: String) -> Texture2D:
+	var key : String = "normal_" + faction_id
+	if _tex_cache.has(key):
+		return _tex_cache[key]
+	var rng : RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = PATTERN_SEED + faction_id.hash()
+	var g1 : Array = _noise_grid(rng, 8)
+	var g2 : Array = _noise_grid(rng, 16)
+	var height := PackedFloat32Array()
+	height.resize(TEX_SIZE * TEX_SIZE)
+	for y in TEX_SIZE:
+		for x in TEX_SIZE:
+			var n : float = _sample_grid(g1, 8, x, y) * 0.68 + _sample_grid(g2, 16, x, y) * 0.32
+			var h : float = n
+			match faction_id:
+				"architects":
+					h = 0.5 + (n - 0.5) * 0.16
+				"bloom":
+					h = n
+				"mesh":
+					var trace : float = 1.0 if y % 16 == 0 else 0.0
+					var junction : float = 1.0 if x % 24 == 0 and y % 16 < 8 else 0.0
+					h = n * 0.30 + maxf(trace, junction) * 0.70
+			height[x + y * TEX_SIZE] = h
+	var slope : float = 4.0
+	match faction_id:
+		"architects": slope = 2.5
+		"bloom": slope = 5.5
+		"mesh": slope = 3.8
+	var img : Image = Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGB8)
+	for y in TEX_SIZE:
+		for x in TEX_SIZE:
+			var xp : int = (x + 1) % TEX_SIZE
+			var xm : int = (x - 1 + TEX_SIZE) % TEX_SIZE
+			var yp : int = (y + 1) % TEX_SIZE
+			var ym : int = (y - 1 + TEX_SIZE) % TEX_SIZE
+			var dx : float = height[xp + y * TEX_SIZE] - height[xm + y * TEX_SIZE]
+			var dy : float = height[x + yp * TEX_SIZE] - height[x + ym * TEX_SIZE]
+			var normal := Vector3(-dx * slope, -dy * slope, 1.0).normalized()
+			img.set_pixel(x, y, Color(normal.x * 0.5 + 0.5, normal.y * 0.5 + 0.5, normal.z))
+	img.generate_mipmaps()
+	var tex : ImageTexture = ImageTexture.create_from_image(img)
+	_tex_cache[key] = tex
+	return tex
 ## Architects: a clean orthogonal lattice — two seams per repeat, hairline-soft edges.
 static func _gen_seams(img: Image) -> void:
 	for y in TEX_SIZE:

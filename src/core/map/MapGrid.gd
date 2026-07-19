@@ -64,6 +64,18 @@ var _ground_mat    : ShaderMaterial = null
 var _data_img      : Image = null
 var _data_tex      : ImageTexture = null
 
+## E1 environment skinning (planning/environment-skinning-plan.md): per-territory biome
+## palette (seeded) + rock-outcrop scatter. Biome grades ground uniforms AND the atmosphere.
+const _TERRAIN_PROPS := preload("res://src/vfx/TerrainProps.gd")
+var _props : Node3D = null
+## [name, ground_tint, water_col, water_glow, sparkle, atmosphere-biome-index]
+const _BIOMES : Array = [
+	["verdant", Color(1.0, 1.0, 1.0), Color(0.045, 0.115, 0.185), Color(0.08, 0.22, 0.32), 0.0],
+	["ashen",   Color(1.06, 0.96, 0.86), Color(0.055, 0.095, 0.130), Color(0.10, 0.16, 0.20), 0.0],
+	["crystal", Color(0.86, 0.93, 1.14), Color(0.050, 0.105, 0.210), Color(0.10, 0.22, 0.40), 0.9],
+	["rust",    Color(1.16, 0.93, 0.76), Color(0.040, 0.130, 0.150), Color(0.06, 0.26, 0.26), 0.0],
+]
+
 ## V2b two-tier fog (playtest 2026-07-01): live line-of-sight, separate from permanent
 ## exploration. Cells are LIT only inside a friendly entity's sight circle; explored-but-
 ## unwatched ground drops to a dim "memory" (the ever-present dark — canon). Recomputed on
@@ -708,6 +720,21 @@ func _mark_circle(buf: PackedByteArray, center2: Vector2, radius_px: float) -> v
 
 const _GROUND_SHADER := preload("res://assets/shaders/ground_tiles.gdshader")
 
+## Explicit preloads make the PBR maps real editor dependencies, ensuring their 3D import
+## settings and mipmaps are available before the runtime-created ShaderMaterial uses them.
+const _GROUND_TEXTURES := {
+	"tex_soil_d": preload("res://assets/textures/ground/brown_mud_leaves_01_diff.jpg"),
+	"tex_soil_n": preload("res://assets/textures/ground/brown_mud_leaves_01_nor.jpg"),
+	"tex_soil_r": preload("res://assets/textures/ground/brown_mud_leaves_01_rough.jpg"),
+	"tex_rock_d": preload("res://assets/textures/ground/aerial_rocks_02_diff.jpg"),
+	"tex_rock_n": preload("res://assets/textures/ground/aerial_rocks_02_nor.jpg"),
+	"tex_rock_r": preload("res://assets/textures/ground/aerial_rocks_02_rough.jpg"),
+	"tex_grass_d": preload("res://assets/textures/ground/aerial_grass_rock_diff.jpg"),
+	"tex_grass_n": preload("res://assets/textures/ground/aerial_grass_rock_nor.jpg"),
+	"tex_grass_r": preload("res://assets/textures/ground/aerial_grass_rock_rough.jpg"),
+
+}
+
 ## Faction substrate creep for claimed ground (V2): pattern id + base tone + glow accent per
 ## faction (codex/11.3 palette — Architect amber crystalline / Bloom bioluminescent green /
 ## Mesh near-black electric blue). Default = the pre-V2 neutral green.
@@ -747,6 +774,14 @@ func _build_terrain() -> void:
 	_ground_mat.set_shader_parameter("map_cells", Vector2(COLS, ROWS))
 	_ground_mat.set_shader_parameter("cell_size", float(CELL_SIZE))
 	_ground_mat.set_shader_parameter("fog_color", _FOG_COL)
+	## E1b photoreal splat: PolyHaven 2K PBR scans (CC0) — soil / rock / grass layers.
+	for uniform_name : String in _GROUND_TEXTURES:
+		_ground_mat.set_shader_parameter(uniform_name, _GROUND_TEXTURES[uniform_name])
+	## Grid toggle (settings.cfg display/show_grid — Title screen Options): 0 = off.
+	var cfg := ConfigFile.new()
+	cfg.load("user://settings.cfg")
+	var show_grid : bool = bool(cfg.get_value("display", "show_grid", true))
+	_ground_mat.set_shader_parameter("grid_strength", 0.18 if show_grid else 0.0)
 	_terrain_mm.material_override = _ground_mat
 	_terrain_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_terrain_mm)
@@ -784,7 +819,32 @@ func _refresh_terrain() -> void:
 	if _ground_mat != null:
 		var tseed : float = float(int(map_data.map_seed) % 4096) if map_data != null else 0.0
 		_ground_mat.set_shader_parameter("terrain_seed", tseed)
+		_apply_biome_params()
 	_apply_faction_ground_params()
+	## E1 rock outcrops: rebuilt when the territory changes, fog-gated every refresh.
+	if map_data != null:
+		if _props == null:
+			_props = _TERRAIN_PROPS.new()
+			_props.name = "TerrainProps"
+			add_child(_props)
+		_props.call("sync", self, map_data)
+
+## E1 biome palette: territory seed → one of four looks, pushed to the ground shader and
+## the atmosphere (lighting grade). Decorrelated from terrain_seed via a bit shift.
+func _apply_biome_params() -> void:
+	var bidx : int = 0
+	if map_data != null:
+		bidx = (int(map_data.map_seed) >> 4) % _BIOMES.size()
+		if bidx < 0:
+			bidx += _BIOMES.size()
+	var b : Array = _BIOMES[bidx]
+	_ground_mat.set_shader_parameter("ground_tint", b[1])
+	_ground_mat.set_shader_parameter("water_col", b[2])
+	_ground_mat.set_shader_parameter("water_glow", b[3])
+	_ground_mat.set_shader_parameter("sparkle", float(b[4]))
+	var atmo : Node = get_tree().get_first_node_in_group("atmosphere")
+	if atmo != null and atmo.has_method("set_biome"):
+		atmo.call("set_biome", bidx)
 
 ## Pushes the active faction's substrate-creep look to the ground shader (cheap; runs per refresh
 ## so a faction selected mid-session — Academy commit, Continue — repaints claimed ground).

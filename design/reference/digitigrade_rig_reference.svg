@@ -1,0 +1,127 @@
+<svg viewBox="0 0 980 650" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect x="0" y="0" width="980" height="650" rx="16" fill="#F7F5F1"/>
+
+  <text x="490" y="35" text-anchor="middle" font-size="22" font-weight="700" fill="#2E2A26">Rig reference — how leg structure sets the bone chain</text>
+  <text x="490" y="57" text-anchor="middle" font-size="13.5" fill="#6E6862">A clean humanoid rig, then why a digitigrade leg's &#8220;backward knee&#8221; is really the ankle</text>
+
+  <!-- legend -->
+  <line x1="356" y1="73" x2="380" y2="73" stroke="#E87B2A" stroke-width="5" stroke-linecap="round"/>
+  <text x="386" y="77" font-size="11.5" fill="#6E6862">bone</text>
+  <circle cx="432" cy="73" r="5" fill="#FFFFFF" stroke="#B85E13" stroke-width="2"/>
+  <text x="442" y="77" font-size="11.5" fill="#6E6862">joint</text>
+  <line x1="500" y1="73" x2="524" y2="73" stroke="#DAD5CC" stroke-width="12" stroke-linecap="round"/>
+  <text x="532" y="77" font-size="11.5" fill="#6E6862">limb volume</text>
+
+  <line x1="330" y1="90" x2="330" y2="612" stroke="#E2DCD2" stroke-width="1.5"/>
+  <line x1="654" y1="90" x2="654" y2="612" stroke="#E2DCD2" stroke-width="1.5"/>
+
+  <!-- ============ PANEL 1: HUMANOID RIG ============ -->
+  <text x="175" y="110" text-anchor="middle" font-size="15" font-weight="650" fill="#2E2A26">Standard humanoid rig</text>
+  <text x="175" y="128" text-anchor="middle" font-size="12" fill="#6E6862">the baseline &#8220;correct rig&#8221;</text>
+
+  <circle cx="175" cy="148" r="17" fill="#DAD5CC"/>
+  <g stroke="#DAD5CC" stroke-linecap="round">
+    <line x1="175" y1="165" x2="175" y2="262" stroke-width="40"/>
+    <line x1="175" y1="192" x2="212" y2="238" stroke-width="18"/>
+    <line x1="212" y1="238" x2="230" y2="300" stroke-width="15"/>
+    <line x1="175" y1="192" x2="138" y2="238" stroke-width="18"/>
+    <line x1="138" y1="238" x2="120" y2="300" stroke-width="15"/>
+    <line x1="186" y1="266" x2="188" y2="376" stroke-width="24"/>
+    <line x1="188" y1="376" x2="185" y2="476" stroke-width="19"/>
+    <line x1="185" y1="476" x2="202" y2="502" stroke-width="14"/>
+    <line x1="164" y1="266" x2="162" y2="376" stroke-width="24"/>
+    <line x1="162" y1="376" x2="165" y2="476" stroke-width="19"/>
+    <line x1="165" y1="476" x2="148" y2="502" stroke-width="14"/>
+  </g>
+  <g stroke="#E87B2A" stroke-width="5.5" stroke-linecap="round">
+    <line x1="175" y1="130" x2="175" y2="163"/>
+    <line x1="175" y1="165" x2="175" y2="262"/>
+    <line x1="175" y1="190" x2="212" y2="238"/><line x1="212" y1="238" x2="230" y2="300"/>
+    <line x1="175" y1="190" x2="138" y2="238"/><line x1="138" y1="238" x2="120" y2="300"/>
+    <line x1="175" y1="262" x2="186" y2="376"/><line x1="186" y1="376" x2="185" y2="476"/><line x1="185" y1="476" x2="200" y2="500"/>
+    <line x1="175" y1="262" x2="164" y2="376"/><line x1="164" y1="376" x2="165" y2="476"/><line x1="165" y1="476" x2="150" y2="500"/>
+  </g>
+  <g fill="#FFFFFF" stroke="#B85E13" stroke-width="2">
+    <circle cx="175" cy="165" r="4.5"/><circle cx="175" cy="262" r="5"/>
+    <circle cx="212" cy="238" r="3.8"/><circle cx="230" cy="300" r="3.8"/>
+    <circle cx="138" cy="238" r="3.8"/><circle cx="120" cy="300" r="3.8"/>
+    <circle cx="186" cy="376" r="4.2"/><circle cx="185" cy="476" r="4.2"/>
+    <circle cx="164" cy="376" r="4.2"/><circle cx="165" cy="476" r="4.2"/>
+  </g>
+  <g text-anchor="middle" fill="#6E6862" font-size="11.5">
+    <text x="175" y="545">arms: shoulder&#8594;elbow&#8594;wrist</text>
+    <text x="175" y="562">legs: hip&#8594;knee&#8594;ankle&#8594;foot</text>
+    <text x="175" y="579">spine runs up the core</text>
+  </g>
+
+  <!-- ============ PANEL 2: PLANTIGRADE ============ -->
+  <text x="495" y="110" text-anchor="middle" font-size="15" font-weight="650" fill="#2E2A26">Plantigrade leg</text>
+  <text x="495" y="128" text-anchor="middle" font-size="12" fill="#6E6862">human — stands on the whole foot</text>
+  <line x1="365" y1="518" x2="638" y2="518" stroke="#B7B0A6" stroke-width="1.5" stroke-dasharray="5 5"/>
+
+  <g stroke="#DAD5CC" stroke-linecap="round">
+    <line x1="502" y1="168" x2="494" y2="318" stroke-width="36"/>
+    <line x1="494" y1="318" x2="491" y2="480" stroke-width="28"/>
+    <line x1="491" y1="480" x2="562" y2="513" stroke-width="22"/>
+    <line x1="491" y1="480" x2="470" y2="513" stroke-width="18"/>
+  </g>
+  <g stroke="#E87B2A" stroke-width="5" stroke-linecap="round">
+    <line x1="502" y1="168" x2="494" y2="318"/>
+    <line x1="494" y1="318" x2="491" y2="480"/>
+    <line x1="491" y1="480" x2="558" y2="512"/>
+  </g>
+  <g fill="#FFFFFF" stroke="#B85E13" stroke-width="2">
+    <circle cx="502" cy="168" r="5.5"/><circle cx="494" cy="318" r="5.5"/>
+    <circle cx="491" cy="480" r="5.5"/><circle cx="558" cy="512" r="4.2"/>
+  </g>
+  <g fill="#2E2A26" font-size="12.5">
+    <text x="536" y="172">Hip</text>
+    <text x="522" y="316">Knee</text>
+    <text x="516" y="474">Ankle</text>
+  </g>
+  <g text-anchor="middle" fill="#6E6862" font-size="11.5">
+    <text x="495" y="548">Bones: Thigh &#8594; Shin &#8594; Foot</text>
+    <text x="495" y="565">Ankle sits low; heel on the ground</text>
+  </g>
+
+  <!-- ============ PANEL 3: DIGITIGRADE ============ -->
+  <text x="807" y="110" text-anchor="middle" font-size="15" font-weight="650" fill="#2E2A26">Digitigrade leg</text>
+  <text x="807" y="128" text-anchor="middle" font-size="12" fill="#6E6862">cat, dog — and your mech — stands on toes</text>
+  <line x1="690" y1="522" x2="952" y2="522" stroke="#B7B0A6" stroke-width="1.5" stroke-dasharray="5 5"/>
+
+  <g stroke="#DAD5CC" stroke-linecap="round">
+    <line x1="770" y1="168" x2="822" y2="288" stroke-width="34"/>
+    <line x1="822" y1="288" x2="762" y2="432" stroke-width="26"/>
+    <line x1="762" y1="432" x2="830" y2="508" stroke-width="20"/>
+    <line x1="830" y1="508" x2="874" y2="513" stroke-width="14"/>
+  </g>
+  <g stroke="#E87B2A" stroke-width="5" stroke-linecap="round">
+    <line x1="770" y1="168" x2="822" y2="288"/>
+    <line x1="822" y1="288" x2="762" y2="432"/>
+    <line x1="762" y1="432" x2="830" y2="508"/>
+    <line x1="830" y1="508" x2="872" y2="512"/>
+  </g>
+  <g fill="#FFFFFF" stroke="#B85E13" stroke-width="2">
+    <circle cx="770" cy="168" r="5.5"/><circle cx="822" cy="288" r="5.5"/>
+    <circle cx="762" cy="432" r="5.5"/><circle cx="830" cy="508" r="4.6"/><circle cx="872" cy="512" r="4"/>
+  </g>
+  <g font-size="12.5" fill="#2E2A26">
+    <text x="838" y="284">Knee</text>
+    <text x="748" y="172" text-anchor="end">Hip</text>
+    <text x="884" y="512">Toe</text>
+  </g>
+  <text x="838" y="299" font-size="10.5" fill="#6E6862">(high, near body)</text>
+  <circle cx="762" cy="432" r="12" fill="none" stroke="#CE4A2F" stroke-width="2.2"/>
+  <line x1="700" y1="432" x2="748" y2="432" stroke="#CE4A2F" stroke-width="2"/>
+  <path d="M748 432 l-9 -4 l0 8 z" fill="#CE4A2F"/>
+  <text x="696" y="415" text-anchor="end" font-size="12.5" font-weight="700" fill="#CE4A2F">ANKLE (hock)</text>
+  <text x="696" y="431" text-anchor="end" font-size="10.5" fill="#CE4A2F">raised off the ground —</text>
+  <text x="696" y="445" text-anchor="end" font-size="10.5" fill="#CE4A2F">NOT a backward knee</text>
+  <g text-anchor="middle" fill="#6E6862" font-size="11.5">
+    <text x="807" y="548">Bones: Thigh &#8594; Shin &#8594; Foot &#8594; Toe</text>
+    <text x="807" y="565">Only the toes touch the ground</text>
+  </g>
+
+  <rect x="180" y="586" width="620" height="26" rx="13" fill="#EDE7DC"/>
+  <text x="490" y="603" text-anchor="middle" font-size="12" font-weight="600" fill="#2E2A26">Your ArchitectCommander uses the digitigrade chain: Thigh &#8594; Shin &#8594; Foot &#8594; Toe</text>
+</svg>

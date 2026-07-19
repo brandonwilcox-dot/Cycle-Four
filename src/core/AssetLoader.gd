@@ -57,15 +57,15 @@ const FACTION_COMMANDER_MODELS = {
 ## Per-faction import scale (Blender units -> game units). The hi-fi Architect mesh is ~1.42
 ## units tall (normalized) so it needs a bigger factor than the ~3.5-unit primitives.
 const FACTION_COMMANDER_SCALE = {
-	"architects": 38.6,   ## hi-fi Rodin v2 quad mesh (~1.889u tall -> ~73 game units)
+	"architects": 23.0,   ## Cathedral rigged assembly (~3.18u to wing tips -> ~73 game units)
 	"bloom": 38.5,        ## hi-fi Rodin mesh (~1.894u tall -> ~73 game units)
 	"mesh": 38.6,         ## hi-fi Rodin body (~1.891u tall -> ~73 game units; tentacles extend above)
 }
 
 ## Per-faction facing correction (degrees about Y): model's front -> game forward (+X).
-## Primitives face -Z (need -90); the hi-fi Architect faces +Z (needs +90). VERIFY in play.
+## Primitives face -Z (need -90); Rodin/Blender models authored facing -Y convert to glTF +Z (need +90).
 const FACTION_COMMANDER_YAW = {
-	"architects": 90.0,
+	"architects": 90.0,   ## Cathedral rigged assembly (Blender -Y front -> glTF +Z -> +X)
 	"bloom": 90.0,        ## hi-fi Rodin mesh faces +Z like the Architect (VERIFY in F3 play; flip if striding sideways)
 	"mesh": 90.0,         ## hi-fi mesh faces +Z like the other Rodin commanders (VERIFY in F2 play)
 }

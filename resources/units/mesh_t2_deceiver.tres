@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Mirage"
+faction_id = "mesh"
+tier = 2
+role = 1
+max_health = 90.0
+move_speed = 80.0
+damage_on_arrival = 8.0
+armor = 1.0
+armor_type = 2
+attack_damage = 0.0
+resource_reward = 12.0
+spawn_cost = {}
+cooldown = 90.0
+color_hint = Color(0.6, 0.2, 0.75, 1.0)
+stealth = true
+cloak_ally = true
+cloak_radius = 200.0

@@ -36,10 +36,32 @@ uniform vec2 commander_pos = vec2(-99999.0, -99999.0);
 uniform float height_amp : hint_range(0.0, 40.0) = 21.0;   // round 4: terrain read as flat
 uniform float water_level : hint_range(0.0, 1.0) = 0.34;
 
+// E1 biome palette (environment-skinning-plan.md): per-territory look, driven by MapGrid.
+uniform vec3 ground_tint : source_color = vec3(1.0, 1.0, 1.0);   // multiplies open ground
+uniform vec3 water_col : source_color = vec3(0.045, 0.115, 0.185);
+uniform vec3 water_glow : source_color = vec3(0.08, 0.22, 0.32);
+uniform float sparkle : hint_range(0.0, 1.5) = 0.0;      // crystalline glints on high ground
+
+// E1b photoreal pass: 3-layer PBR splat (PolyHaven 2K scans, CC0) — grass hugs the
+// waterline, soil owns the flats, rock takes heights + steep slopes. World-planar UVs.
+uniform sampler2D tex_soil_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_soil_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_soil_r : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_rock_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_rock_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_rock_r : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_grass_d : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_grass_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_grass_r : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float uv_scale = 0.0035;       // world px → texture uv (~4.5 cells per repeat)
+uniform float detail_strength : hint_range(0.0, 1.5) = 1.0;
+uniform float grid_strength : hint_range(0.0, 0.5) = 0.18;  // 0 = grid off (settings toggle)
+
 varying vec3 wpos;
 varying vec4 inst_col;
 varying float v_hn;     // terrain height noise 0..1
 varying float v_flat;   // 1 = open ground (may have relief/water), 0 = gameplay-flat
+varying float v_slope;  // terrain steepness 0..1 (drives the rock splat layer)
 
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -88,6 +110,7 @@ void vertex() {
 	float dhx = (hx * hx - relief * relief) * amp / e;
 	float dhz = (hz * hz - relief * relief) * amp / e;
 	NORMAL = normalize(vec3(-dhx, 1.0, -dhz));
+	v_slope = clamp(length(vec2(dhx, dhz)) * 4.0, 0.0, 1.0);
 }
 
 void fragment() {
@@ -99,20 +122,64 @@ void fragment() {
 	float pathness = data.b;
 	float lit_raw  = data.a;
 
-	// --- base: instance color + macro variation (paths stay smoother = readable corridors)
+	// --- E1b PBR splat: photoreal scanned ground, blended by height + slope ------------
 	float n = fbm(wpos.xz * 0.013);
-	vec3 base = inst_col.rgb * (1.0 + (n - 0.5) * mix(noise_strength, 0.10, pathness));
-	// Highlands catch a little more light; lowlands sit heavier.
-	base *= 1.0 + max(v_hn - water_level, 0.0) * 0.35 * v_flat;
+	vec2 puv = wpos.xz * uv_scale;
+	float h = v_hn - water_level;
+	float w_rock = clamp(smoothstep(0.10, 0.24, h) + v_slope * 1.6, 0.0, 1.0);
+	float w_grass = (1.0 - smoothstep(0.015, 0.075, h)) * (1.0 - w_rock);
+	float w_soil = clamp(1.0 - w_rock - w_grass, 0.0, 1.0);
+	vec3 alb1 = texture(tex_soil_d, puv).rgb * w_soil
+	          + texture(tex_rock_d, puv).rgb * w_rock
+	          + texture(tex_grass_d, puv).rgb * w_grass;
+	// Anti-tiling: a second 180-degree-rotated scale blended in by macro noise. Every
+	// PBR channel uses the same transform + blend so visible features and lighting agree.
+	vec2 puv2 = puv * -0.37 + vec2(11.3);
+	vec3 alb2 = texture(tex_soil_d, puv2).rgb * w_soil
+	          + texture(tex_rock_d, puv2).rgb * w_rock
+	          + texture(tex_grass_d, puv2).rgb * w_grass;
+	float anti_mix = clamp(fbm(wpos.xz * 0.004) * 1.2 - 0.2, 0.0, 1.0);
+	vec3 alb = mix(alb1, alb2, anti_mix);
+	vec3 nrm1 = (texture(tex_soil_n, puv).rgb * 2.0 - 1.0) * w_soil
+	          + (texture(tex_rock_n, puv).rgb * 2.0 - 1.0) * w_rock
+	          + (texture(tex_grass_n, puv).rgb * 2.0 - 1.0) * w_grass;
+	vec3 nrm2 = (texture(tex_soil_n, puv2).rgb * 2.0 - 1.0) * w_soil
+	          + (texture(tex_rock_n, puv2).rgb * 2.0 - 1.0) * w_rock
+	          + (texture(tex_grass_n, puv2).rgb * 2.0 - 1.0) * w_grass;
+	// The secondary UV is rotated 180 degrees, so rotate its tangent-space XY normal too.
+	nrm2.xy *= -1.0;
+	vec3 nrm = normalize(mix(normalize(nrm1), normalize(nrm2), anti_mix));
+	vec3 nrm_encoded = nrm * 0.5 + 0.5;
+	float rgh1 = texture(tex_soil_r, puv).r * w_soil
+	           + texture(tex_rock_r, puv).r * w_rock
+	           + texture(tex_grass_r, puv).r * w_grass;
+	float rgh2 = texture(tex_soil_r, puv2).r * w_soil
+	           + texture(tex_rock_r, puv2).r * w_rock
+	           + texture(tex_grass_r, puv2).r * w_grass;
+	float rgh = mix(rgh1, rgh2, anti_mix);
+
+	// paths/spawns/base keep the flat readable corridor style; open ground gets the scans
+	vec3 path_col = inst_col.rgb * (1.0 + (n - 0.5) * 0.10);
+	vec3 terr_col = alb * ground_tint * (1.0 + (n - 0.5) * noise_strength * detail_strength);
+	terr_col *= 1.0 + max(h, 0.0) * 0.30;   // highlands catch more light
+	float gmix = v_flat;
+	vec3 base = mix(path_col, terr_col, gmix);
+
+	vec3 cam = INV_VIEW_MATRIX[3].xyz;
+	float grid_fade = 1.0 - smoothstep(grid_near, grid_far, distance(cam, wpos));
 
 	// Water mask first: creep and grid never draw over water (claiming keeps the pool).
-	float water = smoothstep(water_level, water_level - 0.05, v_hn) * v_flat;
+	float water = (1.0 - smoothstep(water_level - 0.05, water_level, v_hn)) * v_flat;
+	vec3 water_nrm = vec3(0.5, 0.5, 1.0);
 
 	// --- claimed territory: faction substrate creep with a soft, noisy frontier
 	float creep = smoothstep(0.30, 0.72, claimed + (fbm(wpos.xz * 0.03 + vec2(53.1)) - 0.5) * 0.45) * (1.0 - water);
 	vec3 emis = vec3(0.0);
 	if (creep > 0.001) {
-		base = mix(base, claim_base * (0.85 + 0.3 * n), creep * 0.85);
+		float claim_luma = max(dot(claim_base, vec3(0.3333)), 0.05);
+		vec3 claim_tint = claim_base / claim_luma;
+		vec3 claim_surface = base * mix(vec3(1.0), claim_tint, 0.48) * (0.92 + 0.16 * n);
+		base = mix(base, claim_surface, creep * 0.78);
 		float pat = 0.0;
 		if (creep_pattern == 0) {
 			// Architects: engineered crystalline seams — straight lines on the half-cell
@@ -136,20 +203,37 @@ void fragment() {
 	}
 
 	// --- grid lines: a planning tool, not terrain — fade out as the camera pulls back
-	vec3 cam = INV_VIEW_MATRIX[3].xyz;
-	float grid_fade = 1.0 - smoothstep(grid_near, grid_far, distance(cam, wpos));
 	vec2 gc = abs(fract(wpos.xz / cell_size) - 0.5);
 	float line = smoothstep(0.458, 0.486, max(gc.x, gc.y));
 	float flat_ground = 1.0 - smoothstep(0.02, 0.10, max(v_hn - water_level, 0.0) * v_flat);
-	base *= 1.0 - line * 0.18 * grid_fade * (1.0 - water) * flat_ground;
+	base *= 1.0 - line * grid_strength * grid_fade * (1.0 - water) * flat_ground;
 
 	// --- water: pooled lowlands (visual only — the sim is untouched). Animated ripple with a
 	// faint emissive sparkle so it still reads inside the fog tiers. Claim-proof.
 	if (water > 0.001) {
 		float ripple = fbm(wpos.xz * 0.05 + vec2(TIME * 0.22, TIME * 0.15));
-		vec3 wcol = vec3(0.045, 0.115, 0.185) * (0.85 + 0.5 * ripple);
+		float ripple_x = fbm((wpos.xz + vec2(1.5, 0.0)) * 0.05 + vec2(TIME * 0.22, TIME * 0.15));
+		float ripple_z = fbm((wpos.xz + vec2(0.0, 1.5)) * 0.05 + vec2(TIME * 0.22, TIME * 0.15));
+		vec3 wn = normalize(vec3((ripple - ripple_x) * 2.6, (ripple - ripple_z) * 2.6, 1.0));
+		water_nrm = wn * 0.5 + 0.5;
+		vec3 wcol = water_col * (0.85 + 0.5 * ripple);
 		base = mix(base, wcol, water);
-		emis = mix(emis, vec3(0.08, 0.22, 0.32) * smoothstep(0.60, 0.74, ripple), water);
+		emis = mix(emis, water_glow * smoothstep(0.60, 0.74, ripple), water);
+	}
+	// E1 shoreline: a light foam band where ground meets water, gently animated.
+	float shore = (1.0 - smoothstep(water_level + 0.008, water_level + 0.045, v_hn)) * (1.0 - water) * v_flat;
+	if (shore > 0.001) {
+		float foam = smoothstep(0.45, 0.75, fbm(wpos.xz * 0.09 + vec2(TIME * 0.10, -TIME * 0.07)));
+		base = mix(base, base * 1.35 + water_col * 0.4, shore * 0.35);
+		emis += water_glow * foam * shore * 0.35;
+	}
+	// E1 crystalline sparkle (Crystal biome): rare shimmering glints on high open ground.
+	if (sparkle > 0.001) {
+		vec2 gcell = floor(wpos.xz / 9.0);
+		float gl = step(0.986, hash12(gcell));
+		float shim = 0.5 + 0.5 * sin(TIME * 2.6 + hash12(gcell + 7.0) * 6.28);
+		emis += vec3(0.55, 0.75, 1.0) * gl * shim * sparkle
+			* smoothstep(0.05, 0.25, v_hn - water_level) * v_flat * (1.0 - water);
 	}
 
 	// --- fog of war, three tiers ---
@@ -162,12 +246,22 @@ void fragment() {
 	float lit = smoothstep(0.30, 0.70, lit_raw + (fbm(wpos.xz * 0.025 + vec2(7.3)) - 0.5) * 0.30);
 
 	float luma = dot(base, vec3(0.3333));
-	vec3 memory_col = (mix(vec3(luma), base, 0.45) * 0.38) + fog_color * 0.35;
+	vec3 memory_col = (mix(vec3(luma), base, 0.68) * 0.52) + fog_color * 0.24;
 	vec3 seen = mix(memory_col, base, lit);
 	vec3 fogged = fog_color * (0.75 + 0.5 * n);
 
 	ALBEDO = mix(fogged, seen, explored);
 	EMISSION = emis * explored * (0.20 + 0.80 * lit);   // creep glows faintly from memory, fully when watched
-	ROUGHNESS = 1.0;
-	SPECULAR = 0.15;
+	// E1b: scanned normal/roughness detail on lit open ground (flat neutral elsewhere so
+	// paths, creep, water and fog keep their readable, non-bumpy look).
+	float close_detail = clamp(detail_strength * mix(0.45, 1.0, grid_fade), 0.0, 1.0);
+	float nmix = gmix * (1.0 - water) * (1.0 - creep * 0.22) * explored * close_detail;
+	vec3 final_nrm = mix(vec3(0.5, 0.5, 1.0), nrm_encoded, nmix);
+	final_nrm = mix(final_nrm, water_nrm, water * explored);
+	NORMAL_MAP = final_nrm;
+	NORMAL_MAP_DEPTH = 1.15;
+	float surface_rgh = mix(1.0, rgh, gmix * (1.0 - water));
+	surface_rgh = mix(surface_rgh, surface_rgh * 0.65 + 0.22, creep);
+	ROUGHNESS = mix(surface_rgh, 0.22, water);
+	SPECULAR = mix(0.15, 0.48, water);
 }

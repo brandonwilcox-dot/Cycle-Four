@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Warden-Shield"
+faction_id = "architects"
+tier = 2
+role = 5
+max_health = 180.0
+move_speed = 55.0
+damage_on_arrival = 12.0
+armor = 5.0
+armor_type = 0
+attack_damage = 8.0
+attack_range = 170.0
+attack_interval = 1.2
+resource_reward = 12.0
+spawn_cost = {}
+cooldown = 90.0
+color_hint = Color(0.4, 0.7, 1.0, 1.0)
+provides_shield = 60.0
+shield_radius = 160.0

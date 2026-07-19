@@ -20,7 +20,7 @@ const BALANCE    = preload("res://src/core/Balance.gd")
 
 const VISION_RADIUS         : int   = 3
 const SENSOR_RADIUS         : int   = 9
-const MOVE_BASE_SPEED       : float = 140.0
+const MOVE_BASE_SPEED       : float = 36.0   ## slowed to match the deliberate walk cadence (was 140; ~21.6 u/s effective after MOVE_SCALE)
 ## Deliberate, colossal-mech turning: the body swivels toward the heading at a limited
 ## rate, and striding is gated until it is roughly aligned (torso leads, then legs stride).
 const TURN_RATE_DEG        : float = 80.0    ## yaw degrees per second
@@ -39,8 +39,23 @@ const ATTACK_RANGE_PX       : float = VISION_RADIUS * 64.0
 const PRIMARY_INTERVAL      : float = 0.4
 const PRIMARY_DAMAGE        : float = 8.0
 
+## Charged shot — automatic heavy shot on a cycle (NOT a hotkey ability): the fins
+## visibly charge up over the windup, then the next primary volley hits much harder.
+const CHARGED_INTERVAL : float = 9.0    ## seconds between charged shots
+const CHARGED_WINDUP   : float = 2.2    ## fins/cannon glow ramp during the last stretch
+const CHARGED_MULT     : float = 4.0    ## damage multiplier on the charged volley
+var _charge_timer : float = 0.0
+
+## Last aim/build point — the body rig twists the torso toward this (±45°).
+var _aim_plane : Vector2 = Vector2.INF
+var _aim_hold  : float   = 0.0
+
 const ENGINEER_RANGE_PX   : float = 110.0
-const BUILD_RATE          : float = 50.0
+## 2026-07-19: slowed from 50 so construction paces the fins scan animation — a fresh
+## tower (90 HP of work) takes 4.5s = exactly TWO full SCAN_CYCLEs of the raster sweep.
+const BUILD_RATE          : float = 20.0
+const SCAN_CYCLE          : float = 2.25   ## seconds per full fins scan sweep
+var _scan_t : float = 0.0
 
 const MAX_HEALTH       : float = 300.0
 const HEALTH_BAR_W     : float = 40.0
@@ -66,8 +81,7 @@ var _hp_mat      : StandardMaterial3D = null
 var _select_ring : MeshInstance3D = null
 var _los_ring    : MeshInstance3D = null   ## flat ground ring at vision (claim) radius — shown when selected
 var _sensor_ring : MeshInstance3D = null   ## flat ground ring at sensor radius
-var _beam        : MeshInstance3D = null   ## 3D engineering beam (Commander → structure under build)
-var _beam_mat    : StandardMaterial3D = null
+var _beams       : Array[MeshInstance3D] = []   ## scan sheets (one per fin → structure)
 
 const LOS_RING_COLOR    : Color = Color(0.45, 0.95, 0.60, 0.32)
 const SENSOR_RING_COLOR : Color = Color(0.40, 0.70, 1.00, 0.22)
@@ -117,7 +131,18 @@ func _process(delta: float) -> void:
 		_primary_timer = interval
 		_try_primary_attack()
 
+	## Charged-shot cycle: accumulate, drive the fins/cannon glow through the windup,
+	## then the next volley (in _try_primary_attack) discharges it.
+	_charge_timer = minf(_charge_timer + delta, CHARGED_INTERVAL)
+	if _body_rig != null and _body_rig.has_method("set_charge"):
+		var wind : float = clampf((_charge_timer - (CHARGED_INTERVAL - CHARGED_WINDUP)) / CHARGED_WINDUP, 0.0, 1.0)
+		_body_rig.call("set_charge", wind)
+
+	_aim_hold = maxf(0.0, _aim_hold - delta)
 	_try_engineering(delta)
+	if _engineer_target != null and is_instance_valid(_engineer_target):
+		_aim_plane = WORLD3D.node_plane(_engineer_target)
+		_aim_hold = 0.5
 
 	if _move_queue.is_empty():
 		_is_striding = false
@@ -200,6 +225,11 @@ func is_moving() -> bool:
 ## Idle off this, so a pure in-place turn keeps the squared stance until it strides.
 func is_striding() -> bool:
 	return _is_striding and not _dead
+
+## Current aim/build point (plane coords) — the body rig twists the torso toward it,
+## clamped ±45°, so the Commander fires/builds off-axis without turning its legs.
+func aim_point() -> Vector2:
+	return _aim_plane if _aim_hold > 0.0 else Vector2.INF
 
 func move_command(world_pos: Vector2, append: bool) -> void:
 	if not append:
@@ -327,8 +357,15 @@ func _try_primary_attack() -> void:
 	var dmg : float = PRIMARY_DAMAGE * _damage_multiplier
 	if _ability_controller != null and _ability_controller.is_overdrive_active:
 		dmg *= _ability_controller.overdrive_damage_mult
+	## Charged volley: the fins finished winding up — this shot hits far harder.
+	var charged : bool = _charge_timer >= CHARGED_INTERVAL
+	if charged:
+		dmg *= CHARGED_MULT
+		_charge_timer = 0.0
 	var dt : int = Combat.faction_damage_type(FactionManager.active_faction)
 	var tpos : Vector2 = WORLD3D.node_plane(target)
+	_aim_plane = tpos
+	_aim_hold = 1.2
 	## Fire a tracer from each cannon arm (the rig exposes muzzle offsets); to_global folds in the
 	## Commander's facing so the blast leaves the arm cannons, not center mass. Fall back to center.
 	var mz : Array = []
@@ -341,9 +378,23 @@ func _try_primary_attack() -> void:
 			var mp : Vector2 = WORLD3D.to2(to_global(m))
 			Vfx.muzzle(mp, dt)
 			Vfx.bolt(mp, tpos, dt)
+			if charged:
+				Vfx.bolt(mp, tpos, dt)   ## double tracer — the heavy shot reads thicker
 	else:
 		Vfx.muzzle(_p, dt)
 		Vfx.bolt(_p, tpos, dt)   ## 3D tracer (replaces the old 2D shot flash)
+	if charged:
+		## Discharge event: fins flash + recoil snap (rig), muzzle bursts, a double
+		## impact ring at the target, and a camera kick — the heavy shot should be FELT.
+		if _body_rig != null and _body_rig.has_method("discharge"):
+			_body_rig.call("discharge")
+		for m in mz:
+			Vfx.death(WORLD3D.to2(to_global(m)), Color(0.55, 0.85, 1.00), 26.0)
+		Vfx.death(tpos, Color(0.35, 0.75, 1.00), 52.0)   ## electric-blue impact bloom
+		Vfx.death(tpos, Color(0.75, 0.92, 1.00), 88.0)   ## outer shockwave ring
+		var cam : Node = get_tree().get_first_node_in_group("camera_rig")
+		if cam != null and cam.has_method("add_trauma"):
+			cam.call("add_trauma", 0.3)
 	target.take_damage(dmg, dt)
 	EventBus.commander_attacked.emit()
 	if _ability_controller != null:
@@ -379,48 +430,84 @@ func _try_engineering(delta: float) -> void:
 		var rate : float = BUILD_RATE * FACTION_PERKS.build_rate_mult(FactionManager.active_faction)
 		if not bool(_engineer_target.call("receive_engineering", rate * delta)):
 			_engineer_target = null
+	## Fins scan cycle: phase advances only while actually engineering.
+	if _engineer_target != null:
+		_scan_t += delta
+	if _body_rig != null and _body_rig.has_method("set_scan"):
+		_body_rig.call("set_scan", _engineer_target != null, fmod(_scan_t / SCAN_CYCLE, 1.0))
 	_update_beam()
 
 ## 3D engineering beam — a thin emissive bar from the Commander to the structure it's building/repairing.
 ## Lives in the world (parent), updated each frame; hidden when idle.
+const _SCAN_SHEET_SHADER = preload("res://assets/shaders/scan_sheet.gdshader")
+
 func _ensure_beam() -> void:
-	if _beam != null:
+	if not _beams.is_empty():
 		return
-	_beam = MeshInstance3D.new()
-	var bx := BoxMesh.new()
-	bx.size = Vector3(5.0, 5.0, 1.0)   ## unit length along Z; scaled to the target distance
-	_beam.mesh = bx
-	_beam_mat = StandardMaterial3D.new()
-	_beam_mat.albedo_color = ENGINEER_LINE_COLOR
-	_beam_mat.emission_enabled = true
-	_beam_mat.emission = ENGINEER_LINE_COLOR
-	_beam_mat.emission_energy_multiplier = 3.0
-	_beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_beam.material_override = _beam_mat
-	_beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_beam.visible = false
+	## Barcode-scanner sheets: one light-plane per fin, fanned from the fin's leading
+	## edge to the scan point. Geometry is rebuilt per-frame (ImmediateMesh, world coords).
+	var smat := ShaderMaterial.new()
+	smat.shader = _SCAN_SHEET_SHADER
 	var parent : Node = get_parent()
-	if parent != null:
-		parent.add_child(_beam)
+	for i in 2:
+		var beam := MeshInstance3D.new()
+		beam.mesh = ImmediateMesh.new()
+		beam.material_override = smat
+		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		beam.visible = false
+		if parent != null:
+			parent.add_child(beam)
+		_beams.append(beam)
 
 func _update_beam() -> void:
-	if _beam == null:
+	if _beams.is_empty():
 		return
 	if _engineer_target == null or not is_instance_valid(_engineer_target):
-		_beam.visible = false
+		for beam in _beams:
+			beam.visible = false
 		return
-	var from3 : Vector3 = WORLD3D.to3(_p, 20.0)
-	var to3   : Vector3 = WORLD3D.to3(WORLD3D.node_plane(_engineer_target), 28.0)
-	var dist  : float   = from3.distance_to(to3)
-	_beam.global_position = (from3 + to3) * 0.5
-	if dist > 0.01:
-		_beam.look_at(to3, Vector3.UP)
-	_beam.scale = Vector3(1.0, 1.0, dist)
-	_beam.visible = true
+	## Barcode-scanner sheets: each fin's LEADING EDGE (live, bone-tracked) fans a
+	## striped light-plane onto a short vertical line at the scan point, which RASTERS
+	## the structure — sweeping laterally while climbing, like a fabricator pass.
+	var edges : Array = []
+	if _body_rig != null and _body_rig.has_method("fin_edges"):
+		edges = _body_rig.call("fin_edges")
+	if edges.is_empty():
+		var p3 : Vector3 = WORLD3D.to3(_p, 20.0)
+		edges = [[p3, p3 + Vector3(0, 18, 0)], [p3, p3 + Vector3(0, 18, 0)]]
+	var tplane : Vector2 = WORLD3D.node_plane(_engineer_target)
+	var phase : float = fmod(_scan_t / SCAN_CYCLE, 1.0)
+	var dir : Vector2 = (tplane - _p)
+	var perp : Vector2 = Vector2.ZERO
+	if dir.length_squared() > 0.01:
+		dir = dir.normalized()
+		perp = Vector2(-dir.y, dir.x)
+	var sweep_lat : float = sin(phase * TAU) * 18.0                    ## side-to-side pass
+	var sweep_h   : float = 6.0 + (1.0 - cos(phase * TAU)) * 0.5 * 34.0  ## climbs the structure
+	var to3 : Vector3 = WORLD3D.to3(tplane + perp * sweep_lat, sweep_h)
+	var tgt_bot : Vector3 = to3 - Vector3(0, 4.0, 0)   ## narrow target line the sheet converges to
+	var tgt_top : Vector3 = to3 + Vector3(0, 4.0, 0)
+	for i in _beams.size():
+		var beam : MeshInstance3D = _beams[i]
+		var seg : Array = edges[i] if i < edges.size() else edges[0]
+		var im : ImmediateMesh = beam.mesh as ImmediateMesh
+		beam.global_transform = Transform3D.IDENTITY   ## vertices in world space
+		im.clear_surfaces()
+		im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+		## quad: edge_bot(0,0) edge_top(0,1) tgt_top(1,1) tgt_bot(1,0)
+		im.surface_set_uv(Vector2(0, 0)); im.surface_add_vertex(seg[0])
+		im.surface_set_uv(Vector2(0, 1)); im.surface_add_vertex(seg[1])
+		im.surface_set_uv(Vector2(1, 1)); im.surface_add_vertex(tgt_top)
+		im.surface_set_uv(Vector2(0, 0)); im.surface_add_vertex(seg[0])
+		im.surface_set_uv(Vector2(1, 1)); im.surface_add_vertex(tgt_top)
+		im.surface_set_uv(Vector2(1, 0)); im.surface_add_vertex(tgt_bot)
+		im.surface_end()
+		beam.visible = true
 
 func _exit_tree() -> void:
-	if is_instance_valid(_beam):
-		_beam.queue_free()
+	for beam in _beams:
+		if is_instance_valid(beam):
+			beam.queue_free()
 
 func _find_structure_needing_work() -> Node:
 	var best : Node = null
@@ -484,15 +571,17 @@ func _build_visual() -> void:
 	_body_rig.call("setup", FactionManager.active_faction, _body, bmat)
 	_body.position = Vector3(0.0, float(_body_rig.get("body_lift")), 0.0)
 
-	## Centre pip — a small white cap on top.
-	var pip : MeshInstance3D = MeshInstance3D.new()
-	var sp : SphereMesh = SphereMesh.new()
-	sp.radius = 6.0
-	sp.height = 12.0
-	pip.mesh = sp
-	pip.position = _body_rig.get("pip_position")   ## atop this silhouette's head/crown
-	pip.material_override = _unlit(Color(1, 1, 1, 0.95))
-	add_child(pip)
+	## Centre pip — a small white cap on top (procedural mechs only; a rigged GLTF
+	## commander reads as the player by itself, and the pip looks like a stray ball).
+	if not bool(_body_rig.get("_use_gltf")):
+		var pip : MeshInstance3D = MeshInstance3D.new()
+		var sp : SphereMesh = SphereMesh.new()
+		sp.radius = 6.0
+		sp.height = 12.0
+		pip.mesh = sp
+		pip.position = _body_rig.get("pip_position")   ## atop this silhouette's head/crown
+		pip.material_override = _unlit(Color(1, 1, 1, 0.95))
+		add_child(pip)
 
 	## Flat ground selection ring — shown only while selected.
 	_select_ring = MeshInstance3D.new()

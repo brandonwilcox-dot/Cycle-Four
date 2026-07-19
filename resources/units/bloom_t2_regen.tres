@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+unit_name = "Verdant Nurse"
+faction_id = "bloom"
+tier = 2
+role = 4
+max_health = 160.0
+move_speed = 55.0
+damage_on_arrival = 8.0
+armor = 2.0
+armor_type = 1
+attack_damage = 0.0
+resource_reward = 12.0
+spawn_cost = {}
+cooldown = 90.0
+color_hint = Color(0.35, 0.85, 0.45, 1.0)
+ignores_terrain_penalty = true
+regen_aura = 6.0
+regen_radius = 180.0

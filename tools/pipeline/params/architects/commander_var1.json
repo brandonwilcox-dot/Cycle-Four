@@ -1,0 +1,58 @@
+{
+  "asset_id": "architects_commander_var1_torso",
+  "proven": false,
+  "mode": "B",
+  "faction": "architects",
+  "unit": "commander",
+  "variation": 1,
+  "variation_name": "Seraphic",
+  "slot": "torso",
+  "display_name": "Seraphic Torso",
+  "output_file": "seraphic_torso.glb",
+  "destination": "assets/models/parts/architects/commander/torso/",
+  "wip_dir": "art/pipeline/architects/commander/var1/",
+
+  "concept": {
+    "faction_anchor": "Seraphim aesthetic: sleek, polished, chrome; smooth continuous curved surfaces with almost no jagged angles; a single thin glowing amber light-channel tracing the form; lit-from-within polished marble warmth",
+    "unit_role_phrase": "the full torso/body of a towering hovering commander spire-mech, elegant vertical silhouette, crown-like upper structure, no legs (hovers)",
+    "variation_adjectives": "seraphic, angelic, luminous white-and-chrome, swept wing-blade shoulders, halo motif",
+    "negative_terms": "no text, no base plate, no weapons, no humanoid face, no jagged spikes, no dark gothic elements",
+    "prompt": "",
+    "reference_images": []
+  },
+
+  "generation": {
+    "tool": "hyper3d_text",
+    "attempts": [],
+    "approved_attempt": null
+  },
+
+  "budgets": {
+    "tris": 15000,
+    "file_mb": 1.5,
+    "texture_px": 1024
+  },
+
+  "mesh": { "final_tris": null, "uv_repacked": null, "rebaked": null },
+
+  "rig": {
+    "required": false,
+    "clip_names": [],
+    "max_bones": 0
+  },
+
+  "engine": {
+    "asset_loader_scale": null,
+    "asset_loader_yaw": null,
+    "slot_anchor_offset": "TUNE: Cosmetics.SLOT_ANCHORS torso — placeholder offsets, expect adjustment at G5",
+    "cosmetic_part_scale": "TUNE: CommanderBodyRig COSMETIC_PART_SCALE starts at 60",
+    "variations_parts_entry": "Cosmetics.VARIATIONS[\"architects\"][0].parts[\"commander\"][\"torso\"] = \"seraphic_torso\""
+  },
+
+  "gates": {
+    "g1_concept": null, "g2_silhouette": null, "g3_mesh_qa": null,
+    "g4_lookdev": null, "g5_in_engine": null, "g6_contract": null, "g7_signoff": null
+  },
+
+  "notes": "PILOT ASSET. Torso replaces the Commander base body (hides the Needle hifi/procedural rig visual). Verify against the existing architect_commander_hifi.glb scale before export. Optional follow-up in same variation: seraphic_fin.glb in slot 'extra' (Fins). Commander budget raised vs standard part budget (hero unit). Colors stay neutral in-texture — Seraphic preset colors come from the Cosmetics color channels (albedo/emission-color tint), so author textures in near-white/chrome."
+}

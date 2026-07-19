@@ -9,6 +9,138 @@ making any design decisions in code.
 
 ---
 
+## Session 2026-07-18 — UNIT CUSTOMIZER SHIPPED (core/15 lands on Faction Preview)
+
+User directive: a pre-launch unit customizer exposing designs playtesting can't reach
+(parts not unlockable/visible in game state), + a color palette beyond base colors, +
+scaffolding for three user-authored design variations per faction. Vision locked via Q&A:
+GLTF parts via the Blender pipeline; scope = Commander + T1 archetypes; swatches + free
+picker; variations = presets w/ freely-mixable parts; persistence = separate profile
+(`user://cosmetics.json`, survives New Game); PLAYER units only (enemy readability stock).
+
+- **`src/core/cosmetics/Cosmetics.gd`** (NEW, static/preload pattern) — the data layer:
+  slots head/torso/arm_l/arm_r/legs/**extra** (faction-named: Fins/Flora/Tentacles);
+  units commander/line/scout/artillery (`unit_key_for_role` maps UnitData.role);
+  3 color channels (primary/secondary/glow), 6 curated swatches/faction + FACTION_GLOW
+  defaults; 3 VARIATIONS presets/faction (Seraphic/Gilded/Obsidian, Verdant/Sporefall/
+  Mire, Signal/Ember/Ghost — colors now, `parts` dicts fill as the user authors);
+  part discovery scans `assets/models/parts/<faction>/<unit>/<slot>/*.glb` (.remap-safe
+  for exports; see `assets/models/parts/README.md` for authoring rules); profile
+  auto-saves to user://cosmetics.json on every change. Semantics: non-stock TORSO
+  replaces the base body (hides it); other slots attach at `SLOT_ANCHORS` (placeholder
+  offsets — tune as parts land); secondary tints attached parts.
+- **FactionPreview.gd REWRITTEN into the customizer** (its designated core/15 home):
+  turntable stage now shows Commander + LINE/SCOUT/ARTILLERY with cosmetics applied
+  live; right-side panel = unit selector / variation presets / part cyclers (◀ ▶, shows
+  "Stock (no parts yet)" until .glb files exist) / "Use custom colors" + per-channel
+  swatch rows + free ColorPickerButton / Reset This Unit. Everything available
+  regardless of game state — that's the point.
+- **Battle wiring:** `FriendlyUnit._build_visual` — custom primary drives GLTF tint
+  (CUSTOM_TINT_STRENGTH 0.55, stronger than the 0.28 faction tint so it reads) or
+  procedural albedo via `style_material` (also recolors substrate emission = glow
+  channel); parts attach to the gait pivot. `CommanderBodyRig._apply_cosmetics` (called
+  from setup): tint_model on the hifi GLB / style_material on procedural rigs + part
+  attach (COSMETIC_PART_SCALE 60). Enemy `Unit.gd` untouched. Hit-flash/hijack/stealth
+  intact (colors write albedo/emission-color only, never energy/texture).
+- **Verified:** FactionPreview MCP run clean (full stage + panel build, zero SCRIPT
+  ERRORs); Battle3D MCP boot clean (FriendlyUnit/CommanderBodyRig recompiled; only
+  standing baseline warnings). No new class_name → no import-cache gotcha.
+- **⚠ EXES NOT RE-EXPORTED** (no Windows shell this session) — run `.\tools\export.ps1`
+  after the hand playtest.
+- **Playtest checklist:** Title → Faction Preview: cycle factions; select each unit;
+  toggle custom colors + pick a swatch → stage repaints; apply each variation preset;
+  restart game → choices persisted; start a battle → Commander + garrison units wear the
+  custom colors, enemies stock; hijacked enemy still tints cyan; hit-flash still reads.
+  Drop a test .glb under assets/models/parts/... , editor-import once, confirm the part
+  cycler shows it + it attaches on the stage and in battle.
+
+---
+
+## Session 2026-07-17 (2) — U4 SHIPPED: HERESY MODIFIER LAYER (units-land-plan COMPLETE)
+
+The Option B seam, expressed only as mechanics and **never captioned in-game** (canon rule #1).
+Final phase — the whole units-land plan (U0–U5) is now shipped. A heretic sub-path grants its
+army one borrowed-mechanic modifier; orthodox paths grant nothing and stay clean.
+
+- **Three heretic `UnitModifier` .tres** (`resources/modifiers/`, first-class): **terrain_bond**
+  (spiritual_tech), **wreckage_absorb** (assimilator), **dream_stabilize** (dreamer). Each gated by
+  `eligible_sub_paths`. Looked up army-wide via new `FriendlyRoster.heretic_modifier(sub_path)`.
+- **FriendlyUnit `_apply_modifiers`** gathers eligible `data.modifier_slots` (schema path live for
+  future bespoke per-unit mods) + the committed sub-path's heresy grant, then applies by `kind`:
+  · **dream_stabilize** — flat durability on spawn (health_mult 1.25 → `_bonus_max_hp`, +2 armor).
+    `cost_mult 0.85` carried but INERT (no friendly upkeep system exists).
+  · **terrain_bond** — the doc's "rooting mechanic that draws from the ground": bonus (dmg ×1.2,
+    +3 armor) engages while the unit holds position ≥1.2s, drops on movement. F1 will add the
+    favored-terrain gate; movement-root is the queryable-today form (terrain is shader-only —
+    no CPU height/water query exists).
+  · **wreckage_absorb** — NEW `src/entities/Husk.gd`: `Unit._die` drops a husk ONLY when the player
+    is assimilator (zero cost for every other path); an Assimilator unit consumes a husk in 130px
+    for +30 HP + the husk's resource. Husks self-expire (12s), dim field marker.
+- **Design decision:** the heresy expresses through MODIFIERS, not by restricting buildable units —
+  "the same tank down a different path" (§4). So U3 units stay `sub_path_lock=""` (no per-unit lock
+  authoring); the U3 sub-path role filter stays available for any future locked unit.
+- **HARD RULE honored:** modifiers are surfaced NOWHERE (no tooltip/dialogue/achievement). Mechanical
+  `display_name`s only ("Rooted"/"Assimilate"/"Steadfast"), and even those aren't shown.
+- Effective damage now = `attack_damage × damage_mult(node) × _self_dmg_mult(adaptive) ×
+  _mod_dmg_mult(heresy+rooting)`; armor = `data.armor + _mod_armor`; speed × `_mod_speed_mult`.
+- **Verified:** headless import clean; Battle3D boot 900 frames zero SCRIPT ERRORs; force-load shows
+  orthodox→none / each heresy→its modifier (correct dials + eligibility gate); husk loads. Both exes
+  re-exported 21:13. **Behavioral playtest pending.**
+- **Playtest checklist (U4):** as **Spiritual-Tech** Architects — a held unit visibly hits harder /
+  tankier, drops the bonus when it moves; as **Assimilator** Bloom — killing enemies leaves husks,
+  your units walk over them to heal + gain resource; as **Dreamer** Mesh — units are noticeably
+  tankier than networked (bigger HP bars, survive more). Confirm ORTHODOX paths (standard/purist/
+  networked) show none of this. **Nothing anywhere should name why the factions feel related.**
+- **Board after this:** units-land plan DONE. Open cross-cutting item **F1 (gameplay terrain)**
+  activates Bloom hover + Mesh terrain-LOS + terrain-bond's favored-terrain gate. Then the U3/U4
+  hand-playtest and balance tuning.
+
+---
+
+## Session 2026-07-17 — U3 SHIPPED: T2/T3 ROSTER + SHARED SYSTEMS (units-land-plan)
+
+Next phase in the plan's order (U0→U1→U2→U5→**U3**→U4). Nine new friendly-tuned T2/T3 units +
+three shared systems, all wired through the existing garrison role-cycle. Enemy-wave t2/t3 `.tres`
+left untouched (enemy defenders read `attack_damage`, so friendly tuning stays independent — new
+files instead, matching the T1 scout/artillery pattern).
+
+- **Shield system (new, shared):** a pull-based absorb BUFFER spent before HP. Shield/regen/cloak
+  emitters register into cheap dedicated groups (`shield_emitters`/`regen_emitters`/`cloak_emitters`);
+  each FriendlyUnit pulls its buffs every frame (`_update_support`) so emitters never track who
+  enters/leaves radius (anti-micro §6). Thin cyan shield strip above the HP bar. Consumers: Bloom
+  **Carapace** (pure Mobile Shield 80) + Architect **Warden-Shield** (shield 60 + real damage).
+- **Regen aura:** Bloom **Verdant Nurse** heals tethered allies 6 HP/s in radius — mobile, unit-driven,
+  distinct from the Bloom node-maturity aura. Non-combatant (guard keeps default attack stats OFF it).
+- **Heavy Assault:** Architect **Auger-Walker** (clean upgrade), Mesh **Render** (high-DPS, `requires_los`).
+- **T3:** Architect **Compiler** (versatile, status-immune); Bloom **Mire-Beast** (Adaptive — +6%/wave
+  dmg+HP, cap 6, via wave_ended; stored in `_self_dmg_mult`/`_bonus_max_hp` so the Bloom node's
+  per-tick `damage_mult` overwrite can't erase it); Mesh **Carver** (Siege — on-death **EMP** stuns
+  enemies in 140px for 2s + blue Vfx pulse, one legible trick).
+- **Deceiver:** Mesh **Mirage** cloaks tethered allies (and itself) — non-detector enemies skip
+  cloaked friendlies in target acquisition (`Unit._is_hidden_from_me`, both `_engaged_friendly` and
+  `_nearest_player_target`). Note: cloaked units still SHOOT but stop body-blocking — playtest the
+  trade-off + cloak_radius.
+- **Sub-path commit enforced:** `FriendlyRoster.roles_for(faction, sub_path)` filters by
+  `sub_path_lock` (the T2 commit point, core/17). Mechanism live; U3 units ship path-agnostic —
+  per-unit locks arrive with U4's heresy modifiers.
+- **Schema:** UnitData += provides_shield/shield_radius, regen_aura/regen_radius, adapt_per_wave/
+  adapt_cap, emp_on_death/emp_radius/emp_stun, cloak_ally/cloak_radius (append-only). No new
+  `class_name` (added fields to existing UnitData) — but a `--headless --import` was still run to
+  refresh the class cache before MCP (U0 gotcha).
+- **Verified:** headless import clean (scripts recompiled, zero parse errors); Battle3D headless boot
+  900 frames zero SCRIPT ERRORs; force-load of all 9 `.tres` confirms schema + roster resolution +
+  sub-path filter + T3 attack stats intact (Compiler 24 / Mire-Beast 22 / Carver 30, not clobbered).
+  Both exes re-exported 20:39. **Behavioral playtest pending** (see checklist).
+- **Playtest checklist (U3):** cycle a garrison through its full role list (Line→Scout→…→T3);
+  build a Bloom shield/regen garrison and watch a neighbor squad gain the cyan shield strip + regen;
+  Architect Warden-Shield node self-sustains under fire; Mire-Beast visibly stronger after surviving
+  waves; kill a Carver → EMP blue pulse stuns nearby enemies; Mirage cloak makes a cluster
+  unhittable by (non-detector) enemies while still firing; role choice survives save/Continue.
+- **Next:** U4 — heresy modifier layer (terrain-bond / wreckage-absorb / dream-stabilize; the
+  Option B seam, never captioned) + per-unit `sub_path_lock` authoring.
+
+---
+
 ## Session 2026-07-06 — U5 SHIPPED: FACTION WAVE TARGETING (units-land-plan; absorbs backlog J1)
 
 User confirmed the U0–U2 playtest is solid → proceeded to U5. **Waves now attack the way their

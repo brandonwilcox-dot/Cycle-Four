@@ -16,6 +16,7 @@ const _SUBSTRATE = preload("res://src/vfx/SubstrateMaterials.gd")
 const UNIT_BODIES = preload("res://src/vfx/UnitBodies.gd")
 const ASSET_LOADER = preload("res://src/core/AssetLoader.gd")
 const BALANCE = preload("res://src/core/Balance.gd")
+const HUSK_SCRIPT = preload("res://src/entities/Husk.gd")   ## U4 wreckage-absorb
 
 ## Injected by WaveSpawner before the node enters the scene tree.
 var data : UnitData = null
@@ -152,7 +153,7 @@ func _process(delta: float) -> void:
 	var target    : Vector2 = _waypoints[_wp_index]
 	var to_target : Vector2 = target - _p
 	var dist      : float   = to_target.length()
-	var step      : float   = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * delta
+	var step      : float   = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * BALANCE.UNIT_MOVE_SCALE * delta
 	if dist <= step or dist <= ARRIVE_DIST:
 		_set_plane(target)
 		_wp_index += 1
@@ -265,7 +266,7 @@ func _hunter_update(delta: float) -> bool:
 
 ## Unleashed straight-line movement (missions leave the carved paths, like defenders do).
 func _move_free(point: Vector2, delta: float) -> void:
-	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * delta
+	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * BALANCE.UNIT_MOVE_SCALE * delta
 	var dir  : Vector2 = point - _p
 	if dir.length() <= step:
 		_set_plane(point)
@@ -309,20 +310,22 @@ func _animate(delta: float) -> void:
 	var moved : bool = _anim_last_p.is_finite() and _p.distance_squared_to(_anim_last_p) > 0.02
 	_anim_last_p = _p
 	if moved:
+		## 2026-07-19: amplitudes + rates damped ~50% — with the hi-fi drone models and the
+		## slowed unit layer the old values read as bouncing, not walking.
 		match data.faction_id if data != null else "":
 			"architects":   ## glide — a calm engineered hover, no footfall
-				_anim_t += delta * 2.0
-				_mesh.position.y = BODY_LIFT + 1.5 + sin(_anim_t * TAU * 0.5) * 1.0
-			"bloom":        ## lope — heavy organic bound with pitch + waddle (playtest: was invisible)
-				_anim_t += delta * 3.6
-				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 7.5
-				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.16
-				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.09
-			"mesh":         ## skitter — fast shallow bounce + lateral shimmy (playtest: was invisible)
-				_anim_t += delta * 11.0
-				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 3.2
-				_mesh.rotation.z = sin(_anim_t * TAU) * 0.07
-				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 1.8
+				_anim_t += delta * 1.6
+				_mesh.position.y = BODY_LIFT + 1.5 + sin(_anim_t * TAU * 0.5) * 0.6
+			"bloom":        ## lope — heavy organic bound with pitch + waddle
+				_anim_t += delta * 2.6
+				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 3.5
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.10
+				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.05
+			"mesh":         ## skitter — fast shallow patter + lateral shimmy
+				_anim_t += delta * 7.0
+				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 1.4
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.04
+				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 0.9
 	else:
 		_mesh.position.y = lerpf(_mesh.position.y, BODY_LIFT, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.position.z = lerpf(_mesh.position.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))
@@ -386,7 +389,7 @@ func _hijack_update(delta: float) -> void:
 	var tpos : Vector2 = WORLD3D.node_plane(target)
 	var d : float = _p.distance_to(tpos)
 	if d > MELEE_ENGAGE_RANGE:
-		var step : float = data.move_speed * _speed_multiplier * delta
+		var step : float = data.move_speed * _speed_multiplier * BALANCE.UNIT_MOVE_SCALE * delta
 		var dir  : Vector2 = tpos - _p
 		_set_plane(_p + dir.normalized() * minf(step, dir.length()))
 	else:
@@ -413,12 +416,21 @@ func is_detectable() -> bool:
 		return true
 	return _is_detected
 
+## U3 — a cloaked friendly (under a Deceiver's aura) is invisible to non-detector enemies.
+func _can_detect_cloak() -> bool:
+	return is_in_group("detectors")
+
+func _is_hidden_from_me(t: Node) -> bool:
+	return t.has_method("is_cloaked") and bool(t.call("is_cloaked")) and not _can_detect_cloak()
+
 ## C2: nearest meleeable friendly (or commander/built wall) within range, or null.
 func _engaged_friendly() -> Node:
 	var best   : Node  = null
 	var best_d : float = MELEE_ENGAGE_RANGE
 	for f in get_tree().get_nodes_in_group("friendly_units"):
 		if not is_instance_valid(f):
+			continue
+		if _is_hidden_from_me(f):
 			continue
 		var d : float = _p.distance_to(WORLD3D.node_plane(f))
 		if d <= best_d:
@@ -456,6 +468,8 @@ func _nearest_player_target() -> Node:
 		for t in get_tree().get_nodes_in_group(grp):
 			if not is_instance_valid(t):
 				continue
+			if _is_hidden_from_me(t):
+				continue
 			var tpos : Vector2 = WORLD3D.node_plane(t)
 			if tpos.distance_to(_guard_home) > DEFENDER_AGGRO:
 				continue
@@ -466,7 +480,7 @@ func _nearest_player_target() -> Node:
 	return best
 
 func _move_toward_guard(point: Vector2, delta: float) -> void:
-	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * delta
+	var step : float = data.move_speed * _speed_multiplier * _pollen_slow() * BALANCE.MOVE_SCALE * BALANCE.UNIT_MOVE_SCALE * delta
 	var dir  : Vector2 = point - _p
 	var np   : Vector2
 	if dir.length() <= step:
@@ -559,10 +573,23 @@ func _die() -> void:
 	if not _is_defender:
 		WaveManager.report_enemy_killed()
 	EconomyManager.add_resource(FactionManager.get_primary_resource(), data.resource_reward)
+	## U4 — wreckage-absorb heresy: an Assimilator-Bloom field leaves husks for its army to consume.
+	## Gated on the sub-path so no husks are ever spawned for any other faction/path.
+	if FactionManager.active_sub_path == "assimilator":
+		_leave_husk()
 	EventBus.unit_died.emit({"unit": data.unit_name, "faction": data.faction_id})
 	## NOTE: 3D death VFX arrives in migration Stage 4; the 2D Vfx no-ops outside the 2D world.
 	Vfx.death(_p, Vfx.faction_color(data.faction_id), 22.0)
 	queue_free()
+
+## U4 — drop a husk carrying a fraction of this unit's reward for an Assimilator army to absorb.
+func _leave_husk() -> void:
+	var host : Node = get_parent()
+	if host == null:
+		return
+	var h : Node3D = HUSK_SCRIPT.new()
+	host.add_child(h)
+	h.call("setup", _p, data.resource_reward * 0.5)
 
 func _evolve() -> void:
 	var hp_ratio : float = _current_health / data.max_health

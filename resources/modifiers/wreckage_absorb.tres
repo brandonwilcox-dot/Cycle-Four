@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitModifier" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/entities/UnitModifier.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "wreckage_absorb"
+display_name = "Assimilate"
+kind = 2
+eligible_sub_paths = Array[String](["assimilator"])
+health_mult = 1.0
+damage_mult = 1.0
+speed_mult = 1.0
+armor_bonus = 0.0
+cost_mult = 1.0
+effect_radius = 130.0
