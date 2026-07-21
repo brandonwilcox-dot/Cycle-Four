@@ -20,7 +20,18 @@ enum Cell {
 	SPAWN_E  = 7,  ## eastern enemy spawn
 	WALL     = 8,  ## impassable terrain (future)
 	CLAIMED  = 9,  ## friendly territory (Phase E)
+	WATER    = 10, ## rivers/lakes — impassable to walking units, blocks pathing (F1)
 }
+
+## F1 gameplay terrain (environment-skinning-plan.md E2): water + forest are computed
+## per-cell from the SAME fbm field the ground shader displaces, so the logical grid
+## matches the visuals exactly. Water basins block movement; forest cuts vision/sensors.
+## WATER_LEVEL / TERRAIN_FREQ MUST match the ground_tiles.gdshader defaults.
+const WATER_LEVEL   : float = 0.40   ## fbm below this = water (raised for connected rivers/lakes)
+const TERRAIN_FREQ  : float = 0.006
+const FOREST_LEVEL  : float = 0.56   ## grove-noise above this = dense forest (concealment)
+const FOREST_FREQ   : float = 0.010
+const FOREST_VISION_MULT : float = 0.5   ## sight/sensor multiplier inside dense forest
 
 const CELL_SIZE : int = 64
 const COLS      : int = 60
@@ -63,6 +74,8 @@ var _terrain_dirty : bool = false
 var _ground_mat    : ShaderMaterial = null
 var _data_img      : Image = null
 var _data_tex      : ImageTexture = null
+var _water_img     : Image = null       ## F1: per-cell water mask (R8)
+var _water_tex     : ImageTexture = null
 
 ## E1 environment skinning (planning/environment-skinning-plan.md): per-territory biome
 ## palette (seeded) + rock-outcrop scatter. Biome grades ground uniforms AND the atmosphere.
@@ -152,6 +165,7 @@ func load_map_data(data: MapData) -> void:
 	map_data = data
 	for i in COLS * ROWS:
 		_cells[i] = data.cell_types[i] as int
+	_generate_terrain_features()   ## F1: carve water basins + build forest mask (before AStar)
 	_rebuild_astar()
 	_rebuild_friendly_astar()
 	## Phase 3: build the cell→zone reverse index. The index is runtime-only and
@@ -168,6 +182,78 @@ func load_map_data(data: MapData) -> void:
 	## D-1: give MilestoneManager a grid reference so it can query cell counts
 	## for the Bloom coverage condition and the Mesh depot-connectivity count.
 	MilestoneManager.set_map_grid(self)
+
+## F1 shared noise — replicates ground_tiles.gdshader hash12/vnoise/fbm exactly so the
+## logical water/forest masks line up with the displaced terrain pixels.
+static func _hash12(p: Vector2) -> float:
+	var p3 := Vector3(fposmod(p.x * 0.1031, 1.0), fposmod(p.y * 0.1031, 1.0), fposmod(p.x * 0.1031, 1.0))
+	var d : float = p3.dot(Vector3(p3.y, p3.z, p3.x) + Vector3(33.33, 33.33, 33.33))
+	p3 += Vector3(d, d, d)
+	return fposmod((p3.x + p3.y) * p3.z, 1.0)
+
+static func _vnoise(p: Vector2) -> float:
+	var i := Vector2(floor(p.x), floor(p.y))
+	var f := p - i
+	f = f * f * (Vector2(3.0, 3.0) - 2.0 * f)
+	return lerpf(lerpf(_hash12(i), _hash12(i + Vector2(1, 0)), f.x),
+		lerpf(_hash12(i + Vector2(0, 1)), _hash12(i + Vector2(1, 1)), f.x), f.y)
+
+static func _fbm(p: Vector2) -> float:
+	var v : float = 0.0
+	var a : float = 0.5
+	var q := p
+	for k in 4:
+		v += a * _vnoise(q)
+		q = q * 2.13 + Vector2(17.7, 17.7)
+		a *= 0.5
+	return v
+
+## Per-cell forest density 0..1 (grove noise). Public so entities can query concealment.
+var _forest : PackedFloat32Array = PackedFloat32Array()
+
+## F1: convert low-basin GROUND cells to WATER (impassable) and build the forest mask.
+## Only GROUND is touched — PATH/BASE/SPAWN corridors stay dry so every spawn keeps its
+## route to base (validated pre-water in MapGenerator). Water is kept off cells adjacent
+## to BASE so the FOB is never walled in.
+func _generate_terrain_features() -> void:
+	_forest = PackedFloat32Array()
+	_forest.resize(COLS * ROWS)
+	var tseed : float = float(int(map_data.map_seed) % 4096) if map_data != null else 0.0
+	var base_i : int = BASE_POS.x + BASE_POS.y * COLS
+	for row in ROWS:
+		for col in COLS:
+			var i : int = col + row * COLS
+			var wc := Vector2((float(col) + 0.5) * CELL_SIZE, (float(row) + 0.5) * CELL_SIZE)
+			var hn : float = _fbm(wc * TERRAIN_FREQ + Vector2(tseed, tseed))
+			## forest density from a coarser grove field (independent offset)
+			var grove : float = _fbm(wc * FOREST_FREQ + Vector2(tseed + 91.3, tseed - 47.1))
+			_forest[i] = clampf((grove - FOREST_LEVEL) / (1.0 - FOREST_LEVEL), 0.0, 1.0) if grove > FOREST_LEVEL else 0.0
+			## water only on open GROUND, never abutting the FOB
+			if _cells[i] == Cell.GROUND and hn < WATER_LEVEL:
+				if _cheby(i, base_i) > 1:
+					_cells[i] = Cell.WATER
+
+func _cheby(a: int, b: int) -> int:
+	@warning_ignore("integer_division")
+	var ar : int = a / COLS
+	@warning_ignore("integer_division")
+	var br : int = b / COLS
+	return maxi(absi((a % COLS) - (b % COLS)), absi(ar - br))
+
+## True if the cell at this world position is water (walking units can't enter).
+func is_water_world(world_pos: Vector2) -> bool:
+	var c := world_to_cell(world_pos)
+	return _cells[c.x + c.y * COLS] == Cell.WATER
+
+func is_water_cell(col: int, row: int) -> bool:
+	return get_cell(col, row) == Cell.WATER
+
+## Forest density 0..1 at a world position — entities scale vision/sensors by this.
+func forest_density_world(world_pos: Vector2) -> float:
+	if _forest.is_empty():
+		return 0.0
+	var c := world_to_cell(world_pos)
+	return _forest[c.x + c.y * COLS]
 
 func get_cell(col: int, row: int) -> int:
 	if col < 0 or col >= COLS or row < 0 or row >= ROWS:
@@ -584,6 +670,68 @@ func _all_spawns_connected() -> bool:
 ## Returns world-space waypoints (cell centres) leading from spawn_cell to base.
 ## Index 0 is the spawn cell itself -- units skip it (they start there).
 ## Returns empty array if no path exists.
+## F1: friendly-side route that AVOIDS water/obstacles. Returns world-space cell-centre
+## waypoints from the cell under `from_world` to the cell under `to_world` via the friendly
+## AStar (GROUND/CLAIMED/BASE — WATER excluded). Empty if either end is unreachable (e.g.
+## the destination is water); the caller then just holds. Snaps a water/blocked destination
+## to the nearest walkable cell so a click on a lake still routes to its shoreline.
+func get_friendly_path(from_world: Vector2, to_world: Vector2) -> Array[Vector2]:
+	var fc : Vector2i = world_to_cell(from_world)
+	var tc : Vector2i = world_to_cell(to_world)
+	var from_id : int = _cell_id(fc.x, fc.y)
+	if not _friendly_astar.has_point(from_id):
+		return []
+	var to_id : int = _cell_id(tc.x, tc.y)
+	if not _friendly_astar.has_point(to_id):
+		to_id = _nearest_friendly_point(tc)
+		if to_id < 0:
+			return []
+	var cell_pts : PackedVector2Array = _friendly_astar.get_point_path(from_id, to_id)
+	if cell_pts.size() < 2:
+		return []
+	## Raw path is orthogonal cell centres → the Commander staircased (N/S/E/W only). Smooth
+	## it with string-pulling: keep a waypoint only when the straight line from the last kept
+	## point to the next candidate would cross water. Result = any-angle movement around lakes.
+	var world_pts : Array[Vector2] = [from_world]
+	for k in range(1, cell_pts.size()):
+		world_pts.append(cell_to_world(int(cell_pts[k].x), int(cell_pts[k].y)))
+	var result : Array[Vector2] = []
+	var anchor : Vector2 = world_pts[0]
+	for k in range(1, world_pts.size()):
+		if k == world_pts.size() - 1:
+			result.append(world_pts[k])   # always keep the destination
+			break
+		## If a straight line from the anchor to the NEXT point clears water, the current
+		## point is redundant — skip it. Otherwise commit the current point as the new anchor.
+		if _segment_crosses_water(anchor, world_pts[k + 1]):
+			result.append(world_pts[k])
+			anchor = world_pts[k]
+	return result
+
+## Samples the segment a→b; true if any sample lands on a water cell (≈ every third of a cell).
+func _segment_crosses_water(a: Vector2, b: Vector2) -> bool:
+	var steps : int = maxi(1, int(a.distance_to(b) / (CELL_SIZE * 0.34)))
+	for s in range(1, steps + 1):
+		if is_water_world(a.lerp(b, float(s) / float(steps))):
+			return true
+	return false
+
+## Nearest walkable friendly-graph cell to `cell` (expanding ring search); -1 if none near.
+func _nearest_friendly_point(cell: Vector2i) -> int:
+	for radius in range(1, 8):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dy)) != radius:
+					continue
+				var c : int = cell.x + dx
+				var r : int = cell.y + dy
+				if c < 0 or c >= COLS or r < 0 or r >= ROWS:
+					continue
+				var id : int = _cell_id(c, r)
+				if _friendly_astar.has_point(id):
+					return id
+	return -1
+
 func get_path_to_base(spawn_cell: Vector2i) -> Array[Vector2]:
 	var from_id : int = _cell_id(spawn_cell.x, spawn_cell.y)
 	var to_id   : int = _cell_id(BASE_POS.x,   BASE_POS.y)
@@ -660,6 +808,7 @@ const _PATH_COL   : Color = Color(0.22, 0.22, 0.34)
 const _BASE_COL   : Color = Color(0.52, 0.42, 0.06)
 const _OBS_COL    : Color = Color(0.30, 0.22, 0.12)
 const _CLAIM_COL  : Color = Color(0.10, 0.34, 0.18)
+const _WATER_COL  : Color = Color(0.06, 0.14, 0.22)
 const _SPAWN_COL  : Color = Color(0.46, 0.11, 0.11)
 const _SPAWN_DIM  : Color = Color(0.25, 0.06, 0.06)
 const _FOG_COL    : Color = Color(0.035, 0.045, 0.065)
@@ -704,7 +853,12 @@ func _recompute_visibility() -> void:
 			## U2: scout units light farther than the squad default (detector_radius).
 			if grp == "friendly_units" and n.has_method("get_detector_radius"):
 				r = maxf(r, float(n.call("get_detector_radius")))
-			_mark_circle(next, n.call("plane_pos"), r)
+			## F1: an eye standing in dense forest sees less far (sensors disrupted).
+			var epos : Vector2 = n.call("plane_pos")
+			var fd : float = forest_density_world(epos)
+			if fd > 0.0:
+				r *= lerpf(1.0, FOREST_VISION_MULT, fd)
+			_mark_circle(next, epos, r)
 	if next != _visible:
 		_visible = next
 		_terrain_dirty = true
@@ -768,9 +922,15 @@ func _build_terrain() -> void:
 	_terrain_mm.multimesh = mm
 	_data_img = Image.create(COLS, ROWS, false, Image.FORMAT_RGBA8)
 	_data_tex = ImageTexture.create_from_image(_data_img)
+	## F1: per-cell water mask (R = 1 where the cell is WATER). filter_linear smooths the
+	## cell edges into organic shorelines, and — crucially — the SHADER draws water from
+	## THIS mask, so visual water == the impassable WATER cells exactly (no walk-on-water).
+	_water_img = Image.create(COLS, ROWS, false, Image.FORMAT_R8)
+	_water_tex = ImageTexture.create_from_image(_water_img)
 	_ground_mat = ShaderMaterial.new()
 	_ground_mat.shader = _GROUND_SHADER
 	_ground_mat.set_shader_parameter("map_tex", _data_tex)
+	_ground_mat.set_shader_parameter("water_tex", _water_tex)
 	_ground_mat.set_shader_parameter("map_cells", Vector2(COLS, ROWS))
 	_ground_mat.set_shader_parameter("cell_size", float(CELL_SIZE))
 	_ground_mat.set_shader_parameter("fog_color", _FOG_COL)
@@ -782,6 +942,7 @@ func _build_terrain() -> void:
 	cfg.load("user://settings.cfg")
 	var show_grid : bool = bool(cfg.get_value("display", "show_grid", true))
 	_ground_mat.set_shader_parameter("grid_strength", 0.18 if show_grid else 0.0)
+	_ground_mat.set_shader_parameter("water_level", WATER_LEVEL)   ## F1: visual water == logical water cells
 	_terrain_mm.material_override = _ground_mat
 	_terrain_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_terrain_mm)
@@ -813,7 +974,13 @@ func _refresh_terrain() -> void:
 			var pathness : float = 1.0 if (kind == Cell.PATH or kind == Cell.BASE or spawn_state.has(i)) else 0.0
 			var lit : float = 1.0 if (i < _visible.size() and _visible[i] == 1) else 0.0
 			_data_img.set_pixel(col, row, Color(revealed, claimed, pathness, lit))
+			## F1: water mask — the shader draws water ONLY here, so visuals match the
+			## impassable WATER cells exactly (no more walking over water that isn't blocked).
+			if _water_img != null:
+				_water_img.set_pixel(col, row, Color(1.0 if kind == Cell.WATER else 0.0, 0, 0))
 	_data_tex.update(_data_img)
+	if _water_tex != null:
+		_water_tex.update(_water_img)
 	## V6-lite terrain: seed the relief/water noise from the territory's map seed, so every
 	## world has its own geography (and a Continue regenerates the same one).
 	if _ground_mat != null:
@@ -871,6 +1038,8 @@ func _cell_color(i: int, spawn_state: Dictionary) -> Color:
 			return _OBS_COL
 		Cell.CLAIMED:
 			return _CLAIM_COL
+		Cell.WATER:
+			return _WATER_COL
 		_:
 			return _GROUND_COL
 
@@ -985,7 +1154,11 @@ func _rebuild_friendly_astar() -> void:
 ## intentionally excluded — those are enemy corridors. CLAIMED, GROUND, and BASE
 ## form the friendly traversal surface.
 func _is_friendly_traversable(cell_type: int) -> bool:
-	return cell_type == Cell.GROUND or cell_type == Cell.CLAIMED or cell_type == Cell.BASE
+	## Friendly/Commander movement: the whole field is walkable EXCEPT water and solid
+	## blockers. PATH/SPAWN cells (enemy lanes) MUST be included — excluding them fragments
+	## the friendly graph into islands separated by corridors, so routing around a lake
+	## returned no path and the Commander stalled at the shore (2026-07-21 fix).
+	return cell_type != Cell.WATER and cell_type != Cell.WALL and cell_type != Cell.OBSTACLE
 
 func _is_traversable(cell_type: int) -> bool:
 	## CLAIMED is intentionally excluded -- enemy AStar never walks through

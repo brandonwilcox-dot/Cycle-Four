@@ -30,6 +30,14 @@ respected (no props visible in unexplored fog), quiet-over-loud.
 
 ## Status
 
-- E1: SHIPPED 2026-07-19 (this session). Tuning dials: `MapGrid._BIOMES`,
-  `BattleAtmosphere.BIOME_LIGHT`, `TerrainProps.COUNT/SIZE`, shader `detail_strength`.
-- E2–E4: pending.
+- E1: SHIPPED 2026-07-19. Tuning dials: `MapGrid._BIOMES`, `BattleAtmosphere.BIOME_LIGHT`,
+  `TerrainProps.COUNT/SIZE`. ⚠ Volumetric density is extinction-per-unit — keep ~0.0001.
+- E1b (photoreal ground): SHIPPED 2026-07-19 — 3-layer PolyHaven PBR splat
+  (soil/rock/grass by height+slope), normal/roughness maps, anti-tiling, grid toggle
+  via `settings.cfg [display] show_grid` (`grid_strength` uniform).
+  TODO: expose the checkbox in Title-screen Options.
+- E3 flora: PARTIALLY SHIPPED early (ChatGPT, commit f3da693) — grass/bush/tree
+  MultiMesh layers per biome (`FLORA_STYLES`), wind shader `biome_flora.gdshader`,
+  fog-gated; props persist on claimed ground. Weather portion still pending.
+- E2 (obstacles/ruins) + E4 (fauna): pending. Prop collision/blocking rides on the F1
+  gameplay-terrain decision (Commander currently clips through props — user flagged).

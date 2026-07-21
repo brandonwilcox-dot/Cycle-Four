@@ -169,11 +169,27 @@ func _process(delta: float) -> void:
 		return   ## finish squaring up / swivelling before moving
 
 	var step : float = _current_move_speed * BALANCE.MOVE_SCALE * delta
+	## F1: walking types can't enter water. If the next step would clip water, RE-PATH from
+	## here to the final queued destination via the friendly graph (routes around the lake)
+	## rather than stalling. Only give up if no land route exists.
+	var next_p : Vector2 = target if dist <= step else _p + to_target.normalized() * step
+	if _map_grid != null and _map_grid.has_method("is_water_world") and bool(_map_grid.call("is_water_world", next_p)):
+		var final_dest : Vector2 = _move_queue[-1]
+		var reroute : Array = []
+		if _map_grid.has_method("get_friendly_path"):
+			reroute = _map_grid.call("get_friendly_path", _p, final_dest)
+		_move_queue.clear()
+		if reroute.is_empty():
+			_is_striding = false   # genuinely unreachable — hold at the shore
+			return
+		for wp in reroute:
+			_move_queue.append(wp)
+		return
 	if dist <= step:
 		_set_plane(target)
 		_move_queue.pop_front()
 	else:
-		_set_plane(_p + to_target.normalized() * step)
+		_set_plane(next_p)
 	_claim_around()
 	_reveal_around()
 
@@ -234,6 +250,16 @@ func aim_point() -> Vector2:
 func move_command(world_pos: Vector2, append: bool) -> void:
 	if not append:
 		_move_queue.clear()
+	## F1: route AROUND water/obstacles via the friendly AStar (which excludes water) so the
+	## Commander navigates lakes instead of stalling at the shore. The straight destination is
+	## kept as a fallback when the grid can't path (open field with no water between).
+	var start : Vector2 = _move_queue[-1] if not _move_queue.is_empty() else _p
+	if _map_grid != null and _map_grid.has_method("get_friendly_path"):
+		var route : Array = _map_grid.call("get_friendly_path", start, world_pos)
+		if not route.is_empty():
+			for wp in route:
+				_move_queue.append(wp)
+			return
 	_move_queue.append(world_pos)
 
 ## -- Territory claiming --
@@ -261,11 +287,24 @@ func _claim_around() -> void:
 
 func _los_radius() -> int:
 	@warning_ignore("integer_division")
-	return VISION_RADIUS + mini(_commander_rank / LOS_RANKS_PER_STEP, LOS_BONUS_MAX)
+	var base : int = VISION_RADIUS + mini(_commander_rank / LOS_RANKS_PER_STEP, LOS_BONUS_MAX)
+	return _forest_scaled(base)
 
 func _sensor_radius() -> int:
 	@warning_ignore("integer_division")
-	return SENSOR_RADIUS + mini(_commander_rank / SENSOR_RANKS_PER_STEP, SENSOR_BONUS_MAX)
+	var base : int = SENSOR_RADIUS + mini(_commander_rank / SENSOR_RANKS_PER_STEP, SENSOR_BONUS_MAX)
+	return _forest_scaled(base)
+
+## F1: dense forest cuts sight/sensor range — moving through the woods hides you and
+## blinds you. Scales toward FOREST_VISION_MULT with the forest density at the Commander.
+func _forest_scaled(radius: int) -> int:
+	if _map_grid == null or not _map_grid.has_method("forest_density_world"):
+		return radius
+	var d : float = float(_map_grid.call("forest_density_world", _p))
+	if d <= 0.0:
+		return radius
+	var mult : float = lerpf(1.0, float(_map_grid.FOREST_VISION_MULT), d)
+	return maxi(1, int(round(float(radius) * mult)))
 
 ## -- Spawn activation / fog --
 

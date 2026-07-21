@@ -9,10 +9,17 @@ const COUNT        : int = 90        ## placement attempts (real count lands low
 const SIZE_MIN     : float = 10.0
 const SIZE_MAX     : float = 30.0
 const HEIGHT_BAND  : float = 0.045   ## how far above water level ground must be
-const GRASS_FIELD_DENSITY : float = 1.75
-const GRASS_PATCH_DENSITY : float = 1.45
-const BUSH_DENSITY        : float = 1.80
-const TREE_DENSITY        : float = 1.60
+## Forest/jungle pass (2026-07-20): denser canopy, clustered into groves so trees form
+## navigable boundaries between clearings (open plains are now the exception).
+const GRASS_FIELD_DENSITY : float = 1.90
+const GRASS_PATCH_DENSITY : float = 1.60
+const BUSH_DENSITY        : float = 3.20
+const TREE_DENSITY        : float = 3.60
+## Grove clustering: trees/bushes favour cells where this coarse field is high, leaving
+## the rest as clearings. FREQ/LEVEL mirror MapGrid.FOREST_* so the visual canopy lines
+## up with the concealment mask (dense trees == reduced vision there).
+const GROVE_FREQ  : float = 0.010
+const GROVE_LEVEL : float = 0.50
 const ROCK_COLOR   : Color = Color(0.82, 0.80, 0.78)
 const ROCK_ALBEDO  : Texture2D = preload("res://assets/textures/ground/aerial_rocks_02_diff.jpg")
 const ROCK_NORMAL  : Texture2D = preload("res://assets/textures/ground/aerial_rocks_02_nor.jpg")
@@ -135,7 +142,7 @@ func _rebuild(grid: Node, map_data) -> void:
 	var rows : int = grid.ROWS
 	var csize : float = float(grid.CELL_SIZE)
 	var tseed : float = float(_seed % 4096)
-	var water_level : float = 0.34
+	var water_level : float = 0.40   ## F1: matches MapGrid.WATER_LEVEL / shader
 	var amp : float = 21.0 * 3.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _seed * 31 + 7
@@ -440,26 +447,28 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 	for tree_try in int(round(float(style["tree_attempts"]) * TREE_DENSITY)):
 		var col : int = rng.randi_range(2, cols - 3)
 		var row : int = rng.randi_range(2, rows - 3)
+		## natural cell + no water/path neighbour (radius 1) — trees ring clearings, not water
 		if not _has_natural_clearance(grid, col, row, spawn_cells, 1):
 			continue
-		var too_close : bool = false
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				if tree_taken.has((col + dx) + (row + dy) * cols):
-					too_close = true
-					break
-			if too_close:
-				break
-		if too_close:
-			continue
+		## Grove clustering: high grove noise packs a dense canopy (multiple trees per cell
+		## allowed); low grove is a clearing (mostly rejected). Groves become the boundaries.
+		var gx : float = (float(col) + 0.5) * csize
+		var gz : float = (float(row) + 0.5) * csize
+		var grove : float = _fbm(Vector2(gx, gz) * GROVE_FREQ + Vector2(tseed + 91.3, tseed - 47.1))
+		var grove_w : float = clampf((grove - GROVE_LEVEL) / (1.0 - GROVE_LEVEL), 0.0, 1.0)
+		if rng.randf() > 0.12 + grove_w * grove_w:
+			continue   ## sparse in the open, thick in the grove
 		var cell : int = col + row * cols
-		var wx : float = (float(col) + rng.randf_range(0.28, 0.72)) * csize
-		var wz : float = (float(row) + rng.randf_range(0.28, 0.72)) * csize
+		var stack : int = tree_taken.get(cell, 0)
+		if stack >= 1 + int(round(grove_w * 2.0)):
+			continue   ## up to 3 trees/cell at grove core, 1 in light woods
+		var wx : float = (float(col) + rng.randf_range(0.18, 0.82)) * csize
+		var wz : float = (float(row) + rng.randf_range(0.18, 0.82)) * csize
 		var hn : float = _fbm(Vector2(wx, wz) * 0.006 + Vector2(tseed, tseed))
 		var relief : float = hn - water_level
 		if relief < float(style["min_relief"]) or relief > float(style["max_relief"]):
 			continue
-		tree_taken[cell] = true
+		tree_taken[cell] = stack + 1
 		var height : float = rng.randf_range(float(style["tree_min_h"]), float(style["tree_max_h"]))
 		var width : float = height * rng.randf_range(0.42, 0.60)
 		var basis := Basis(Vector3.UP, rng.randf() * TAU)

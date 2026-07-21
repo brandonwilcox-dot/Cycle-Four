@@ -14,6 +14,10 @@ shader_type spatial;
 render_mode cull_back;
 
 uniform sampler2D map_tex : filter_linear, repeat_disable;
+// F1: per-cell water mask (R = 1 where the cell is impassable WATER). filter_linear turns
+// the blocky cells into smooth shorelines. The shader draws water ONLY from this mask, so
+// what looks like water is exactly what blocks walking units.
+uniform sampler2D water_tex : filter_linear, repeat_disable;
 uniform vec2 map_cells = vec2(60.0, 34.0);
 uniform float cell_size = 64.0;
 
@@ -34,7 +38,7 @@ uniform float terrain_seed = 0.0;
 // only near it (the work in progress); settled territory keeps a faint trace (playtest).
 uniform vec2 commander_pos = vec2(-99999.0, -99999.0);
 uniform float height_amp : hint_range(0.0, 40.0) = 21.0;   // round 4: terrain read as flat
-uniform float water_level : hint_range(0.0, 1.0) = 0.34;
+uniform float water_level : hint_range(0.0, 1.0) = 0.40;  // F1: matches MapGrid.WATER_LEVEL
 
 // E1 biome palette (environment-skinning-plan.md): per-territory look, driven by MapGrid.
 uniform vec3 ground_tint : source_color = vec3(1.0, 1.0, 1.0);   // multiplies open ground
@@ -99,9 +103,11 @@ void vertex() {
 	vec4 td = textureLod(map_tex, tuv, 0.0);
 	v_flat = 1.0 - td.b;   // paths/spawns/base flat; claiming does NOT flatten (water survives)
 	v_hn = fbm(wpos.xz * 0.006 + vec2(terrain_seed));
+	// F1: water cells sit flat + sunken (pool basin). The mask, not the noise, defines water.
+	float wmask = textureLod(water_tex, tuv, 0.0).r;
 	float relief = max(v_hn - water_level, 0.0);
-	float amp = height_amp * 3.0 * v_flat;
-	VERTEX.y += relief * relief * amp;
+	float amp = height_amp * 3.0 * v_flat * (1.0 - wmask);
+	VERTEX.y += relief * relief * amp - wmask * 6.0;
 	// Recompute the normal from the height field (finite differences). Without this the
 	// displaced hills are lit as if flat — the grid seemed to float over a phantom shadow.
 	float e = 10.0;
@@ -168,8 +174,11 @@ void fragment() {
 	vec3 cam = INV_VIEW_MATRIX[3].xyz;
 	float grid_fade = 1.0 - smoothstep(grid_near, grid_far, distance(cam, wpos));
 
-	// Water mask first: creep and grid never draw over water (claiming keeps the pool).
-	float water = (1.0 - smoothstep(water_level - 0.05, water_level, v_hn)) * v_flat;
+	// F1: water comes from the per-cell MASK (== the impassable WATER cells), smoothed by
+	// filter_linear into a shoreline. No more per-pixel noise water that units could cross.
+	float wmask = texture(water_tex, uv).r;
+	float water = smoothstep(0.28, 0.62, wmask) * v_flat;
+	float shore_edge = smoothstep(0.10, 0.30, wmask) * (1.0 - water);   // foam band
 	vec3 water_nrm = vec3(0.5, 0.5, 1.0);
 
 	// --- claimed territory: faction substrate creep with a soft, noisy frontier
@@ -220,8 +229,8 @@ void fragment() {
 		base = mix(base, wcol, water);
 		emis = mix(emis, water_glow * smoothstep(0.60, 0.74, ripple), water);
 	}
-	// E1 shoreline: a light foam band where ground meets water, gently animated.
-	float shore = (1.0 - smoothstep(water_level + 0.008, water_level + 0.045, v_hn)) * (1.0 - water) * v_flat;
+	// E1 shoreline: foam band at the mask edge (matches the impassable water outline).
+	float shore = shore_edge * v_flat;
 	if (shore > 0.001) {
 		float foam = smoothstep(0.45, 0.75, fbm(wpos.xz * 0.09 + vec2(TIME * 0.10, -TIME * 0.07)));
 		base = mix(base, base * 1.35 + water_col * 0.4, shore * 0.35);

@@ -49,6 +49,7 @@ var _adapt_stacks  : int   = 0
 var _mod_dmg_mult   : float = 1.0   ## flat damage dial from dream-stabilize / stat mods (+ rooting)
 var _mod_armor      : float = 0.0   ## flat armor bonus from modifiers (+ rooting)
 var _mod_speed_mult : float = 1.0   ## flat speed dial
+var _terrain_grid : Node = null     ## F1: cached map_grid for water clipping check
 var _absorb_radius  : float = 0.0   ## >0 → wreckage-absorb: consumes husks in this radius
 var _absorb_timer   : float = 0.0
 var _root_mod       : UnitModifier = null ## terrain-bond: a rooting bonus engaged while stationary
@@ -401,6 +402,12 @@ func _move_toward(point: Vector2, delta: float, clamp_leash: bool = true) -> voi
 		var from_home : Vector2 = np - _home
 		if from_home.length() > _leash:
 			np = _home + from_home.normalized() * _leash
+	## F1: walking units don't clip water — hold at the shoreline if the step enters it.
+	if _terrain_grid == null:
+		_terrain_grid = get_tree().get_first_node_in_group("map_grid")
+	if _terrain_grid != null and _terrain_grid.has_method("is_water_world") \
+			and bool(_terrain_grid.call("is_water_world", np)):
+		return
 	_set_plane(np)
 
 func _set_plane(p: Vector2) -> void:

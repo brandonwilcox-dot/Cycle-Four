@@ -11,7 +11,10 @@ const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 
 const RANGE        : float = 256.0
-const DAMAGE       : float = 18.0
+## 2026-07-21: FOB one-shots small enemies (scouts/light line ≤120 HP). The enemy faction is
+## the one the player is weak against, so the FOB's shot usually takes the ×0.66 weak-type
+## multiplier — 150 still clears ~100 effective, one-shotting the small tier; T2+ survive.
+const DAMAGE       : float = 150.0
 const ATTACK_SPEED : float = 1.5
 const MAX_HP : float = 300.0
 const CARGO_PER_RANK : float = 10.0
