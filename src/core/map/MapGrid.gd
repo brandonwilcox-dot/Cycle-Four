@@ -77,6 +77,51 @@ var _data_tex      : ImageTexture = null
 var _water_img     : Image = null       ## F1: per-cell water mask (R8)
 var _water_tex     : ImageTexture = null
 
+## Perimeter "worked path" aprons around structures (2026-07-21, user directive): every
+## placed structure gets a ring of path-visual ground so bases/buildings never need their
+## gates aligned to map corridors. VISUAL-ONLY — feeds the shader's path-ness channel;
+## cell types / AStar / placement rules untouched. Keyed by structure cell -> ring radius;
+## structures register in _ready and unregister in _exit_tree.
+var _apron_sources : Dictionary = {}
+var _apron_cells   : Dictionary = {}   ## flattened index set, rebuilt on add/remove
+
+func add_structure_apron(center: Vector2i, radius: int = 1) -> void:
+	_apron_sources[center] = maxi(1, radius)
+	_rebuild_apron_cells()
+	_prepare_apron_ground()
+	_terrain_dirty = true
+
+func remove_structure_apron(center: Vector2i) -> void:
+	if _apron_sources.erase(center):
+		_rebuild_apron_cells()
+		_terrain_dirty = true
+
+func is_apron_index(cell: int) -> bool:
+	return _apron_cells.has(cell)
+
+func _rebuild_apron_cells() -> void:
+	_apron_cells.clear()
+	for c : Vector2i in _apron_sources:
+		var r : int = _apron_sources[c]
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				var col : int = c.x + dx
+				var row : int = c.y + dy
+				if col >= 0 and col < COLS and row >= 0 and row < ROWS:
+					_apron_cells[col + row * COLS] = true
+
+## Playtest directive 2026-07-21: apron ground is WORKED ground — flat (pathness channel
+## already flattens it in the shader), dry, and unobstructed. Water/obstacle cells under a
+## structure's apron become GROUND, and forest density is cleared so nothing restricts
+## Commander movement or vision on the pad. Deliberately NOT reverted on apron removal
+## (the ground was worked; the sim never depends on water reappearing).
+func _prepare_apron_ground() -> void:
+	for i : int in _apron_cells:
+		if _cells[i] == Cell.WATER or _cells[i] == Cell.OBSTACLE:
+			_cells[i] = Cell.GROUND
+		if i < _forest.size():
+			_forest[i] = 0.0
+
 ## E1 environment skinning (planning/environment-skinning-plan.md): per-territory biome
 ## palette (seeded) + rock-outcrop scatter. Biome grades ground uniforms AND the atmosphere.
 const _TERRAIN_PROPS := preload("res://src/vfx/TerrainProps.gd")
@@ -232,6 +277,8 @@ func _generate_terrain_features() -> void:
 			if _cells[i] == Cell.GROUND and hn < WATER_LEVEL:
 				if _cheby(i, base_i) > 1:
 					_cells[i] = Cell.WATER
+	## Standing structures keep their aprons dry/clear across map regeneration (deploys).
+	_prepare_apron_ground()
 
 func _cheby(a: int, b: int) -> int:
 	@warning_ignore("integer_division")
@@ -961,17 +1008,19 @@ func _refresh_terrain() -> void:
 		for sp in map_data.spawn_points:
 			if sp != null:
 				spawn_state[sp.position.x + sp.position.y * COLS] = sp.state
+	var apron : Dictionary = _apron_cells   ## structure perimeter paths (grey worked pads)
 	for row in ROWS:
 		for col in COLS:
 			var i : int = col + row * COLS
-			mm.set_instance_color(i, _cell_color(i, spawn_state))
+			mm.set_instance_color(i, _cell_color(i, spawn_state, apron))
 			var revealed : float = 1.0
 			if map_data != null and not map_data.get_meta_revealed(i):
 				revealed = 0.0
 			var kind : int = _cells[i]
-			var claimed : float = 1.0 if kind == Cell.CLAIMED else 0.0
+			## Apron cells suppress claim creep so they render as pure grey worked path.
+			var claimed : float = 1.0 if (kind == Cell.CLAIMED and not apron.has(i)) else 0.0
 			## Paths / spawns / base read as worked corridors: the shader gives them less noise.
-			var pathness : float = 1.0 if (kind == Cell.PATH or kind == Cell.BASE or spawn_state.has(i)) else 0.0
+			var pathness : float = 1.0 if (kind == Cell.PATH or kind == Cell.BASE or spawn_state.has(i) or apron.has(i)) else 0.0
 			var lit : float = 1.0 if (i < _visible.size() and _visible[i] == 1) else 0.0
 			_data_img.set_pixel(col, row, Color(revealed, claimed, pathness, lit))
 			## F1: water mask — the shader draws water ONLY here, so visuals match the
@@ -1026,9 +1075,13 @@ func _apply_faction_ground_params() -> void:
 ## Per-tile color: spawn overlay (active/dormant) on spawn cells; else by cell type.
 ## (Fog is no longer applied here — the ground shader darkens unrevealed cells from the
 ## data texture, giving soft frontier edges instead of hard per-tile fog.)
-func _cell_color(i: int, spawn_state: Dictionary) -> Color:
+func _cell_color(i: int, spawn_state: Dictionary, apron: Dictionary = {}) -> Color:
 	if spawn_state.has(i):
 		return _SPAWN_COL if spawn_state[i] == SpawnPoint.SpawnState.ACTIVE else _SPAWN_DIM
+	## Structure aprons read as the SAME grey worked path the enemy corridors use —
+	## not faction claim creep (user directive 2026-07-21).
+	if apron.has(i):
+		return _PATH_COL
 	match _cells[i]:
 		Cell.PATH:
 			return _PATH_COL

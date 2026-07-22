@@ -116,6 +116,22 @@ func _ready() -> void:
 	position = WORLD3D.to3(_p, 0.0)
 	_build_visual()
 	_refresh_detector_group()
+	call_deferred("_register_apron")
+
+## Perimeter path apron (2026-07-21): every placed structure gets a ring of worked-path
+## ground (visual-only, MapGrid data texture). Registered while the structure stands;
+## _exit_tree covers sell, enemy destruction, and deploy resets alike.
+func _register_apron() -> void:
+	if not is_inside_tree():
+		return
+	var grid : Node = get_tree().get_first_node_in_group("map_grid")
+	if grid != null and grid.has_method("add_structure_apron"):
+		grid.call("add_structure_apron", grid.call("world_to_cell", _p), 1)
+
+func _exit_tree() -> void:
+	var grid : Node = get_tree().get_first_node_in_group("map_grid")
+	if grid != null and grid.has_method("remove_structure_apron"):
+		grid.call("remove_structure_apron", grid.call("world_to_cell", _p))
 
 ## -- Construction / engineering (Phase 2B) --
 

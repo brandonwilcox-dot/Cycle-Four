@@ -27,6 +27,7 @@ var _role_btn      : Button = null   ## cycles garrison production role; hidden 
 var _sell_btn      : Button = null   ## sells tower or building
 var _upgrade_b_btn : Button = null   ## second branch (B) upgrade; hidden when no B branch
 var _doctrine_btns : Array[Button] = []   ## FOB doctrine buttons (shown only for the FOB)
+var _weapon_btns   : Array[Button] = []   ## FOB bastion weapon cyclers (shown only for the FOB)
 
 func _ready() -> void:
 	close_btn.pressed.connect(func() -> void: visible = false)
@@ -54,7 +55,17 @@ func _ready() -> void:
 		db.pressed.connect(_on_doctrine_pressed.bind(str(d[0])))
 		vbox.add_child(db)
 		_doctrine_btns.append(db)
+	## FOB bastion weapon cyclers (playtest 2026-07-21) — one per corner tower.
+	for i in 4:
+		var wb := Button.new()
+		wb.visible = false
+		wb.pressed.connect(_on_weapon_pressed.bind(i))
+		vbox.add_child(wb)
+		_weapon_btns.append(wb)
 	visible = false
+
+func _on_weapon_pressed(bastion_idx: int) -> void:
+	EventBus.fob_weapon_requested.emit(bastion_idx)
 
 func _on_doctrine_pressed(doctrine_id: String) -> void:
 	EventBus.fob_doctrine_requested.emit(doctrine_id)
@@ -105,6 +116,8 @@ func open_tower(tower: Node, _can_afford: bool) -> void:
 	_sell_btn.visible = true
 	for b in _doctrine_btns:
 		b.visible = false
+	for b in _weapon_btns:
+		b.visible = false
 	visible = true
 	move_to_front()   ## draw above the minimap and other late-added HUD children
 
@@ -130,6 +143,8 @@ func open_building(building: Node) -> void:
 		_role_btn.text = "Produce: %s" % str(building.call("production_role_name"))
 	_sell_btn.visible = true
 	for b in _doctrine_btns:
+		b.visible = false
+	for b in _weapon_btns:
 		b.visible = false
 	visible = true
 
@@ -159,6 +174,13 @@ func open_fob(base: Node) -> void:
 		b.visible  = true
 		b.text     = ("✓ " + str(DOCTRINE_DEFS[i][1])) if did == cur else str(DOCTRINE_DEFS[i][1])
 		b.disabled = (did == cur)
+	## Bastion armament cyclers — one per fortress corner tower (click to cycle weapon).
+	var has_weapons : bool = base.has_method("bastion_weapon_label")
+	for i in _weapon_btns.size():
+		var wb : Button = _weapon_btns[i]
+		wb.visible = has_weapons
+		if has_weapons:
+			wb.text = "Bastion %d: %s" % [i + 1, str(base.call("bastion_weapon_label", i))]
 	_tower = null
 	visible = true
 	move_to_front()
@@ -195,6 +217,8 @@ func open_unit(unit: Node) -> void:
 	_sell_btn.visible      = false
 	for b in _doctrine_btns:
 		b.visible = false
+	for b in _weapon_btns:
+		b.visible = false
 	_tower = null
 	visible = true
 	move_to_front()
@@ -223,6 +247,8 @@ func open_commander(cmd: Node) -> void:
 	_role_btn.visible      = false
 	_sell_btn.visible      = false
 	for b in _doctrine_btns:
+		b.visible = false
+	for b in _weapon_btns:
 		b.visible = false
 	_tower = null
 	visible = true

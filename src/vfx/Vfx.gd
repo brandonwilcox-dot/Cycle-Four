@@ -48,6 +48,29 @@ func bolt(from2: Vector2, to2: Vector2, damage_type: int) -> void:
 func muzzle(at2: Vector2, damage_type: int) -> void:
 	_pulse(WORLD3D.to3(at2, BOLT_Y), damage_color(damage_type), 16.0, 0.12)
 
+## Weapon-styled tracer (FOB bastion armaments): explicit color + flight height.
+func bolt_styled(from2: Vector2, to2: Vector2, color: Color, y: float = BOLT_Y) -> void:
+	var layer : Node3D = _layer_node()
+	if layer == null:
+		return
+	var b : Node3D = BOLT_SCRIPT.new()
+	layer.add_child(b)
+	b.setup(WORLD3D.to3(from2, y), WORLD3D.to3(to2, y), color)
+
+## Colored ground ring (rocket impacts, arc grounding) at a plane position.
+func pulse_at(at2: Vector2, color: Color, radius: float, life: float = 0.3, y: float = DEATH_Y) -> void:
+	_pulse(WORLD3D.to3(at2, y), color, radius, life)
+
+## Weapon tracer with EXPLICIT start/end heights — bastion fire descends from the tower
+## top to the target unit's mid-body, so the bolt visibly angles down onto the enemy.
+func bolt_from_to(from2: Vector2, from_y: float, to2: Vector2, to_y: float, color: Color) -> void:
+	var layer : Node3D = _layer_node()
+	if layer == null:
+		return
+	var b : Node3D = BOLT_SCRIPT.new()
+	layer.add_child(b)
+	b.setup(WORLD3D.to3(from2, from_y), WORLD3D.to3(to2, to_y), color)
+
 ## Faction-tinted poof + sparks when a unit dies.
 func death(at2: Vector2, faction_col: Color, radius: float) -> void:
 	_pulse(WORLD3D.to3(at2, DEATH_Y), faction_col, maxf(radius, 22.0), 0.35)

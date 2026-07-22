@@ -123,6 +123,7 @@ func _ready() -> void:
 	EventBus.panel_upgrade_requested.connect(_on_panel_upgrade)      ## inspection-panel Upgrade buttons (branch A/B)
 	EventBus.panel_sell_requested.connect(_on_panel_sell)           ## inspection-panel Sell button
 	EventBus.fob_doctrine_requested.connect(_on_fob_doctrine)       ## inspection-panel FOB doctrine buttons
+	EventBus.fob_weapon_requested.connect(_on_fob_weapon)           ## FOB panel bastion weapon cyclers
 	EventBus.commander_destroyed.connect(_on_commander_destroyed)   ## mortality → forced retreat (revive)
 	EventBus.academy_phase_started.connect(_on_academy_phase_started)
 	EventBus.academy_phase_ended.connect(_on_academy_phase_ended)
@@ -169,6 +170,7 @@ func _exit_tree() -> void:
 		[EventBus.panel_upgrade_requested, _on_panel_upgrade],
 		[EventBus.panel_sell_requested, _on_panel_sell],
 		[EventBus.fob_doctrine_requested, _on_fob_doctrine],
+		[EventBus.fob_weapon_requested, _on_fob_weapon],
 		[EventBus.commander_destroyed, _on_commander_destroyed],
 		[EventBus.academy_phase_started, _on_academy_phase_started],
 		[EventBus.academy_phase_ended, _on_academy_phase_ended],
@@ -536,6 +538,15 @@ func _on_panel_sell() -> void:
 		EventBus.notification_pushed.emit("Garrison sold.", "positive")
 	if _hud != null:
 		_hud.call("close_inspection")
+
+## FOB panel bastion button → cycle that corner tower's weapon (free — defensive posture).
+func _on_fob_weapon(bastion_idx: int) -> void:
+	var base : Node = get_tree().get_first_node_in_group("base")
+	if base == null or not base.has_method("cycle_bastion_weapon"):
+		return
+	base.call("cycle_bastion_weapon", bastion_idx)
+	if _hud != null:
+		_hud.call("open_fob_inspection", base)   ## refresh the panel labels
 
 func _on_fob_doctrine(doctrine_id: String) -> void:
 	var base : Node = get_tree().get_first_node_in_group("base")

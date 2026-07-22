@@ -31,6 +31,8 @@ const COSMETIC_PART_SCALE : float = 60.0
 ## it replaces the procedural build; the walk animation is driven by movement.
 var _use_gltf  : bool             = false
 var _gltf_root : Node3D           = null
+var _power_light : OmniLight3D    = null   ## 2026-07-21: reactor under-glow (pulses in _update_glow)
+const POWER_LIGHT_ENERGY : float = 1.4
 var _anim      : AnimationPlayer  = null
 var _walk_name : String           = ""
 var _idle_name : String           = ""
@@ -139,6 +141,17 @@ func _try_build_gltf(faction: String) -> bool:
 		top = (ab.position.y + ab.size.y) * mscale
 	pip_position = Vector3(0.0, top + 8.0, 0.0)
 	bar_y        = top
+	## 2026-07-21 lighting: the Commander carries its own power-glow — a faction-tinted
+	## omni that washes the hull + ground so it reads as POWERFUL TECHNOLOGY, with a slow
+	## reactor pulse in _process. Shadowless (it's a fill; the sun owns shadows).
+	_power_light = OmniLight3D.new()
+	_power_light.light_color = Vfx.faction_color(faction).lerp(Color.WHITE, 0.25)
+	_power_light.light_energy = POWER_LIGHT_ENERGY
+	_power_light.omni_range = 190.0
+	_power_light.omni_attenuation = 1.6
+	_power_light.shadow_enabled = false
+	_power_light.position = Vector3(0.0, top * 0.45, 0.0)
+	_body.add_child(_power_light)
 	_anim = _ASSET.find_animation_player(model)
 	if _anim != null:
 		for n in _anim.get_animation_list():
@@ -256,6 +269,10 @@ func _update_glow(delta: float) -> void:
 	if _cannon_mat != null:
 		_cannon_mat.emission_energy_multiplier = _cannon_base_e * \
 			(1.0 + 1.5 * _charge_level + 4.0 * _flash)
+	## Reactor pulse: slow breath at rest, surges with charge + weapon flash.
+	if _power_light != null:
+		_power_light.light_energy = POWER_LIGHT_ENERGY * \
+			(1.0 + 0.12 * sin(_t * TAU * 0.35) + 0.8 * _charge_level + 1.6 * _flash)
 	## Fins wobble: a slow sweeping nod while scanning, a sharp kick on discharge.
 	if _skel != null and _fins_idx >= 0:
 		var pitch : float = 0.0

@@ -310,22 +310,23 @@ func _animate(delta: float) -> void:
 	var moved : bool = _anim_last_p.is_finite() and _p.distance_squared_to(_anim_last_p) > 0.02
 	_anim_last_p = _p
 	if moved:
-		## 2026-07-19: amplitudes + rates damped ~50% — with the hi-fi drone models and the
-		## slowed unit layer the old values read as bouncing, not walking.
+		## 2026-07-21 de-cartoon pass: VERTICAL BOB REMOVED (it read as bouncing on the hi-fi
+		## drones). Motion identity now lives in low-amplitude sway/lean only; the real walk/
+		## hover cycles arrive with rigged per-unit animations (model-pipeline Mode A).
 		match data.faction_id if data != null else "":
-			"architects":   ## glide — a calm engineered hover, no footfall
-				_anim_t += delta * 1.6
-				_mesh.position.y = BODY_LIFT + 1.5 + sin(_anim_t * TAU * 0.5) * 0.6
-			"bloom":        ## lope — heavy organic bound with pitch + waddle
-				_anim_t += delta * 2.6
-				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 3.5
-				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.10
-				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.05
-			"mesh":         ## skitter — fast shallow patter + lateral shimmy
-				_anim_t += delta * 7.0
-				_mesh.position.y = BODY_LIFT + absf(sin(_anim_t * TAU * 0.5)) * 1.4
-				_mesh.rotation.z = sin(_anim_t * TAU) * 0.04
-				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 0.9
+			"architects":   ## glide — a barely-perceptible engineered hover
+				_anim_t += delta * 1.2
+				_mesh.position.y = BODY_LIFT + 1.5 + sin(_anim_t * TAU * 0.5) * 0.35
+			"bloom":        ## organic sway — slow roll, no bound
+				_anim_t += delta * 2.0
+				_mesh.position.y = BODY_LIFT
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.045
+				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.02
+			"mesh":         ## fast shallow shimmy, ground-hugging
+				_anim_t += delta * 6.0
+				_mesh.position.y = BODY_LIFT
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.02
+				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 0.3
 	else:
 		_mesh.position.y = lerpf(_mesh.position.y, BODY_LIFT, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.position.z = lerpf(_mesh.position.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))

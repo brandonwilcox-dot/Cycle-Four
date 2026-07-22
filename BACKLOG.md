@@ -254,6 +254,63 @@ _(Add new observations here with date. Format: "DATE — observation. Repro: ste
 
 ---
 
+## ART + ENVIRONMENT TRACK — status as of 2026-07-21
+
+The project pivoted from mechanics to VISUALS (Jun 28+) then ENVIRONMENT (Jul 19+). Summary
+of what shipped in that arc so this backlog isn't stuck in the June mechanics view:
+
+**SHIPPED + in the exes (Cycle Four.exe / DEBUG.exe, last export 2026-07-21 16:39):**
+- Full 3D migration (Node3D entities, RTS camera, galaxy zoom) — the game is 3D now.
+- Visual supercharge V1–V6-lite: atmosphere (Forward+, AgX, glow, SSAO, volumetric fog),
+  starfield sky, substrate materials, per-faction gaits, tower recoil, camera shake, VFX.
+- **Architect Commander "Cathedral"** — hand-rigged GLB (head/torso/fins/cannons/pelvis/legs),
+  digitigrade IK, looping walk + idle, torso ±45° aim-twist, tip muzzles, cannon side-glow,
+  automatic charged shot, barcode-scanner twin construction beams from the fin edges.
+  Palette locked: BLACK frame / WHITE plating / ELECTRIC BLUE. (memory: cathedral-rig)
+- Environment E1/E1b/E2 (partial E3): 4 seeded biomes (verdant/ashen/crystal/rust) grading
+  ground + lighting; photoreal PBR ground splat (PolyHaven CC0 soil/rock/grass by height+slope);
+  rock outcrops; forest/jungle flora (grass/bush/tree MultiMesh, grove-clustered); shoreline
+  foam; crystal sparkle. (memory: environment)
+- **F1 gameplay terrain (2026-07-21):** connected WATER cells (rivers/lakes ~30%) impassable to
+  walking units — shader draws water from the exact cell mask (visual == blocked); Commander
+  routes AROUND water via friendly AStar with string-pulling (any-angle movement); forest cuts
+  vision/sensors by ½. FOB one-shots small enemies (Base.DAMAGE 150).
+
+### NEW OPEN TASKS (from the art/environment sessions) — prioritized
+
+**P1 — do next (blocks fun / core polish):**
+- [ENHANCEMENT][P1] E2 Obstacles & Ruins — seeded prop placement + canon low-albedo Ancient
+  ruin fragments. Pairs with the Rodin pipeline (static GLB prop packs, no rigging). Next env phase.
+- [PLAYTEST][P1] Hand-playtest the F1 terrain slice end to end: navigate around lakes, forest
+  dimming, FOB one-shots, biome variety across deploys, volumetric-fog perf late-wave.
+
+**P2 — hurts feel / should fix:**
+- [ENHANCEMENT][P2] Wire the battle-grid toggle into Title-screen Options (checkbox → settings.cfg
+  [display] show_grid). Backend done (`grid_strength` uniform); only the UI control is missing.
+- [BUG][P2] Enemy Units melee-chasing friendlies move directly and can clip water at a shoreline
+  (lane travel uses AStar, safe). Add the same is_water_world guard to Unit chase movement.
+- [DEFERRED→P2] Prop/terrain COLLISION for non-water obstacles (rocks, dense groves, ruins as
+  blockers). Currently cosmetic — Commander/units clip through props. Decide blocking vs cosmetic
+  per prop type; rides on the F1 gameplay-terrain foundation now in place.
+- [ENHANCEMENT][P2] Exe size ballooned to ~795 MB — the Commander's 2K texture set + PBR ground
+  scans ship uncompressed in the PCK. Do a texture-compression / import-preset pass before any
+  external distribution.
+
+**P3 — polish / taste:**
+- [ENHANCEMENT][P3] E3 Weather (cloud shadows, gusts syncing flora, distant lightning, per-seed
+  weather) + E4 Fauna (ambient critter flocks that scatter from units). Env phases after E2.
+- [ENHANCEMENT][P3] Architect build-perk (×1.6 rate) desyncs the construction SCAN animation
+  pacing — fold the perk into SCAN_CYCLE so the beam matches build speed for Architects.
+- [TASTE][P3] Commander leg length ~35% of height vs the MASTER sheet's ~42%; optional 8% leg
+  scale-up for the leggier stance. Judgment call.
+- [TASTE][P3] Water coverage ~30% (WATER_LEVEL 0.40) may feel heavy — drop to 0.38 for ~25% if so.
+- [TASK][P3] Author remaining faction/variant part sets (USER's long-running task): 3 designs ×
+  3 factions, each blown-up into parts (Head/Torso/Fins/Arms/Pelvis/Legs; legs → Hip/Femur/Shin/
+  Foot). Segmented parts attach RIGIDLY via Cosmetics slots — no per-part skinning needed.
+  Recipe saved in memory (cathedral-rig): weld → assemble → rig → lock-in → palette-grade → export.
+
+---
+
 ## How to pull from this backlog
 
 When scheduling work in a Code session:

@@ -12,11 +12,12 @@ const FACTION_MODELS = {
 }
 
 ## Per-faction UNIT import scale (Blender units -> game units) and facing yaw (deg about Y).
-## The Rodin drone is ~1.36u tall normalized; ×20 -> ~27 game units. Facing VERIFIED in play.
+## 2026-07-21 playtest: drones read too LARGE next to the Commander (73u) and the FOB —
+## scaled ~0.65x so a drone is ~17-19u (Commander ≈ 4 drones tall, fortress dwarfs both).
 const FACTION_UNIT_SCALE = {
-	"architects": 20.0,
-	"bloom": 18.0,        ## ~1.61u tall -> ~29 game units
-	"mesh": 20.0,         ## ~1.32u tall -> ~26 game units
+	"architects": 13.0,   ## ~1.36u tall -> ~18 game units
+	"bloom": 12.0,        ## ~1.61u tall -> ~19 game units
+	"mesh": 13.0,         ## ~1.32u tall -> ~17 game units
 }
 const FACTION_UNIT_YAW = {
 	"architects": 0.0,   ## VERIFY in play; flip 90/180 if the drone flies sideways/backwards
@@ -69,6 +70,73 @@ const FACTION_COMMANDER_YAW = {
 	"bloom": 90.0,        ## hi-fi Rodin mesh faces +Z like the Architect (VERIFY in F3 play; flip if striding sideways)
 	"mesh": 90.0,         ## hi-fi mesh faces +Z like the other Rodin commanders (VERIFY in F2 play)
 }
+
+## Player FOB (base) GLTF models — Rodin regional fortresses. Missing faction -> the
+## procedural bunker in Base.gd. Design rule: the Commander (~73 game units) must NOT be
+## taller than the fortress's EXTERNAL WALLS, so wall height = norm_wall * scale >= 73.
+const FACTION_BASE_MODELS = {
+	"architects": "res://assets/models/buildings/architect_fob_hifi.glb",  ## "Default" concept, Rodin
+}
+## Import scale (Blender units -> game units). Architect model: 1.55u tall, walls at 0.57u.
+## x140 -> walls ~80 (> Commander 73), spire ~217, footprint ~266 px (~4 cells). Imposing.
+const FACTION_BASE_SCALE = {
+	"architects": 140.0,
+}
+## Facing (deg about Y): gatehouse front. Rodin fronts export as +Z; camera looks from +Z.
+const FACTION_BASE_YAW = {
+	"architects": 0.0,   ## VERIFY in play; flip 180 if the gate faces away from the camera
+}
+## Normalized (pre-scale) heights measured from the mesh, for HP-bar / turret placement.
+const FACTION_BASE_WALL_NORM = { "architects": 0.57 }
+const FACTION_BASE_TOTAL_NORM = { "architects": 1.55 }
+
+## Bastion muzzle points, NORMALIZED mesh units (x, muzzle_y, z) — MEASURED from the mesh
+## (the four tall towers flanking the spire; muzzle sits at the tower-top band so tracers
+## visibly leave the towers). Multiplied by FACTION_BASE_SCALE at runtime. NOTE: measured
+## in model space — if a faction's FACTION_BASE_YAW is non-zero, rotate these to match.
+## The FOUR OUTER-WALL CORNER towers (measured from the mesh — the octagonal bastions at
+## the corners of the square footprint, muzzle at the tower crenellation ~0.556 norm).
+const FACTION_BASE_BASTIONS = {
+	"architects": [
+		Vector3(-0.78, 0.556, -0.78),   ## NW corner
+		Vector3(0.78, 0.556, -0.78),    ## NE corner
+		Vector3(0.78, 0.556, 0.78),     ## SE corner
+		Vector3(-0.78, 0.556, 0.78),    ## SW corner
+	],
+}
+
+## Bastion points in GAME units for the faction's FOB model ([] if no model).
+static func base_bastion_points(faction_id: String) -> Array:
+	var pts : Array = FACTION_BASE_BASTIONS.get(faction_id, [])
+	var s : float = float(FACTION_BASE_SCALE.get(faction_id, 0.0))
+	var out : Array = []
+	for p : Vector3 in pts:
+		out.append(p * s)
+	return out
+
+## Load the FOB fortress model for `faction_id` with scale + yaw applied, or null.
+static func load_base_model(faction_id: String) -> Node3D:
+	var path : String = FACTION_BASE_MODELS.get(faction_id, "")
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	var resource = ResourceLoader.load(path)
+	if resource == null:
+		push_error("AssetLoader: Failed to load %s" % path)
+		return null
+	var model = resource.instantiate() as Node3D
+	if model == null:
+		return null
+	var s : float = float(FACTION_BASE_SCALE.get(faction_id, 100.0))
+	model.scale = Vector3(s, s, s)
+	model.rotation_degrees = Vector3(0.0, float(FACTION_BASE_YAW.get(faction_id, 0.0)), 0.0)
+	return model
+
+## External-wall / total height of the faction's FOB model in GAME units (0 if no model).
+static func base_wall_height(faction_id: String) -> float:
+	return float(FACTION_BASE_WALL_NORM.get(faction_id, 0.0)) * float(FACTION_BASE_SCALE.get(faction_id, 0.0))
+
+static func base_total_height(faction_id: String) -> float:
+	return float(FACTION_BASE_TOTAL_NORM.get(faction_id, 0.0)) * float(FACTION_BASE_SCALE.get(faction_id, 0.0))
 
 ## Load a rigged COMMANDER scene for `faction_id`, preserving its own materials
 ## and its AnimationPlayer. Returns the instanced Node3D, or null if unavailable.

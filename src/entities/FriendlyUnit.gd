@@ -273,20 +273,20 @@ func _animate(delta: float) -> void:
 	_anim_last_p = _p
 	if moved:
 		match data.faction_id if data != null else "":
-			## 2026-07-19: damped ~50% alongside the enemy gait — see Unit._animate.
+			## 2026-07-21 de-cartoon pass: vertical bob removed — see Unit._animate.
 			"architects":
-				_anim_t += delta * 1.6
-				_mesh.position.y = _GAIT_REST_Y + 1.2 + sin(_anim_t * TAU * 0.5) * 0.5
+				_anim_t += delta * 1.2
+				_mesh.position.y = _GAIT_REST_Y + 1.2 + sin(_anim_t * TAU * 0.5) * 0.3
 			"bloom":
-				_anim_t += delta * 2.6
-				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 2.6
-				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.10
-				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.05
+				_anim_t += delta * 2.0
+				_mesh.position.y = _GAIT_REST_Y
+				_mesh.rotation.z = sin(_anim_t * TAU * 0.5) * 0.045
+				_mesh.rotation.y = sin(_anim_t * TAU * 0.25) * 0.02
 			"mesh":
-				_anim_t += delta * 7.0
-				_mesh.position.y = _GAIT_REST_Y + absf(sin(_anim_t * TAU * 0.5)) * 1.2
-				_mesh.rotation.z = sin(_anim_t * TAU) * 0.04
-				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 0.8
+				_anim_t += delta * 6.0
+				_mesh.position.y = _GAIT_REST_Y
+				_mesh.rotation.z = sin(_anim_t * TAU) * 0.02
+				_mesh.position.z = sin(_anim_t * TAU * 0.7) * 0.3
 	else:
 		_mesh.position.y = lerpf(_mesh.position.y, _GAIT_REST_Y, minf(1.0, delta * _GAIT_SETTLE))
 		_mesh.position.z = lerpf(_mesh.position.z, 0.0, minf(1.0, delta * _GAIT_SETTLE))

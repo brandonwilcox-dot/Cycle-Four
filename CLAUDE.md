@@ -2,10 +2,217 @@
 
 Godot 4.6.1 | GDScript | D:\AI\Cycle Four\
 
-Design corpus lives at:
-  C:\ClaudeProjects\Skippy Gaming Design Engineer Agent\core\
-Read PROJECT-MEMORY.md and core/23_open-questions-resolved.md before
+**Cycle Four is the single source of truth for ALL game work — build AND design.**
+The design corpus, Game Codex, and planning handoffs were migrated in-repo from the
+former Skippy project (2026-07-21); the Skippy folder is now historical only — do not
+read from or write back to it.
+
+Design corpus lives in-repo at:
+  D:\AI\Cycle Four\docs\core\      (numbered design corpus, 01–24)
+  D:\AI\Cycle Four\docs\codex\     (Game Codex 00–11 + The-Codex.html, + Units_Land.md)
+  D:\AI\Cycle Four\docs\planning\  (design/implementation handoffs)
+Read docs\PROJECT-MEMORY.md and docs\core\23_open-questions-resolved.md before
 making any design decisions in code.
+
+---
+
+## Session 2026-07-21 (6) — PLAYTEST ROUND 3: corner-bastion fire, real PolyHaven rock/plant assets, better tree mesh
+
+Last pass of the session. Boot clean (MCP), screenshot shows the fortress casting a real
+directional shadow + dense flora + the assets rendering.
+
+- **Bastion fire moved to the OUTER-WALL CORNER towers** (was the inner spire-flanking
+  towers): `AssetLoader.FACTION_BASE_BASTIONS` re-measured to the 4 square-corner bastions
+  (±0.78 norm, y 0.556). Tracer now DESCENDS from the tower top to the unit's mid-body via
+  new `Vfx.bolt_from_to(from,from_y,to,to_y,color)` + `Base.UNIT_HIT_Y=16` (was flying flat
+  at wall height). Muzzle flash still at the tower.
+- **Real PolyHaven assets (CC0) via Blender MCP** — user: procedural blobs too simple, rocks
+  had lost their texture. `assets/models/props/`:
+  · `rock_boulder_01.glb` — PolyHaven Boulder 01 (game-ready proxy ~26k tris, baked normal +
+    diff + ARM, alphaMode OPAQUE). Replaces the SphereMesh rock blob.
+  · `plant_calathea_01.glb` — PolyHaven Calathea Orbifolia (decimated ~5.8k, alphaMode MASK →
+    Godot alpha-scissor leaves, doubleSided). Replaces the sphere-lobe bush.
+  New `TerrainProps._glb_mesh(path)` extracts a GLB's Mesh (materials baked onto surfaces) for
+  reuse in the fog-gated MultiMesh layers; both fall back to the procedural mesh if absent.
+  Sketchfab was OFF (needs API key) so trees stayed procedural.
+- **Tree mesh rebuilt** (`_make_tree_mesh`) — tapered trunk rising into the crown + 3 angled
+  branch stubs + a 9-lobe golden-angle canopy of vertically-stretched ellipsoids w/ a pointed
+  top (was a 5-sphere blob on a stick). Keeps the 2-surface trunk/foliage flora-shader (wind +
+  biome tint) intact.
+- **⚠ TUNING NOTE for next session:** the calathea GLB was JOINED from 5 plant variants, so
+  it's normalized as a WIDE row (X=1.0, Y-up height small) → placed bushes read as low wide
+  leaf-spreads rather than upright shrubs. If it looks too flat, re-export a SINGLE plant
+  variant from Blender (delete 4, renormalize) OR branch the bush placement scale for the GLB.
+  Also perf: real bush mesh × dense placement — watch late-wave FPS (drop BUSH_DENSITY if needed).
+- **NOTE (still queued):** user wants ASSET-based projectiles replacing the Vfx geometric
+  bolt/pulse across ALL units (realistic pass) — not started.
+- **⚠ EXES STILL NOT RE-EXPORTED** (sessions 2-6) — `.\tools\export.ps1` after the playtest.
+
+---
+
+## Session 2026-07-21 (5) — PLAYTEST ROUND 2: bastion alignment, polished lighting stack, Commander glow, dense flora
+
+Follow-ups to round 1. All MCP-verified (boot clean, screenshot shows dense green flora +
+the fortress under directional light). Round-1 items the user accepted: apron (good), weapon
+options + cycling (good), drone scale/movement (leave as-is).
+
+- **Bastion muzzles measured from the mesh:** `AssetLoader.FACTION_BASE_BASTIONS` (normalized
+  N/E/S/W tower muzzles at y 0.80, x/z ±0.47–0.50 — measured from the GLB heightfield) ×
+  `base_bastion_points()`. `Base` fires each bastion from its real tower top (`_bastion_pos`
+  + `_bastion_y`, plus a muzzle `Vfx.pulse_at`). Falls back to `BASTION_OFFSETS` if no model.
+  ⚠ measured in MODEL space — rotate if a faction's `FACTION_BASE_YAW` is non-zero.
+- **NOTE for the future:** user wants ASSET-based projectiles replacing the geometric Vfx
+  bolt/pulse shapes across ALL units (realistic pass) — not done yet; `Vfx.bolt/bolt_styled/
+  muzzle` still draw emissive bars/spheres. Queue as a Vfx art pass.
+- **Polished lighting stack (user: "give me everything" + "no more noon"):** sun elevation
+  -52°→-33° (real lit/shadow sides), AMBIENT 0.55→0.42 + FILL 0.5→0.38 so shadow sides read
+  dark, then filled by **SSIL** (radius 96, int 1.6) + **SDFGI** (min cell 24, bounce feedback
+  0.3) for true bounced light. **Volumetric density ~2x** (0.0001→0.00022) + faint self-emission
+  = visible god-ray shafts. **Code-built filmic LUT** (`_build_grade_lut`: S-curve + teal-shadow/
+  warm-highlight split-tone) on `adjustment_color_correction`. ⚠ PERF GATE: SDFGI is the
+  expensive one — `SDFGI_ENABLED=false` first if frames dip on the late-wave 48-cap.
+- **Commander power-tech light:** `CommanderBodyRig` adds a faction-tinted shadowless OmniLight
+  (energy 1.4, range 190) at mid-hull; pulses in `_update_glow` (slow reactor breath + surges
+  with ability charge + weapon flash) → "powerful technology."
+- **Flora density → ~75% coverage:** `TerrainProps` global multipliers up (grass field 1.9→4.5,
+  patch 1.6→3.2, bush 3.2→8.0, tree 3.6→8.5), `GROVE_LEVEL` 0.50→0.38, open-ground tree accept
+  0.12→0.30, up to 5 trees/cell in grove cores. **Grove fireflies:** one `CPUParticles3D`
+  (`_build_fireflies`) of drifting biome-tinted emissive motes, rebuilt per territory.
+- **Playtest checklist:** bastion tracers now leave the four towers (spawn a wave), lit vs
+  shadow side on the FOB/towers (no more flat noon), god-ray shafts at tactical pitch, Commander
+  under-glow pulse, flora coverage feel + firefly motes, **late-wave FPS with SDFGI on**.
+  ⚠ EXES STILL NOT RE-EXPORTED (sessions 2-5).
+
+---
+
+## Session 2026-07-21 (4) — PLAYTEST ROUND: apron ground-prep, FOB BASTION WEAPONS, drone scale/gait, lighting+flora pass
+
+Six playtest notes, all shipped + MCP-verified (boot clean; screenshot shows the brighter
+scene, living flora, and the fortress on a clear pad).
+
+- **Aprons are now WORKED ground, not just paint:** `MapGrid._prepare_apron_ground()` —
+  WATER/OBSTACLE cells under any apron become GROUND (Commander movement never blocked on
+  the pad), forest density zeroed, and `TerrainProps._is_natural_cell` excludes apron cells
+  (no rocks/flora on pads). Re-applied after `_generate_terrain_features` so deploys can't
+  regenerate water under standing structures. Deliberately not reverted on removal.
+- **FOB BASTION WEAPONS (new system):** the fortress's four corner towers each carry a
+  SELECTABLE weapon — Base.gd `WEAPONS` dict: **Rail-Gun** (150dmg/2s/420px — keeps the
+  one-shot-smalls role), **Laser** (22/0.45s/300), **Lightning Arc** (34/1.25s/280, chains
+  ×2 at 60%), **Machine Gun** (6/0.16s/240), **Rockets** (48/1.7s/360, 90px splash 60%).
+  Per-bastion timers/targeting from `BASTION_OFFSETS` (±96px corners), tracers fire from
+  wall-top via new `Vfx.bolt_styled` / `Vfx.pulse_at` (per-weapon colors). FOB panel gained
+  4 "Bastion N: <Weapon>" cycle buttons (`fob_weapon_requested` on EventBus → Battle3D).
+  Architect doctrine fire-rate mult still applies. Default loadout railgun/laser/rockets/mg.
+  NOT persisted in saves yet (same as doctrine). Old single `_try_attack` turret removed.
+- **Drone scale** ~0.65x (`FACTION_UNIT_SCALE` 13/12/13 → drones ~17-19u vs Commander 73 —
+  ≈4 drones tall, per playtest note that a few drones matched the Commander).
+- **Gait de-cartooned:** vertical bob REMOVED from Bloom/Mesh gaits (Unit+FriendlyUnit
+  `_animate`) — identity now lives in low-amplitude roll/shimmy; Architect hover kept but
+  subtler. Real fix remains rigged per-unit walk cycles (pipeline Mode A).
+- **Lighting pass:** KEY_ENERGY 1.15→1.5, FILL 0.35→0.5, AMBIENT 0.40→0.55, GLOW 0.70→0.95,
+  saturation 0.95→1.06, contrast 1.05; all four BIOME_LIGHT key energies ~+0.35 with
+  lighter ambients. **FOB omni glow light** (warm-cyan, energy 1.8, range 520, shadowless)
+  above the walls in Base.gd's GLTF branch.
+- **Flora "life pass"** (`TerrainProps.FLORA_STYLES`): all biomes re-palette to saturated
+  living colors + soft bioluminescent emission (verdant green glow / ashen→golden savanna /
+  crystal brighter / rust→glowing ember scrub) + ~30% more grass/bush/tree density.
+- **Playtest checklist:** bastion tracers when a wave reaches the FOB (five styles), cycle
+  weapons from the FOB panel, drone size feel, no bounce at unit zoom, pad always dry/flat,
+  perf with denser flora + omni light. ⚠ EXES STILL NOT RE-EXPORTED (sessions 2-4).
+
+---
+
+## Session 2026-07-21 (3) — FOB EMISSIVE BAKED + STRUCTURE PERIMETER-PATH APRONS
+
+Follow-ups to the FOB ship (user directives). Both MCP-verified: boot clean (zero SCRIPT
+ERRORs, no new warnings), screenshot shows cyan glow on the fortress + a worked-path pad
+ringing it.
+
+- **Emissive baked from the diffuse cyan mask** (Rodin's basic-plan export has no emissive
+  option): HSV cyan-band mask (hue 0.55±0.13, sat/val gated) over the 2K diffuse, dilated
+  1px + blurred, emitted as saturated cyan (0.25,0.85,1.0) — embedded directly into
+  `assets/models/buildings/architect_fob_hifi.glb` as a 4th image (`texture_emissive`) with
+  `emissiveFactor` 1,1,1 + **`KHR_materials_emissive_strength` 2.0** (Godot 4 honors it; >1
+  clears the glow HDR threshold). Editor re-imported 21:01. `design/concepts/` original left
+  untouched (raw). Tuning: re-run the bake (mask thresholds / strength) rather than editing
+  the .glb by hand — recipe is in this session's chat; consider committing a
+  `tools/bake_fob_emissive.py` if we do this per-faction.
+- **Perimeter-path aprons (new rule going forward):** EVERY placed structure projects a ring
+  of worked-path ground so bases/buildings never need gate/path alignment per faction.
+  VISUAL-ONLY — feeds the ground shader's path-ness channel (flatten + corridor treatment);
+  cell types, AStar, spawns, and placement rules untouched. `MapGrid.add_structure_apron
+  (cell, radius)` / `remove_structure_apron(cell)` (`_apron_sources` dict → index set
+  rebuilt per terrain refresh). Structures self-register in `_ready` (deferred) and
+  unregister in `_exit_tree` — covers place, restore, sell, enemy destruction, and deploy
+  resets with one mechanism. Radii: Base **3** (≈ fortress footprint + walkway), Tower/
+  Garrison/Wall **1** (3×3 pad). EnemyBase deliberately skipped (sits on spawn corridors).
+- **Apron look (user follow-up, same session): aprons render as the GREY enemy-path ground,
+  not faction claim creep** — apron cells return `_PATH_COL` in `_cell_color` AND suppress
+  the `claimed` channel in the data texture (pathness stays 1). Screenshot-verified: green
+  claim grid now stops at the pad boundary. Base apron stays radius 3 = fortress footprint
+  (radius-2 cells) + ONE ring — the buffer that absorbs gate-position differences across
+  future faction FOB models.
+- **⚠ EXES STILL NOT RE-EXPORTED** (covers sessions 2+3) — `.\tools\export.ps1` after the
+  hand playtest. Playtest adds: cyan channels glow at close zoom (tune emissiveStrength 2.0
+  if too hot/dim); aprons appear under a freshly placed tower/garrison/wall and vanish on
+  sell/destruction; FOB pad connects incoming corridors on all sides + reads grey, not green.
+
+---
+
+## Session 2026-07-21 (2) — ARCHITECT FOB HI-FI MODEL SHIPPED (Rodin "Default" fortress)
+
+The Rodin-generated Architect regional fortress (`design/concepts/Architect_Default_base_basic_pbr.glb`,
+from `design/architect_fob_concepts/Default/` — crops were edge-cleaned into `Default/rodin_in/`
+before generation) is now the player FOB when playing Architects.
+
+- **`assets/models/buildings/architect_fob_hifi.glb`** (copied from design/concepts; 40k tris,
+  1.90×1.55×1.86u, origin at base, diffuse/normal/MR — **NO emissive map**, see gap below).
+- **AssetLoader:** new `FACTION_BASE_MODELS` / `FACTION_BASE_SCALE` / `FACTION_BASE_YAW` /
+  `FACTION_BASE_WALL_NORM` / `FACTION_BASE_TOTAL_NORM` + `load_base_model()` /
+  `base_wall_height()` / `base_total_height()`. **Design rule enforced by scale: the Commander
+  (~73 game units) must NOT out-height the external walls.** Architect scale **140** → walls ~80
+  (wall top = 0.57 norm), spire ~217, footprint ~266 px (~4.2 cells). Missing faction → procedural.
+- **Base.gd `_build_visual`:** GLTF branch — model replaces apron/body/corners/turret (the
+  fortress is sculptural; turret fire still originates at the plane pos via Vfx), `_height` =
+  wall height, HP bar (width 160) billboards above the spire. Bloom/Mesh keep the bunker.
+- **Verified:** editor-imported (No-loader gotcha honored), Battle3D F1 run — zero SCRIPT ERRORs,
+  no "No loader found"; screenshot shows the fortress dwarfing Commander+units on the claimed
+  grid, HP bar correct. Map/unit scale NOT changed — 4-cell footprint reads imposing without
+  crowding the 60×34 map.
+- **Gaps / next:** (1) no emissive texture in this Rodin export → cyan channels don't glow;
+  re-export from Rodin with emissive (or bake one from the diffuse cyan mask) and rebind.
+  (2) Gate facing unverified at close zoom — if the gatehouse faces away from the default camera,
+  flip `FACTION_BASE_YAW.architects` to 180. (3) Playtest: walls vs Commander height side-by-side,
+  enemy breach readability, late-wave perf with the 40k-tri base. (4) ⚠ EXES NOT RE-EXPORTED —
+  run `.\tools\export.ps1` after the hand playtest. (5) ⚠ My F1 dev run auto-saved — if you had a
+  real campaign save, check `%APPDATA%\Godot\app_userdata\Cycle Four\` before continuing it.
+
+---
+
+## Session 2026-07-21 — DESIGN CANON MIGRATED IN-REPO; CYCLE FOUR IS SOLE SOURCE OF TRUTH
+
+User directive: Cycle Four is the source of truth for ALL game work going forward — build
+AND design. The design corpus that previously lived in the separate Skippy project
+(`C:\ClaudeProjects\Skippy Gaming Design Engineer Agent\`) is now migrated in-repo; Skippy
+is historical only (do not read from or write back to it).
+
+- **Migrated into `docs\`** (copied from Skippy, kept the pre-existing `docs\codex\Units_Land.md`):
+  · `docs\core\` — full numbered design corpus `01`–`24` (incl. `23_open-questions-resolved.md`,
+    `17_units-maps-buildings.md`, `24_ability-system.md`, `24_late-game-balance.md`; note the
+    RETIRED ULBFF `01`–`09` come along for completeness).
+  · `docs\codex\` — Game Codex `00`–`11` + `The-Codex.html`, beside `Units_Land.md`.
+  · `docs\planning\` — `map-architecture-implementation-handoff.md` (+ brief),
+    `academy-scene-implementation-handoff.md`.
+  · `docs\` root — `PROJECT-MEMORY.md`, `Cowork_Faction_Lore_Brief.md`, `Game design ideas.md`.
+- **Repointed all in-repo Skippy references** to the new `docs\...` paths: this `CLAUDE.md`
+  header + the map-architecture handoff pointer + the Track-B ability-system output path;
+  `DASHBOARD.html` Codex/Wiki doc links (also fixed three dead links to the real filenames:
+  20→`galaxy-strategy`, 21→`late-game-progression`, 22→`interface-design`);
+  `docs\core\10_faction-lore.md` project-files path.
+- **NOT migrated** (Skippy tooling/infra, not game-design canon): Skippy's own `CLAUDE.md`,
+  `Setup-GameDesignAI.ps1`, the local-AI chat stack, and `GameDesignAI_ProjectPlan*` files.
+- Migrated docs are now a COPY — edits in Cycle Four do not sync back to Skippy (intended:
+  Cycle Four is canonical). No engine code touched; no export needed.
 
 ---
 
@@ -2262,7 +2469,7 @@ assets/            -- sprites, audio, fonts, shaders
 The hardcoded 30x17 cell grid is being replaced with a multi-layer,
 data-driven architecture. Full specification lives at:
 
-`C:\ClaudeProjects\Skippy Gaming Design Engineer Agent\planning\map-architecture-implementation-handoff.md`
+`D:\AI\Cycle Four\docs\planning\map-architecture-implementation-handoff.md`
 
 **Read the handoff doc before touching any file in `src/core/map/`.**
 
@@ -2426,7 +2633,7 @@ Current combat in Commander.gd:
 7. What 2–3 other abilities beyond the cannon AOE make sense for the first build?
 
 #### Output
-Write `C:\ClaudeProjects\Skippy Gaming Design Engineer Agent\core\24_ability-system.md`
+Write `D:\AI\Cycle Four\docs\core\24_ability-system.md`
 covering all of the above plus implementation handoff notes (files to touch, new
 resource types, signal names). This doc is the spec for Track C.
 

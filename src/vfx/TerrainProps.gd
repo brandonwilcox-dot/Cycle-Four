@@ -11,51 +11,59 @@ const SIZE_MAX     : float = 30.0
 const HEIGHT_BAND  : float = 0.045   ## how far above water level ground must be
 ## Forest/jungle pass (2026-07-20): denser canopy, clustered into groves so trees form
 ## navigable boundaries between clearings (open plains are now the exception).
-const GRASS_FIELD_DENSITY : float = 1.90
-const GRASS_PATCH_DENSITY : float = 1.60
-const BUSH_DENSITY        : float = 3.20
-const TREE_DENSITY        : float = 3.60
+## 2026-07-21 density pass (user: ~75% ground coverage — too much bare dirt): global
+## multipliers ~2.5x on top of the per-style counts, plus a lower GROVE_LEVEL so groves
+## cover more of the map, and looser open-ground tree acceptance.
+const GRASS_FIELD_DENSITY : float = 4.5
+const GRASS_PATCH_DENSITY : float = 3.2
+const BUSH_DENSITY        : float = 8.0
+const TREE_DENSITY        : float = 8.5
+const OPEN_TREE_ACCEPT    : float = 0.30   ## was 0.12 — open ground keeps scattered trees
 ## Grove clustering: trees/bushes favour cells where this coarse field is high, leaving
 ## the rest as clearings. FREQ/LEVEL mirror MapGrid.FOREST_* so the visual canopy lines
 ## up with the concealment mask (dense trees == reduced vision there).
 const GROVE_FREQ  : float = 0.010
-const GROVE_LEVEL : float = 0.50
+const GROVE_LEVEL : float = 0.38   ## 2026-07-21: lower threshold — groves claim more ground
 const ROCK_COLOR   : Color = Color(0.82, 0.80, 0.78)
 const ROCK_ALBEDO  : Texture2D = preload("res://assets/textures/ground/aerial_rocks_02_diff.jpg")
 const ROCK_NORMAL  : Texture2D = preload("res://assets/textures/ground/aerial_rocks_02_nor.jpg")
 const ROCK_ROUGH   : Texture2D = preload("res://assets/textures/ground/aerial_rocks_02_rough.jpg")
 const FLORA_SHADER := preload("res://assets/shaders/biome_flora.gdshader")
+## 2026-07-21 "life pass" (playtest: flora read brown/dead): every biome got saturated
+## living palettes, brighter tips, MORE flora, and a soft bioluminescent emission so the
+## glow pass lights the undergrowth. Ashen re-themed dead-brown → golden savanna; rust
+## re-themed dry-rot → glowing ember scrub.
 const FLORA_STYLES := [
-	{"grass_fields": 30, "grass_per_field": 15, "bush_attempts": 170, "tree_attempts": 115,
-		"base": Color(0.08, 0.25, 0.055), "tip": Color(0.44, 0.72, 0.18),
-		"bush_base": Color(0.055, 0.20, 0.045), "bush_tip": Color(0.30, 0.58, 0.12),
-		"tree_base": Color(0.035, 0.15, 0.035), "tree_tip": Color(0.24, 0.52, 0.10),
-		"trunk": Color(0.20, 0.115, 0.055), "emission": Color(0.0, 0.0, 0.0),
-		"energy": 0.0, "roughness": 0.92, "wind": 0.14,
+	{"grass_fields": 40, "grass_per_field": 18, "bush_attempts": 220, "tree_attempts": 140,
+		"base": Color(0.10, 0.32, 0.07), "tip": Color(0.55, 0.95, 0.22),
+		"bush_base": Color(0.07, 0.26, 0.06), "bush_tip": Color(0.42, 0.80, 0.16),
+		"tree_base": Color(0.05, 0.20, 0.05), "tree_tip": Color(0.32, 0.70, 0.14),
+		"trunk": Color(0.24, 0.14, 0.07), "emission": Color(0.10, 0.35, 0.08),
+		"energy": 0.10, "roughness": 0.88, "wind": 0.14,
 		"grass_min_h": 7.0, "grass_max_h": 14.0, "bush_min_h": 13.0, "bush_max_h": 27.0,
 		"tree_min_h": 46.0, "tree_max_h": 78.0, "min_relief": 0.012, "max_relief": 0.19},
-	{"grass_fields": 17, "grass_per_field": 12, "bush_attempts": 115, "tree_attempts": 65,
-		"base": Color(0.20, 0.17, 0.11), "tip": Color(0.50, 0.40, 0.21),
-		"bush_base": Color(0.17, 0.15, 0.10), "bush_tip": Color(0.38, 0.33, 0.19),
-		"tree_base": Color(0.13, 0.14, 0.11), "tree_tip": Color(0.31, 0.32, 0.23),
-		"trunk": Color(0.17, 0.13, 0.095), "emission": Color(0.0, 0.0, 0.0),
-		"energy": 0.0, "roughness": 0.98, "wind": 0.085,
+	{"grass_fields": 24, "grass_per_field": 15, "bush_attempts": 150, "tree_attempts": 85,
+		"base": Color(0.28, 0.24, 0.12), "tip": Color(0.85, 0.72, 0.34),
+		"bush_base": Color(0.24, 0.21, 0.12), "bush_tip": Color(0.66, 0.58, 0.28),
+		"tree_base": Color(0.18, 0.20, 0.13), "tree_tip": Color(0.52, 0.55, 0.30),
+		"trunk": Color(0.20, 0.15, 0.10), "emission": Color(0.30, 0.24, 0.08),
+		"energy": 0.08, "roughness": 0.94, "wind": 0.10,
 		"grass_min_h": 6.0, "grass_max_h": 12.0, "bush_min_h": 11.0, "bush_max_h": 23.0,
 		"tree_min_h": 38.0, "tree_max_h": 66.0, "min_relief": 0.022, "max_relief": 0.22},
-	{"grass_fields": 16, "grass_per_field": 12, "bush_attempts": 90, "tree_attempts": 52,
-		"base": Color(0.12, 0.25, 0.46), "tip": Color(0.52, 0.82, 1.0),
-		"bush_base": Color(0.10, 0.22, 0.42), "bush_tip": Color(0.40, 0.70, 1.0),
-		"tree_base": Color(0.08, 0.18, 0.38), "tree_tip": Color(0.46, 0.76, 1.0),
-		"trunk": Color(0.10, 0.15, 0.25), "emission": Color(0.18, 0.48, 1.0),
-		"energy": 0.38, "roughness": 0.28, "wind": 0.035,
+	{"grass_fields": 22, "grass_per_field": 15, "bush_attempts": 120, "tree_attempts": 70,
+		"base": Color(0.12, 0.25, 0.46), "tip": Color(0.55, 0.85, 1.0),
+		"bush_base": Color(0.10, 0.22, 0.42), "bush_tip": Color(0.45, 0.75, 1.0),
+		"tree_base": Color(0.08, 0.18, 0.38), "tree_tip": Color(0.50, 0.80, 1.0),
+		"trunk": Color(0.10, 0.15, 0.25), "emission": Color(0.25, 0.60, 1.15),
+		"energy": 0.50, "roughness": 0.28, "wind": 0.035,
 		"grass_min_h": 9.0, "grass_max_h": 17.0, "bush_min_h": 15.0, "bush_max_h": 30.0,
 		"tree_min_h": 50.0, "tree_max_h": 82.0, "min_relief": 0.045, "max_relief": 0.29},
-	{"grass_fields": 21, "grass_per_field": 13, "bush_attempts": 145, "tree_attempts": 80,
-		"base": Color(0.25, 0.095, 0.03), "tip": Color(0.72, 0.34, 0.075),
-		"bush_base": Color(0.20, 0.07, 0.025), "bush_tip": Color(0.56, 0.21, 0.055),
-		"tree_base": Color(0.18, 0.055, 0.02), "tree_tip": Color(0.50, 0.18, 0.045),
-		"trunk": Color(0.19, 0.075, 0.035), "emission": Color(0.34, 0.08, 0.02),
-		"energy": 0.06, "roughness": 0.86, "wind": 0.08,
+	{"grass_fields": 28, "grass_per_field": 16, "bush_attempts": 190, "tree_attempts": 105,
+		"base": Color(0.34, 0.11, 0.04), "tip": Color(1.0, 0.45, 0.10),
+		"bush_base": Color(0.28, 0.09, 0.03), "bush_tip": Color(0.85, 0.30, 0.08),
+		"tree_base": Color(0.24, 0.08, 0.03), "tree_tip": Color(0.75, 0.26, 0.07),
+		"trunk": Color(0.22, 0.09, 0.04), "emission": Color(0.55, 0.14, 0.03),
+		"energy": 0.22, "roughness": 0.80, "wind": 0.08,
 		"grass_min_h": 7.0, "grass_max_h": 14.0, "bush_min_h": 12.0, "bush_max_h": 25.0,
 		"tree_min_h": 42.0, "tree_max_h": 72.0, "min_relief": 0.020, "max_relief": 0.21},
 ]
@@ -181,29 +189,48 @@ func _rebuild(grid: Node, map_data) -> void:
 	_build_rocks(placed, colors)
 	_build_vegetation(grid, spawn_cells, tseed, water_level, amp)
 
+## Real photoscanned assets (2026-07-21, user: procedural blobs too simple). Loaded once,
+## meshes reused in the MultiMesh layers. PolyHaven CC0 (boulder + calathea plant).
+const ROCK_GLB  := "res://assets/models/props/rock_boulder_01.glb"
+const BUSH_GLB  := "res://assets/models/props/plant_calathea_01.glb"
+
+## Extract a render Mesh (materials baked onto surfaces) from a GLB scene, or null.
+static func _glb_mesh(path: String) -> Mesh:
+	if not ResourceLoader.exists(path):
+		return null
+	var scene = ResourceLoader.load(path)
+	if scene == null:
+		return null
+	var inst : Node = scene.instantiate()
+	var mi : MeshInstance3D = _find_mi(inst)
+	var m : Mesh = null
+	if mi != null and mi.mesh != null:
+		m = mi.mesh
+		for si in range(m.get_surface_count()):
+			var ov : Material = mi.get_surface_override_material(si)
+			if ov != null:
+				m.surface_set_material(si, ov)
+	inst.queue_free()
+	return m
+
+static func _find_mi(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node
+	for c in node.get_children():
+		var r : MeshInstance3D = _find_mi(c)
+		if r != null:
+			return r
+	return null
+
 func _build_rocks(placed: Array[Transform3D], colors: Array[Color]) -> void:
 	if placed.is_empty():
 		return
-	var mesh := SphereMesh.new()
-	mesh.radius = 1.0
-	mesh.height = 1.6
-	mesh.radial_segments = 7
-	mesh.rings = 4
-	if _mat == null:
-		_mat = StandardMaterial3D.new()
-		_mat.albedo_color = ROCK_COLOR
-		_mat.albedo_texture = ROCK_ALBEDO
-		_mat.roughness = 1.0
-		_mat.roughness_texture = ROCK_ROUGH
-		_mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
-		_mat.metallic = 0.02
-		_mat.normal_enabled = true
-		_mat.normal_texture = ROCK_NORMAL
-		_mat.normal_scale = 0.78
-		_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-		_mat.uv1_scale = Vector3(1.35, 1.35, 1.35)
-		_mat.vertex_color_use_as_albedo = true
-	mesh.material = _mat
+	## Real boulder mesh (own PBR textures + baked normals) replaces the sphere blob.
+	var mesh : Mesh = _glb_mesh(ROCK_GLB)
+	if mesh == null:
+		var sm := SphereMesh.new()
+		sm.radius = 1.0; sm.height = 1.6; sm.radial_segments = 7; sm.rings = 4
+		mesh = sm
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -222,6 +249,9 @@ func _build_rocks(placed: Array[Transform3D], colors: Array[Color]) -> void:
 	add_child(_mmi)
 
 static func _is_natural_cell(grid: Node, cell: int) -> bool:
+	## Structure aprons are worked pads — keep rocks/flora off them (2026-07-21).
+	if grid.has_method("is_apron_index") and bool(grid.call("is_apron_index", cell)):
+		return false
 	var kind : int = grid._cells[cell]
 	return kind == grid.Cell.GROUND or kind == grid.Cell.CLAIMED
 
@@ -287,37 +317,50 @@ static func _make_bush_mesh() -> ArrayMesh:
 	st.generate_normals()
 	return st.commit()
 
+## 2026-07-21: less "blob on a stick" — a tapered trunk that rises INTO the crown, a few
+## angled branch stubs, and an irregular multi-lobe canopy (vertically stretched ellipsoids
+## + a pointed top) so the silhouette reads as a full tree, not a ball on a pole.
 static func _make_tree_mesh() -> ArrayMesh:
 	var tree := ArrayMesh.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260721
+	## --- trunk + branches (surface 0) ---
 	var trunk := CylinderMesh.new()
-	trunk.top_radius = 0.34
-	trunk.bottom_radius = 0.62
-	trunk.height = 1.0
-	trunk.radial_segments = 7
-	trunk.rings = 1
+	trunk.top_radius = 0.18; trunk.bottom_radius = 0.9
+	trunk.height = 1.0; trunk.radial_segments = 8; trunk.rings = 1
 	var trunk_st := SurfaceTool.new()
 	trunk_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	## main bole — taller, rising to 0.62 so the canopy sits ON it
 	trunk_st.append_from(trunk, 0,
-		Transform3D(Basis().scaled(Vector3(0.13, 0.66, 0.13)), Vector3(0.0, 0.33, 0.0)))
+		Transform3D(Basis().scaled(Vector3(0.11, 0.64, 0.11)), Vector3(0.0, 0.32, 0.0)))
+	## three angled branch stubs reaching up into the crown
+	var branch := CylinderMesh.new()
+	branch.top_radius = 0.05; branch.bottom_radius = 0.16
+	branch.height = 1.0; branch.radial_segments = 5; branch.rings = 1
+	for bi in 3:
+		var ang : float = float(bi) * TAU / 3.0 + 0.4
+		var tilt := Basis.from_euler(Vector3(0.0, ang, 0.7))
+		var b := tilt.scaled(Vector3(0.06, 0.30, 0.06))
+		trunk_st.append_from(branch, 0,
+			Transform3D(b, Vector3(cos(ang) * 0.10, 0.48, sin(ang) * 0.10)))
 	trunk_st.generate_normals()
 	trunk_st.commit(tree)
+	## --- canopy (surface 1): irregular stacked lobes, taller than wide, pointed top ---
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.5
-	sphere.height = 1.0
-	sphere.radial_segments = 9
-	sphere.rings = 5
-	var crowns : Array = [
-		[Vector3(0.0, 0.67, 0.0), Vector3(0.92, 0.52, 0.86)],
-		[Vector3(-0.27, 0.72, 0.04), Vector3(0.58, 0.44, 0.60)],
-		[Vector3(0.27, 0.73, 0.07), Vector3(0.60, 0.46, 0.55)],
-		[Vector3(-0.04, 0.76, -0.27), Vector3(0.62, 0.46, 0.58)],
-		[Vector3(0.06, 0.90, 0.0), Vector3(0.52, 0.38, 0.50)],
-	]
+	sphere.radius = 0.5; sphere.height = 1.0; sphere.radial_segments = 9; sphere.rings = 5
 	var leaf_st := SurfaceTool.new()
 	leaf_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for crown in crowns:
-		var xform := Transform3D(Basis().scaled(crown[1]), crown[0])
-		leaf_st.append_from(sphere, 0, xform)
+	var lobes : int = 9
+	for li in lobes:
+		var frac : float = float(li) / float(lobes - 1)
+		var ring_ang : float = float(li) * 2.399   ## golden-angle spread
+		var rad : float = lerpf(0.62, 0.14, frac) * rng.randf_range(0.85, 1.12)
+		var h : float = lerpf(0.60, 1.06, frac) + rng.randf_range(-0.03, 0.03)
+		var off : float = lerpf(0.34, 0.05, frac)
+		var pos := Vector3(cos(ring_ang) * off, h, sin(ring_ang) * off)
+		## vertically stretched, slightly squashed horizontally = leafy mass, not a ball
+		var sc := Vector3(rad, rad * rng.randf_range(1.15, 1.5), rad)
+		leaf_st.append_from(sphere, 0, Transform3D(Basis().scaled(sc), pos))
 	leaf_st.generate_normals()
 	leaf_st.commit(tree)
 	return tree
@@ -456,12 +499,12 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 		var gz : float = (float(row) + 0.5) * csize
 		var grove : float = _fbm(Vector2(gx, gz) * GROVE_FREQ + Vector2(tseed + 91.3, tseed - 47.1))
 		var grove_w : float = clampf((grove - GROVE_LEVEL) / (1.0 - GROVE_LEVEL), 0.0, 1.0)
-		if rng.randf() > 0.12 + grove_w * grove_w:
-			continue   ## sparse in the open, thick in the grove
+		if rng.randf() > OPEN_TREE_ACCEPT + grove_w * grove_w:
+			continue   ## scattered in the open, thick in the grove
 		var cell : int = col + row * cols
 		var stack : int = tree_taken.get(cell, 0)
-		if stack >= 1 + int(round(grove_w * 2.0)):
-			continue   ## up to 3 trees/cell at grove core, 1 in light woods
+		if stack >= 2 + int(round(grove_w * 3.0)):
+			continue   ## up to 5 trees/cell at grove core, 2 in light woods
 		var wx : float = (float(col) + rng.randf_range(0.18, 0.82)) * csize
 		var wz : float = (float(row) + rng.randf_range(0.18, 0.82)) * csize
 		var hn : float = _fbm(Vector2(wx, wz) * 0.006 + Vector2(tseed, tseed))
@@ -487,8 +530,11 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 	_trunk_mat.roughness = 0.98
 	var grass_mesh := _make_grass_field_mesh()
 	grass_mesh.surface_set_material(0, _flora_mat)
-	var bush_mesh := _make_bush_mesh()
-	bush_mesh.surface_set_material(0, _bush_mat)
+	## Bushes: real leafy calathea plant (own alpha-cut textured leaves), procedural fallback.
+	var bush_mesh : Mesh = _glb_mesh(BUSH_GLB)
+	if bush_mesh == null:
+		bush_mesh = _make_bush_mesh()
+		bush_mesh.surface_set_material(0, _bush_mat)
 	var tree_mesh := _make_tree_mesh()
 	tree_mesh.surface_set_material(0, _trunk_mat)
 	tree_mesh.surface_set_material(1, _tree_mat)
@@ -508,6 +554,53 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 	_tree_shown.fill(0)
 	_tree_mmi = _create_vegetation_layer("BiomeTrees", tree_mesh, tree_placed, tree_colors,
 		cols, rows, csize, float(style["tree_max_h"]), true)
+	_build_fireflies(style, tree_placed, cols, rows, csize)
+
+## Drifting emissive motes over the groves (2026-07-21 atmosphere pass) — one CPUParticles3D
+## per rebuild, seeded from the tree spread's bounding span, tinted to the biome emission.
+var _fireflies : CPUParticles3D = null
+func _build_fireflies(style: Dictionary, trees: Array, cols: int, rows: int, csize: float) -> void:
+	if _fireflies != null:
+		_fireflies.queue_free()
+		_fireflies = null
+	if trees.is_empty():
+		return
+	var em : Color = style.get("emission", Color(0.2, 0.5, 0.3))
+	var p := CPUParticles3D.new()
+	p.name = "GroveFireflies"
+	p.amount = clampi(trees.size() / 3, 40, 260)
+	p.lifetime = 6.0
+	p.preprocess = 3.0
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(cols * csize * 0.5, 40.0, rows * csize * 0.5)
+	p.position = Vector3(cols * csize * 0.5, 55.0, rows * csize * 0.5)
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 60.0
+	p.gravity = Vector3.ZERO
+	p.initial_velocity_min = 2.0
+	p.initial_velocity_max = 8.0
+	p.scale_amount_min = 1.6
+	p.scale_amount_max = 3.2
+	var mesh := SphereMesh.new()
+	mesh.radius = 1.0; mesh.height = 2.0; mesh.radial_segments = 6; mesh.rings = 3
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = em.lightened(0.4)
+	mat.emission_enabled = true
+	mat.emission = em.lightened(0.3)
+	mat.emission_energy_multiplier = 3.5
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mesh.material = mat
+	p.mesh = mesh
+	## Fade the motes in/out over their life so they twinkle rather than pop.
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1, 1, 1, 0.0))
+	ramp.add_point(0.5, Color(1, 1, 1, 1.0))
+	ramp.set_color(1, Color(1, 1, 1, 0.0))
+	p.color_ramp = ramp   ## CPUParticles3D.color_ramp is a Gradient (GPU variant uses a texture)
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	_fireflies = p
 
 func _cell_is_visible(map_data, cell: int) -> bool:
 	if _grid == null:

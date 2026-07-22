@@ -11,26 +11,37 @@ const SKY_SHADER := preload("res://assets/shaders/starfield_sky.gdshader")
 const SUBSTRATE  := preload("res://src/vfx/SubstrateMaterials.gd")
 
 ## --- key / fill lights ---------------------------------------------------------------
-const KEY_ROTATION_DEG   : Vector3 = Vector3(-52.0, -40.0, 0.0)   ## matches the pre-V1 sun angle
+## 2026-07-21 "no more noon": sun lowered -52° → -33° elevation so structures get a LIT
+## side and a SHADOW side (Blender-lookdev directional modeling). Ambient/fill deliberately
+## sit lower than round-1 so the shadow side actually reads darker.
+const KEY_ROTATION_DEG   : Vector3 = Vector3(-33.0, -40.0, 0.0)
 const KEY_COLOR          : Color = Color(1.0, 0.93, 0.82)          ## warm amber-white ("warm light on a work surface")
-const KEY_ENERGY         : float = 1.15
+const KEY_ENERGY         : float = 1.5    ## 2026-07-21 playtest: scene read dull — brighter sun
 const KEY_SHADOW_MAX_DIST: float = 6000.0                          ## pixel scale — default 100 is invisible here
 const FILL_ROTATION_DEG  : Vector3 = Vector3(-28.0, 140.0, 0.0)    ## opposes the key in yaw
 const FILL_COLOR         : Color = Color(0.45, 0.60, 0.90)         ## cool moonlight rim
-const FILL_ENERGY        : float = 0.35
+const FILL_ENERGY        : float = 0.38   ## cool rim only — must not lift the shadow side to noon
 
 ## --- environment ---------------------------------------------------------------------
 const AMBIENT_COLOR      : Color = Color(0.38, 0.45, 0.58)
-const AMBIENT_ENERGY     : float = 0.40
-const GLOW_INTENSITY     : float = 0.70
+const AMBIENT_ENERGY     : float = 0.42   ## lower than round-1: SSIL/SDFGI now fill the shadows
+const GLOW_INTENSITY     : float = 0.95
+## Polished-lookdev stack (2026-07-21, user: "give me everything"):
+const SSIL_ENABLED       : bool  = true    ## screen-space indirect — emissives light nearby ground
+const SSIL_RADIUS        : float = 96.0    ## ~1.5 cells at pixel scale
+const SSIL_INTENSITY     : float = 1.6
+const SDFGI_ENABLED      : bool  = true    ## real bounced light. PERF GATE: flip false first if frames dip
+const SDFGI_MIN_CELL     : float = 24.0    ## world (pixel) scale — coarse cascades, cheap-ish
+const VOL_EMISSION       : Color = Color(0.05, 0.07, 0.10)   ## faint self-lit haze (god-ray body)
+const VOL_EMISSION_ENERGY: float = 0.35
 const GLOW_BLOOM         : float = 0.05
 const FOG_COLOR          : Color = Color(0.10, 0.14, 0.22)
 const FOG_DENSITY        : float = 0.00005    ## exp fog at pixel scale: ~8% haze at 1600, ~26% at 6000
 const FOG_FADE_RATE      : float = 0.00012    ## density/sec toward the zoom target (galaxy = no fog)
 const SSAO_RADIUS        : float = 24.0       ## ~1/3 cell — grounds structures onto their tiles
 const SSAO_INTENSITY     : float = 1.5
-const GRADE_SATURATION   : float = 0.95       ## melancholy, not grimdark: a touch under neutral
-const GRADE_CONTRAST     : float = 1.03
+const GRADE_SATURATION   : float = 1.06       ## 2026-07-21: over neutral — the muted grade read as dull
+const GRADE_CONTRAST     : float = 1.05
 
 ## V5.2 — THE canon effect (codex/03): while an Ancient is present, "color drains".
 ## Saturation sinks toward OBSERVED_SATURATION while anything is in the "ancients" group,
@@ -42,10 +53,10 @@ const OBSERVED_RECOVER_RATE : float = 0.25 ## saturation/sec back to the normal 
 ## E1 biome light grades (environment-skinning-plan.md): keyed by MapGrid's biome index.
 ## [key_color, key_energy, ambient_color, fog_color]
 const BIOME_LIGHT : Array = [
-	[Color(1.00, 0.93, 0.82), 1.15, Color(0.38, 0.45, 0.58), Color(0.10, 0.14, 0.22)],  ## verdant (baseline)
-	[Color(1.00, 0.86, 0.70), 1.05, Color(0.46, 0.42, 0.40), Color(0.14, 0.12, 0.11)],  ## ashen — dusty, warm-grey
-	[Color(0.90, 0.95, 1.00), 1.20, Color(0.36, 0.44, 0.64), Color(0.09, 0.13, 0.26)],  ## crystal — cold, clear
-	[Color(1.00, 0.82, 0.62), 1.10, Color(0.48, 0.40, 0.34), Color(0.15, 0.11, 0.08)],  ## rust — low amber sun
+	[Color(1.00, 0.93, 0.82), 1.50, Color(0.42, 0.50, 0.62), Color(0.10, 0.14, 0.22)],  ## verdant (baseline)
+	[Color(1.00, 0.88, 0.72), 1.40, Color(0.52, 0.48, 0.44), Color(0.14, 0.12, 0.11)],  ## ashen — golden, dusty
+	[Color(0.90, 0.95, 1.00), 1.55, Color(0.40, 0.48, 0.70), Color(0.09, 0.13, 0.26)],  ## crystal — cold, clear
+	[Color(1.00, 0.84, 0.64), 1.45, Color(0.54, 0.44, 0.36), Color(0.15, 0.11, 0.08)],  ## rust — low amber sun
 ]
 
 ## Volumetric fog (E1): faint light-shafted haze at tactical pitch. Density is an
@@ -53,7 +64,7 @@ const BIOME_LIGHT : Array = [
 ## opaque wall (optical depth 32 — the 2026-07-19 "map all hidden" bug). 0.0001 ≈ 15%
 ## haze at tactical distance. Perf dial: set VOLUMETRIC false first if frames dip.
 const VOLUMETRIC          : bool = true
-const VOLUMETRIC_DENSITY  : float = 0.0001
+const VOLUMETRIC_DENSITY  : float = 0.00022   ## 2026-07-21: ~2x — visible god-ray shafts at tactical pitch
 const VOLUMETRIC_LENGTH   : float = 4000.0   ## pixel scale — covers the tactical camera band
 
 var _env : Environment = null
@@ -133,21 +144,54 @@ func _build_environment() -> void:
 		_env.volumetric_fog_density = VOLUMETRIC_DENSITY
 		_env.volumetric_fog_length = VOLUMETRIC_LENGTH
 		_env.volumetric_fog_albedo = FOG_COLOR.lightened(0.35)
-		_env.volumetric_fog_emission_energy = 0.0
+		_env.volumetric_fog_emission = VOL_EMISSION
+		_env.volumetric_fog_emission_energy = VOL_EMISSION_ENERGY
 		_env.volumetric_fog_sky_affect = 0.0
 
 	_env.ssao_enabled = true
 	_env.ssao_radius = SSAO_RADIUS
 	_env.ssao_intensity = SSAO_INTENSITY
 
+	## 2026-07-21 polished-lookdev stack — SSIL (emissives bleed onto nearby surfaces) +
+	## SDFGI (true bounced key light: lit sides bounce warmth into shadow sides).
+	if SSIL_ENABLED:
+		_env.ssil_enabled = true
+		_env.ssil_radius = SSIL_RADIUS
+		_env.ssil_intensity = SSIL_INTENSITY
+	if SDFGI_ENABLED:
+		_env.sdfgi_enabled = true
+		_env.sdfgi_min_cell_size = SDFGI_MIN_CELL
+		_env.sdfgi_bounce_feedback = 0.3
+		_env.sdfgi_energy = 1.0
+
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = GRADE_SATURATION
 	_env.adjustment_contrast = GRADE_CONTRAST
+	_env.adjustment_color_correction = _build_grade_lut()
 
 	var we : WorldEnvironment = WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = _env
 	add_child(we)
+
+## Filmic grading LUT built in code (no asset): gentle S-curve (deeper shadows, protected
+## highlights) + split-tone — cool teal lift in the shadows, warm drift in the highlights.
+## The Blender-lookdev "polish" the flat tonemap alone doesn't give.
+func _build_grade_lut() -> ImageTexture:
+	var w : int = 256
+	var img := Image.create(w, 1, false, Image.FORMAT_RGB8)
+	for i in w:
+		var t : float = float(i) / float(w - 1)
+		## S-curve via smoothstep blended over identity.
+		var s : float = lerpf(t, t * t * (3.0 - 2.0 * t), 0.55)
+		## Split-tone: shadows toward teal, highlights toward warm amber.
+		var shadow_w : float = pow(1.0 - s, 2.2) * 0.055
+		var high_w   : float = pow(s, 2.2) * 0.045
+		var r : float = clampf(s - shadow_w * 0.6 + high_w, 0.0, 1.0)
+		var g : float = clampf(s + shadow_w * 0.25 + high_w * 0.55, 0.0, 1.0)
+		var b : float = clampf(s + shadow_w - high_w * 0.7, 0.0, 1.0)
+		img.set_pixel(i, 0, Color(r, g, b))
+	return ImageTexture.create_from_image(img)
 
 ## Depth fog sells scale at tactical pitch but would wash out the galaxy graph at zoom-out
 ## (nodes sit 5000–14000 px away), so fade it toward zero while the rig reports galaxy zoom.

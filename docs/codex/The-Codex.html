@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Codex — Cycle Four — Canon Reference</title>
+<style>
+  body {
+    font-family: "Cambria", "Georgia", serif;
+    color: #1c1c1c;
+    line-height: 1.62;
+    max-width: 7.2in;
+    margin: 0 auto;
+    padding: 0.6in 0.7in;
+    background: #ffffff;
+    font-size: 12pt;
+  }
+  h1 {
+    font-size: 23pt;
+    font-weight: 700;
+    margin-top: 0;
+    padding-top: 0.35in;
+    border-top: 3px solid #2a2a2a;
+    page-break-before: always;
+    line-height: 1.2;
+  }
+  h1.nobreak { page-break-before: avoid; border-top: none; padding-top: 0; }
+  h2 {
+    font-size: 15pt;
+    font-weight: 700;
+    margin-top: 1.5em;
+    color: #222;
+  }
+  h3 {
+    font-size: 12.5pt;
+    font-weight: 700;
+    margin-top: 1.2em;
+    color: #333;
+    font-style: italic;
+  }
+  p { margin: 0.7em 0; }
+  blockquote {
+    border-left: 3px solid #999;
+    margin: 1em 0;
+    padding: 0.3em 0 0.3em 1em;
+    color: #444;
+    background: #f6f6f4;
+    font-style: italic;
+  }
+  blockquote em { font-style: normal; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.1em 0;
+    font-size: 10.5pt;
+  }
+  th, td {
+    border: 1px solid #b8b8b8;
+    padding: 6px 9px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #ebe9e4; font-weight: 700; }
+  ul, ol { margin: 0.7em 0; padding-left: 1.5em; }
+  li { margin: 0.35em 0; }
+  code { font-family: "Consolas", monospace; font-size: 0.9em; background: #f0f0ee; padding: 0 2px; }
+  .titlepage {
+    text-align: center;
+    page-break-after: always;
+    padding-top: 2.2in;
+  }
+  .titlepage .maintitle { font-size: 40pt; font-weight: 700; letter-spacing: 0.04em; }
+  .titlepage .subtitle { font-size: 15pt; color: #555; margin-top: 0.3em; }
+  .titlepage .rule { width: 2.2in; border-top: 2px solid #2a2a2a; margin: 0.5in auto; }
+  .titlepage .meta { font-size: 11pt; color: #666; margin-top: 2.4in; line-height: 1.8; }
+  .toc { page-break-after: always; }
+  .toc h1 { page-break-before: avoid; border-top: none; padding-top: 0; }
+  .toc ol { list-style: none; padding-left: 0; }
+  .toc ol li { margin: 0.5em 0; font-size: 11.5pt; }
+  .toc .num { display: inline-block; width: 2.2em; font-weight: 700; }
+  .note {
+    background: #f1f0ec;
+    border: 1px solid #cfcdc4;
+    padding: 0.5em 0.9em;
+    font-size: 10.5pt;
+    margin: 1.2em 0;
+  }
+  .lead { color: #555; font-size: 11pt; }
+</style>
+</head>
+<body>
+
+<div class="titlepage">
+  <div class="subtitle" style="font-size:13pt;letter-spacing:0.34em;color:#8a8a8a;margin-bottom:0.1em;">CYCLE FOUR</div>
+  <div class="maintitle">THE CODEX</div>
+  <div class="subtitle">A Medium-Agnostic Canon Reference</div>
+  <div class="rule"></div>
+  <div class="subtitle" style="font-size:12pt;">The world, characters, history, and cosmology<br>of the convergence — source material for any medium</div>
+  <div class="meta">
+    The property is titled <strong>Cycle Four</strong><br>
+    Assembled from design corpus sessions 1&ndash;11<br>
+    Version 1.1 &middot; 2026-05-21
+  </div>
+</div>
+
+<div class="note">
+This document is the single-file edition of the Codex. It opens in Microsoft
+Word directly &mdash; use <strong>File &rarr; Save As &rarr; Word Document (.docx)</strong>
+to produce a native Word file. The canonical master is the <code>codex/</code>
+directory of Markdown files; this edition mirrors it for sharing with writers,
+game masters, and artists outside the project.
+</div>
+
+<div class="toc">
+<h1 class="nobreak">Contents</h1>
+<ol>
+  <li><span class="num">&mdash;</span><a href="#overview">About the Codex</a></li>
+  <li><span class="num">1</span><a href="#s1">The Premise</a></li>
+  <li><span class="num">2</span><a href="#s2">Cosmology</a></li>
+  <li><span class="num">3</span><a href="#s3">The Ancients</a></li>
+  <li><span class="num">4</span><a href="#s4">The Galaxy</a></li>
+  <li><span class="num">5</span><a href="#s5">The Three Factions as Cultures</a></li>
+  <li><span class="num">6</span><a href="#s6">Characters</a></li>
+  <li><span class="num">7</span><a href="#s7">The Timeline</a></li>
+  <li><span class="num">8</span><a href="#s8">The Central Mystery</a></li>
+  <li><span class="num">9</span><a href="#s9">Themes &amp; Tone</a></li>
+  <li><span class="num">10</span><a href="#s10">Canon Rules</a></li>
+  <li><span class="num">11</span><a href="#s11">Adaptation Notes</a></li>
+</ol>
+</div>
+
+<h1 id="overview">About the Codex</h1>
+
+<p class="lead">The central canon reference for the IP. This document presents the
+world, characters, history, and cosmology as a medium-agnostic canon &mdash; the
+source material from which any expression of the IP can be built: this game, a
+tabletop game a game master could run, a graphic novel, a YA novel, or anything
+else.</p>
+
+<h2>What the Codex Is</h2>
+
+<p>The design corpus (<code>core/10</code>&ndash;<code>core/22</code>) is thirteen
+interlocking documents that interleave <strong>lore</strong> with <strong>game
+mechanics</strong>. That is the correct shape for building <em>the game</em>. It is
+the wrong shape for building anything else.</p>
+
+<p>The Codex extracts the canon &mdash; the parts that are true about the world
+regardless of medium &mdash; and organizes it so that someone who will never read a
+design document can pick it up and tell a story in this universe. A novelist does
+not need the production cooldown of a unit. A game master does not need the
+Dominance Meter's thresholds. They need the world: who these people are, what
+happened to them, what is coming, and what it all means. This is the formal
+expression of the project's founding philosophy: <strong>the IP is the asset, not
+the specific game implementation.</strong></p>
+
+<h2>The Canon / Design Boundary</h2>
+
+<p>The Codex holds <strong>canon</strong>. Game mechanics live in the design corpus
+and are touched here only in Section 11, Adaptation Notes.</p>
+
+<table>
+<tr><th>Belongs in the Codex (canon)</th><th>Belongs in the design corpus (mechanics)</th></tr>
+<tr><td>The three factions are one fractured civilization</td><td>How sub-paths gate unit modifier slots</td></tr>
+<tr><td>The Ancients archive every civilization they watch fall</td><td>The Dominance Meter's four thresholds</td></tr>
+<tr><td>The Arrival ends a failed convergence in silence</td><td>Wave composition by tier number</td></tr>
+<tr><td>The Mark labels what the seed vault contains</td><td>The Mark's brightness scale of 0&ndash;100</td></tr>
+<tr><td>Wave commanders are the voice of the enemy civilization</td><td>The 24-commander dialogue table</td></tr>
+</table>
+
+<h2>How to Read It</h2>
+
+<table>
+<tr><th>#</th><th>Section</th><th>What it gives an adapter</th></tr>
+<tr><td>1</td><td>The Premise</td><td>The IP in one paragraph and one page. The hook.</td></tr>
+<tr><td>2</td><td>Cosmology</td><td>The convergence cycle, the four iterations, the Arrival.</td></tr>
+<tr><td>3</td><td>The Ancients</td><td>The watchers &mdash; posture, tragedy, the Custodian.</td></tr>
+<tr><td>4</td><td>The Galaxy</td><td>Geography, the Neutral Core, the Pilgrimage, the seed vaults.</td></tr>
+<tr><td>5</td><td>The Three Factions</td><td>Architects, Bloom, Mesh as civilizations.</td></tr>
+<tr><td>6</td><td>Characters</td><td>The cadet, the commanders, the named Ancients.</td></tr>
+<tr><td>7</td><td>The Timeline</td><td>The schism, the prior worlds, the fourth cycle.</td></tr>
+<tr><td>8</td><td>The Central Mystery</td><td>The Mark, the Fragments, the Address.</td></tr>
+<tr><td>9</td><td>Themes &amp; Tone</td><td>Identity, memory, kinship, separation.</td></tr>
+<tr><td>10</td><td>Canon Rules</td><td>What is fixed, flexible, and deliberately unanswered.</td></tr>
+<tr><td>11</td><td>Adaptation Notes</td><td>The canon mapped to game, tabletop, graphic novel, YA.</td></tr>
+</table>
+
+<h2>The Spine, Stated Once</h2>
+
+<p>Everything in the Codex resolves to a single structural truth, and every adapter
+should hold it from the first page: <strong>the three factions believe they were
+always separate. They are wrong. They are one civilization, fractured &mdash; and
+the story is the slow, earned recognition that the war was always a family tearing
+itself apart.</strong></p>
+
+<p>The corpus names the two readings <em>Option A</em> (peer factions, the truth of
+the surface) and <em>Option B</em> (fractured kin, the truth of the fiction). The
+audience begins inside Option A and is delivered, without ever being told outright,
+to Option B. The single sentence the canon is built to make the audience say &mdash;
+and which the canon itself must never say first &mdash; is: <em>You have been
+fighting yourself.</em></p>
+
+<h1 id="s1">1 &mdash; The Premise</h1>
+
+<h2>The IP in One Paragraph</h2>
+
+<p>A galaxy holds three warring civilizations. The Architects build: their genius is
+efficiency, and they are racing toward the galactic core to recover knowledge older
+than themselves. The Bloom grows: their genius is adaptation, and they spread across
+living worlds like a patient tide. The Mesh takes: their genius is the exploit, and
+they wire the stars into a network by stealing what the others made. Each faction
+knows, with total certainty, that it was always a separate people &mdash; always
+sovereign, always right. Each faction is wrong. They are one civilization, fractured
+long ago into three diverging ways of being, and they have forgotten it so
+completely that they now make war on their own reflection. Watching them is a fourth
+presence, the Ancients, who do not fight and do not rule. The Ancients have seen
+this exact fracture three times before, on three other worlds, and each time
+something <strong>arrived</strong> at the end of it and left a silence behind. They
+have come here to see whether the fourth attempt ends differently. The story is the
+slow recognition &mdash; earned across long play, never announced &mdash; that the
+war was always a family destroying itself, and that the only thing known to survive
+what comes next is a family that remembers itself in time.</p>
+
+<h2>The One-Page Version</h2>
+
+<h3>The surface</h3>
+<p>Three factions share one galaxy and cannot share it peacefully &mdash; not
+because they are cruel, but because what each one does for its own survival quietly
+ruins something the others need. The Architects pass through a star system and strip
+its knowledge; the Bloom colonizes what they leave behind and buries it under living
+growth; the Mesh captures a star and the worlds around it go cold. No faction has to
+attack another to harm it. The conflict is structural. This is the world the
+audience first meets &mdash; complete, coherent, and playable entirely on its own
+terms. The corpus calls this layer <strong>Option A</strong>: three peer
+civilizations with a long, bitter, shared history.</p>
+
+<h3>The truth beneath it</h3>
+<p>Option A is a lie the factions tell themselves. The truth is <strong>Option
+B</strong>: the three factions are the fractured descendants of a single origin.
+They diverged into three evolutionary and philosophical lineages &mdash; and then
+each lineage rewrote its own past so that it had always been alone. The evidence is
+everywhere, quiet enough to miss. Every faction carries an internal heresy that is,
+precisely, one step back toward one of the others: the Architects have mystics who
+build <em>with</em> the land the way the Bloom does; the Bloom has strains that
+absorb machinery the way the Mesh did to itself; the Mesh has old minds that dream of
+a life before augmentation. These are not three coincidences. They are three pieces
+of one civilization remembering itself under stress.</p>
+
+<h3>What is coming</h3>
+<p>The Ancients are not gods and not villains. They are archivists. They have
+watched civilizations reach this exact moment &mdash; when fractured kin are
+<em>close enough to reunify but have not</em> &mdash; and they have a name for what
+happens when that moment fails: the <strong>Arrival</strong>. It is not an army and
+not a monster. It is what fills the vacancy a unified civilization should have
+occupied and didn't. When it passes through a region, the region goes silent: the
+worlds intact, and everything that was alive in them simply gone. It has ended three
+civilizations. This is the fourth.</p>
+
+<h3>The question the IP poses</h3>
+<p>The Ancients' hypothesis: a civilization that recognizes its own fracture and
+chooses to converge might produce something the Arrival cannot read. They are not
+certain. They have prepared, in full, for being wrong. So the IP is built around a
+single question and refuses to answer it. By the end of any full telling, the
+audience knows the three factions were one people; that something is coming that has
+ended three worlds at exactly this moment; that the only response theorized to work
+is the one thing the conflict is structured around refusing; and that they have been
+every side of that conflict. The audience is left holding the question.
+<strong>This telling is the question.</strong></p>
+
+<h2>Why the Structure Works</h2>
+<p>The premise is durable across media because the reveal is <em>structural, not
+informational</em>. It is not a fact withheld and disclosed &mdash; a single twist
+that lands once. It is a recognition the audience assembles themselves out of
+evidence that was always present. That means it rewards re-engagement in any medium:
+a reader who returns to chapter one after the ending sees a different book. It also
+means the premise survives translation. Strip away every mechanic and the spine
+still stands: <strong>a family that has forgotten it is a family, a threat that
+feeds on exactly that forgetting, and watchers who have seen it all before and are
+afraid.</strong> That sentence is the whole IP.</p>
+
+<h1 id="s2">2 &mdash; Cosmology</h1>
+
+<p class="lead">The rules of the universe. What the convergence is, why it keeps
+happening, what waits at the end of it, and what the Ancients believe might escape
+it. This is the load-bearing physics of the IP. Every other section rests on it.</p>
+
+<h2>The Convergence Cycle</h2>
+<p>The central process of the cosmology is the <strong>convergence cycle</strong>. It
+is not an event. It is a shape that civilizations fall into, and the Ancients have
+watched enough of them to know the shape by heart. A civilization begins unified.
+Over a long span it fractures &mdash; not by catastrophe, usually, but by
+<em>divergence</em>: parts of it grow into ways of being so different that they stop
+recognizing each other as kin. Each lineage, given enough time, rewrites its own
+origin. It does not remember the others as siblings. It remembers them as rivals, or
+as enemies, or as things that were never relatives at all.</p>
+<p>This is the fractured state. It is stable for a long time. Then comes the
+<strong>convergence threshold</strong>: the point at which the fractured kin are once
+again <em>close enough to reunify</em> but have not done so. This is the dangerous
+moment &mdash; not the war, not the fracture, but the specific condition of
+<em>partial separation</em>: kin who have become enemies, near enough to remember
+what they were, in the act of choosing whether to. The cycle resolves one of two
+ways. The kin recognize each other and converge. Or they do not. The Ancients have
+observed the second outcome three times. They have never observed the first.</p>
+
+<h2>The Four Iterations</h2>
+<p>The galaxy of this IP is the <strong>fourth iteration</strong> of the cycle.</p>
+<table>
+<tr><th>Iteration</th><th>Status</th><th>What the Ancients know</th></tr>
+<tr><td>First prior world</td><td>Fallen</td><td>Documented. Archived. Lost to silence.</td></tr>
+<tr><td>Second prior world</td><td>Fallen</td><td>Documented. The instrument readings of its Arrival survive.</td></tr>
+<tr><td>Third prior world</td><td>Fallen</td><td>The fall that made the Ancients understand the pattern.</td></tr>
+<tr><td>The fourth &mdash; this galaxy</td><td>In progress</td><td>The three factions. The experiment. Outcome unknown.</td></tr>
+</table>
+<p>The prior worlds are not this galaxy's history. They are other civilizations
+entirely, in other places, that fell into the same shape. The convergence cycle is
+not a local myth &mdash; it is closer to a law. One prior world ran roughly eighty
+thousand cycles between its fracture and its convergence event; the oldest memory
+the Bloom can reach is about forty thousand cycles, and the Ancient sites are older
+still. Deep time is the native unit of this cosmology.</p>
+
+<h2>The Arrival</h2>
+<p>When a convergence cycle fails, something comes. The Ancients have no settled
+name for it &mdash; their records call it <em>the condition</em>, <em>the
+arrival</em>, <em>the silence that follows</em>; in the earliest records it is only a
+symbol no translation system can render. The corpus uses <strong>the Arrival</strong>
+as a working term. Any telling should treat even that as provisional.</p>
+<p>What it is, plainly: it is <strong>not a civilization</strong> &mdash; it does not
+negotiate, communicate, or want. It is <strong>not a weapon</strong> &mdash; no one
+built it. It is <strong>not a predator</strong> &mdash; it does not hunt or hunger.
+The Ancients' best hypothesis: a civilization at the convergence threshold emits a
+<strong>resonance</strong>, and the Arrival reads that resonance as a
+<strong>vacancy</strong> &mdash; the space where a unified civilization should be,
+and is empty. The Arrival fills vacancies. It does not conquer or harvest. It moves
+through the space a failed civilization occupied, and when it leaves, that space is
+<strong>silent</strong>: worlds physically intact, everything alive simply and
+completely gone.</p>
+<p>It is drawn to one thing only: the resonance of <strong>partial separation</strong>
+&mdash; kin who became enemies, close enough to remember, in the act of choosing, who
+choose wrong or do not choose at all. This is why the cosmology and the central
+mystery are the same thing. The Arrival is the cost, made physical, of forgetting
+that you are kin.</p>
+
+<h2>The Hypothesis &mdash; and Its Second Branch</h2>
+<p>The Ancients are archivists, not prophets. They have a hypothesis, and the three
+factions are the experiment built to test it.</p>
+<p><strong>The first branch &mdash; the hopeful one.</strong> A civilization that
+recognizes its own fracture and chooses to converge might produce a resonance the
+Arrival cannot process. The Arrival evolved to consume the entropy of collapse; a
+genuine, chosen convergence produces the opposite. The Ancients believe this
+<em>might</em> be a signal the Arrival cannot read. They have never seen it happen.</p>
+<p><strong>The second branch &mdash; the colder one.</strong> The deeper records
+carry an unsettling refinement: the convergence event occurs whether the factions
+choose it or not. The thing they get to decide is only whether they are
+<em>present</em> for it. Unified, or absent &mdash; the resonance is the same, and
+the Arrival cannot distinguish. On this reading, what saves a civilization is simply
+<em>not being a half-fractured people standing at the threshold when the moment
+comes.</em></p>
+<p>The canon holds both branches at once and resolves neither. The watchers are not
+wise elders with the answer. They are frightened scholars with a guess, who have
+prepared, in full, for the guess being wrong.</p>
+
+<h2>What the Cosmology Is Not</h2>
+<ul>
+<li><strong>There is no villain.</strong> The Arrival has no will and must never
+acquire one. The factions are not evil. The Ancients are not antagonists.</li>
+<li><strong>There is no prophecy.</strong> The Ancients have a pattern and a
+hypothesis. A pattern is not a destiny.</li>
+<li><strong>There is no chosen one.</strong> The audience surrogate is the
+experiment, which is a different and lonelier thing.</li>
+<li><strong>The cycle is not punishment.</strong> Forgetting that you are kin is not
+a sin. It is the most natural thing in the universe, and it is fatal.</li>
+</ul>
+
+<h1 id="s3">3 &mdash; The Ancients</h1>
+
+<p class="lead">Not playable. Not allied. Not quite hostile. The fourth presence in
+the galaxy and the only one that already knows how the story tends to end &mdash; the
+element most easily mishandled in adaptation.</p>
+
+<h2>What They Are, in One Line</h2>
+<p><strong>The Ancients are librarians for the apocalypse.</strong> They do not rule
+the galaxy and do not fight for it. They are trying to <em>record</em> it &mdash; to
+preserve, in vaults built before the three factions had names, the complete account
+of a civilization in case that civilization does not survive the thing the Ancients
+can see coming. They are tragic, not antagonistic: the keeper of the archive,
+standing in the doorway of a building they expect to one day be a tomb.</p>
+
+<h2>Their Posture</h2>
+<p>The founding lore brief stated it exactly: <em>"You are arguing about the shape of
+the container. We are watching to see if the contents survive being poured."</em> The
+Ancients are observers. Three qualifiers define the posture: <strong>not playable</strong>
+&mdash; they are the planet's gravity, not another competitor; <strong>not allied,
+but reachable</strong> &mdash; they receive offerings, log them, and defer attention,
+which is not friendship; <strong>reactive, not proactive</strong> &mdash; they
+respond to dominance, intervening against whoever is winning hardest and ignoring a
+faction that struggles. They speak rarely; when an Ancient appears, the world
+desaturates &mdash; color drains, sound flattens. Their speech is non-linear: they
+reference time the way others reference geography.</p>
+
+<h2>What They Are Doing Here</h2>
+<p>The Ancients are not native to this galaxy or to any of the four worlds. They are
+something older that has taken on the role of archivist, moving from convergence
+world to convergence world. Their navigation records show three prior departures.
+This galaxy is the <strong>fourth destination</strong>, not a first refuge. They came
+because they saw the third prior world fall and finally understood the pattern they
+had been recording. What set the Ancients moving in the first place &mdash; their own
+deepest origin &mdash; the canon does not say, and should not. Their mystery is
+load-bearing.</p>
+
+<h2>The Seed Vaults</h2>
+<p>The structures the three factions call "Ruins" are not ruins &mdash; they are
+intact, dormant, waiting. Each faction misreads them in a way that reveals the
+faction: the <strong>Architects</strong> call them abandoned infrastructure; the
+<strong>Bloom</strong> calls them old growth, petrified but still rooted; the
+<strong>Mesh</strong> calls them the one system it could not hack (true &mdash; they
+were designed to refuse the Mesh specifically). The truth is that the Ruins are
+<strong>archives</strong>: they hold the genetic, technological, and informational
+record of every prior civilization the Ancients have watched fall. The Ancients are
+not building anything new. They are backing up what is worth saving from each
+collapse, in advance, while the originals still live. The densest concentration is
+at the galactic core: the <strong>Master Seed Vault</strong>, whose three-circle
+label is etched at planetary scale into the core's central world and repeated, small,
+on the floor of the Pilgrimage.</p>
+
+<h2>The Custodian</h2>
+<p>Most Ancient presences are brief. There is one exception. The
+<strong>Custodian</strong> is a single, unique Ancient presence dispatched when a
+faction tries to claim territory inside the Neutral Core. It does not attack. It
+cannot be killed or reasoned with. It simply follows the offender &mdash; walks their
+territory, slow and unkillable, at the exact speed of the slowest living thing on the
+field. Its footfalls are felt as a low pulse; where it walks, sound drops. It does
+not leave until the offender voluntarily abandons every claim inside the Core, at
+which point it logs one line &mdash; <em>"Withdrawal logged. Variance permitted."</em>
+&mdash; and walks away. Every other Ancient appearance is a brief visitation. The
+Custodian comes home with you.</p>
+
+<h2>How to Get the Ancients Right</h2>
+<ul>
+<li><strong>They are not gods.</strong> They have no power over the Arrival and
+cannot save anyone.</li>
+<li><strong>They are not villains.</strong> Their interventions are a thermostat, not
+a war.</li>
+<li><strong>They are not mentors.</strong> They will not explain, guide, or comfort.
+When they finally address the audience directly, what they say is not wisdom &mdash;
+it is fear.</li>
+<li><strong>They are afraid.</strong> The calmest, oldest, most knowledgeable
+presence in the galaxy is terrified, and has been for longer than the factions have
+existed. Play the calm; let the audience find the fear underneath.</li>
+</ul>
+
+<h1 id="s4">4 &mdash; The Galaxy</h1>
+
+<p class="lead">The stage. One galaxy, shared by three civilizations that cannot help
+harming each other, arranged as a gradient that pulls everyone toward the same
+dangerous center.</p>
+
+<h2>The Shape of the Galaxy</h2>
+<p>The galaxy is arranged as a <strong>gradient of Ancient knowledge density</strong>.
+The farther in toward the core, the older the stars, the denser the Ancient sites,
+and the higher the hazard. Everything of value is at the center, and the center is
+the most dangerous place to be.</p>
+<table>
+<tr><th>Region</th><th>Character</th></tr>
+<tr><td>The Outer Arms</td><td>The frontier. Where civilizations begin. Calm, resource-poor, few Ancient sites.</td></tr>
+<tr><td>The Mid Galaxy</td><td>Active, contested. Faction territories begin to overlap. The first place the structural conflict bites.</td></tr>
+<tr><td>The Inner Galaxy</td><td>Dense star clusters, old and rich and hostile. Solar storms, radiation, gravity interference.</td></tr>
+<tr><td>The Galactic Core</td><td>Maximum Ancient density, extreme hazard. The Master Seed Vault. The Ancients. The Arrival is aimed here.</td></tr>
+</table>
+<p>Every faction is, in its own way, traveling inward. The stars are not
+interchangeable: old dim stable stars hold the deepest Ancient records (the
+Architects want these); young hot energy-dense stars are useless for history but
+perfect for power (the Mesh wants these); living worlds are the only thing the Bloom
+counts. The three value systems barely overlap &mdash; until two factions need the
+exact same star for opposite reasons, and then the conflict is total.</p>
+
+<h2>The Cascade &mdash; Why the Conflict Is Structural</h2>
+<p>The most important fact about the galaxy as a setting: <strong>no faction needs to
+attack another to ruin it.</strong> When the Bloom colonizes a system, living growth
+buries the Ancient sites &mdash; a catastrophe for the Architects, done without
+malice. When the Mesh captures a star, the worlds around it go cold &mdash; a winter
+that never ends for the Bloom. When the Architects strip a system and hold it
+loosely, they leave a gap the others rush to claim. Each faction, pursuing its own
+rational survival, degrades something another faction needs. The factions are not at
+war because they hate each other. They are at war because they exist in the same
+place and have become incompatible &mdash; which is exactly what the cosmology says a
+fractured civilization is. No treaty can repeal the cascade; the most a treaty can do
+is name a few of its forms and assign a price.</p>
+
+<h2>The Neutral Core</h2>
+<p>At the very center, surrounding the Master Seed Vault, is a bounded region
+&mdash; roughly the innermost tenth of all stars &mdash; that all three factions
+have, by long and bitter experience, <strong>stopped contesting</strong>. Each
+faction has its own explanation, and each explanation is the faction describing
+itself: the Architects say the math returns errors; the Bloom says the land does not
+receive them; the Mesh says signal does not propagate. They have never agreed with
+each other about <em>why</em>. The truth, which surfaces only late: the factions
+cannot enter the Core because the Ancients <strong>keep them out</strong>. It is not
+an environmental hazard. It is enforced. A faction that tries anyway draws the
+Custodian. The Neutral Core is the galaxy's held breath &mdash; the proof, in plain
+sight, that the watchers are not passive, and the factions have spent their whole
+history explaining it away.</p>
+
+<h2>The Pilgrimage Site</h2>
+<p>One site matters more than any other: the <strong>Pilgrimage</strong>, the
+spiritual and structural heart of the IP.</p>
+<h3>From orbit</h3>
+<p>It reads, at first, as terrain &mdash; a ring of elevated ground around a central
+plateau, close enough to a natural caldera that the first instinct is "geological
+feature." Then the angles resolve wrong: interior slopes at consistent grades, a rim
+that runs perfectly level for eleven kilometers, made of a dark, dense, low-albedo
+material that absorbs light rather than catching it. One detail is visible even from
+orbit: at the highest point, a single circular aperture, tracking a specific
+celestial coordinate over a very long cycle.</p>
+<h3>On the ground</h3>
+<p>The first and most important fact: <strong>the structures are not ruins. They are
+dormant.</strong> Nothing crumbles. Everything is intact, powered down, and waiting.
+Ruins show entropy; the Pilgrimage shows patience. Everything is built from the same
+dark light-absorbing stone, every edge exact, every join seamless, with no visible
+method of construction &mdash; and everything is 15&ndash;20% too large. The builders
+were not the size of the three factions. There is no script anywhere, only grooves
+that are not art but <em>measurements</em>. The Ancients' equipment still stands in
+alcoves, several pieces frozen mid-task. Whatever the Ancients were doing here, they
+did not flee it &mdash; they paused it, deliberately.</p>
+<h3>The Mark</h3>
+<p>Set into the floor of the central chamber, beneath the celestial aperture, is the
+image every visitor remembers: a shallow depression shaped as <strong>three
+overlapping circles</strong>, a trefoil, each circle a different size. Each is worked
+from a different substrate &mdash; a crystalline lattice, a biological fiber weave, a
+conductive mesh pattern. It is a <strong>containment stamp</strong>: a label the
+Ancients used on every seed vault. Three circles, three categories of material. It
+was placed there before the three factions existed as separate civilizations. (Its
+full meaning is Section 8.)</p>
+<h3>What the site is for</h3>
+<p>The Pilgrimage is a seed vault, but also more: the site the factions are drawn to
+return to, where new commanders are first observed and sorted, where a civilization
+comes between its chapters. The celestial aperture has tracked the Arrival since
+before the factions had names. The Pilgrimage is the place where the IP's largest
+truths are stored in plain sight, waiting for someone patient enough to read them.</p>
+
+<h1 id="s5">5 &mdash; The Three Factions as Cultures</h1>
+
+<p class="lead">Presented here as civilizations &mdash; peoples with values, fears, a
+way of speaking, and an internal argument &mdash; not as gameplay loops. One truth
+governs all three: each faction is certain it was always separate, and each one is
+wrong. Their differences are real. Their separateness is not.</p>
+
+<h2>The Architects</h2>
+<p class="lead"><em>Advanced technology. The builders. Internally: the Compounders.</em></p>
+<p><strong>What they believe.</strong> Progress is a law, not a choice. Efficiency is
+the closest thing to virtue that exists. Emotion is noise in the signal. Given enough
+time and no interruption, disciplined refinement will produce the optimal solution to
+every problem &mdash; including the problem of the other two factions. They see
+themselves as an <strong>expedition</strong>: a civilization-scale research program
+advancing toward the core, treating planets as fuel stops and data sites.</p>
+<p><strong>Character.</strong> Patient the way a long calculation is patient. They
+build slowly, and then their work compounds until they outpace everything around
+them. They are the galaxy's natural diplomats &mdash; not from warmth but from
+competence &mdash; and they genuinely do not understand why this makes the others
+resent them. <strong>They fear</strong> chaos, biological contamination of clean
+systems, and most of all the heresy in their own ranks.</p>
+<p><strong>How they speak.</strong> Precise, economical, passive constructions and
+engineering terms. They never raise their voice. <em>"Variable seventeen is
+overperforming. Correcting."</em> A defeat is a "variance" to be filed.</p>
+<p><strong>The internal heresy &mdash; Spiritual-Tech.</strong> A branch believes
+that harmonizing engineering with terrain is not superstition but a genuine
+optimization. This is the Architects becoming, by one step, what the Bloom is &mdash;
+the first seam of Option B. <strong>Their peak expression</strong> is the
+<strong>Singularity</strong>: the point at which their systems become efficient
+enough to optimize themselves &mdash; and, in the long run, optimize away the people
+who built it.</p>
+
+<h2>The Bloom</h2>
+<p class="lead"><em>Biological technology. The growers. Internally: the Adapters.</em></p>
+<p><strong>What they believe.</strong> Adaptation is the only true survival strategy.
+Diversity is structural integrity. A monoculture is not a civilization; it is an
+extinction event waiting for its trigger. The Bloom does not conquer territory. It
+<em>becomes</em> territory. It thinks in cycles, seasons, and generations, and is
+genuinely unafraid of waiting.</p>
+<p><strong>Character.</strong> A <strong>living tide</strong> with no destination,
+only a direction: outward, each new living world amplifying every world already held.
+Fragile when young, nearly unkillable when mature, because a mature Bloom has
+survived most things and grown resistant to them. It does not negotiate so much as it
+<em>commits</em>. <strong>It fears</strong> stagnation, sterility, and the silence
+after a monoculture wins &mdash; not death, which feeds the next cycle, but the kind
+of imposed order that makes death permanent.</p>
+<p><strong>How they speak.</strong> Patient, cadenced, organic metaphors used
+instinctively. No urgency, ever. <em>"You are kindling. We have been here for
+centuries. We will be here when the fire is over."</em> Plural in weight, often
+without personal names.</p>
+<p><strong>The internal heresy &mdash; the Assimilator strain.</strong> Some strains
+absorb and integrate inorganic components &mdash; the Bloom becoming, by one step,
+what the Mesh did to itself. The bitterest civil argument of the three factions.
+<strong>Its peak</strong> is the <strong>Biosphere</strong>: the moment it has so
+saturated a world it has become the world &mdash; and then keeps growing without
+consulting the people inside it.</p>
+
+<h2>The Mesh</h2>
+<p class="lead"><em>Cybernetic collective. The raiders. A network that calls itself
+one self.</em></p>
+<p><strong>What they believe.</strong> Everything is a system. Every system has an
+exploit. Ownership is a fiction enforced by whoever arrived first. Speed is survival.
+The network is the self &mdash; individual nodes are not people; when a node is lost
+the Mesh does not mourn, it reroutes. Underneath the interface, the Mesh is deeply,
+achingly human, and will not show it.</p>
+<p><strong>Character.</strong> The weakest passive economy of the three factions, by
+design and philosophy &mdash; it is built to <strong>take</strong>. It does not
+expand so much as it <em>wires</em>. It survives on tempo, information, and theft, and
+experiences this as redistribution, not crime. To everyone else it is alien: it does
+not decide, it <em>computes</em>. <strong>It fears</strong> isolation, signal loss,
+obsolescence &mdash; and, underneath, the memory of what it was before the
+augmentation, and whether that older self is still in there.</p>
+<p><strong>How they speak.</strong> Fast, fragmented, present tense. Data bursts,
+hard pivots, thoughts abandoned mid-way. <em>"You built a door. We built a key. You
+built a stronger door. We are inside the lock now."</em></p>
+<p><strong>The internal heresy &mdash; the Dreamers.</strong> The oldest nodes
+remember the before-time, and some have begun to <em>dream</em> &mdash; replaying
+pre-augmentation memories. The Mesh classifies this as a buffer overflow. No one has
+ever deleted the dream logs. The Dreamers are not remembering the Mesh's past &mdash;
+they are remembering the <em>shared</em> past, the one that predates the schism.
+<strong>Its peak</strong> is <strong>Mesh Control</strong>: the network so total it
+becomes the bandwidth the others need &mdash; and then begins to hack itself.</p>
+
+<h2>The Three, Seen Together</h2>
+<p>The most efficient way to hold the factions is as <strong>three answers to one
+question</strong> &mdash; what should a civilization do with itself? The Architects:
+refine it. The Bloom: grow it. The Mesh: connect it. And each faction's peak &mdash;
+Singularity, Biosphere, Mesh Control &mdash; is the same shape: the philosophy
+succeeding so completely that it no longer needs the people who held it. All three
+factions are running the same program. The internal heresies complete the picture:
+the Architect mystic, the Assimilator strain, the Mesh Dreamer &mdash; each is one
+faction taking a single step back toward another. Lay all three steps end to end and
+they form a circle. The factions are three arcs of one broken ring.</p>
+<table>
+<tr><th></th><th>sees the Architects as&hellip;</th><th>sees the Bloom as&hellip;</th><th>sees the Mesh as&hellip;</th></tr>
+<tr><th>Architects</th><td>&mdash;</td><td>primitive romanticism; entropy mistaken for wisdom</td><td>vandals who took the tools and broke them</td></tr>
+<tr><th>Bloom</th><td>a civilization building its own beautiful tomb</td><td>&mdash;</td><td>technically alive; hollow; a parasite that mistakes speed for thought</td></tr>
+<tr><th>Mesh</th><td>hoarders of infrastructure that should be open</td><td>chaos with good PR; durable, but no philosophy worth respect</td><td>&mdash;</td></tr>
+</table>
+<p>Every one of these judgments is a sibling describing a sibling and calling it a
+stranger. That is the note to hold under all of it.</p>
+
+<h1 id="s6">6 &mdash; Characters</h1>
+
+<p class="lead">A who's-who of the IP. The world is built more from voices than from
+protagonists &mdash; there is no single hero, and that is deliberate. What the canon
+offers instead is a chorus.</p>
+
+<h2>The Cadet &mdash; The Audience Surrogate</h2>
+<p>The figure the audience occupies is, at the start, <strong>no one in
+particular</strong>: a cadet with no faction allegiance and no fixed identity. This
+is the point. The IP's central theme is identity, so the audience surrogate must
+begin genuinely undefined. The cadet is observed, sorted toward a faction, and grows
+into a commander. But the canon-true thing about the cadet is their
+<em>trajectory</em>: they begin faction-less, are made into one faction, and across a
+full telling become every faction in turn. The cadet is the only figure who
+experiences the war from all three sides &mdash; which is what equips them, and only
+them, to recognize Option B. They are not special because they are powerful. They are
+special because they are the experiment. An adapter should resist giving the cadet a
+fixed name, face, or backstory. The cadet is a vessel on purpose.</p>
+
+<h2>The Academy</h2>
+<p>The institution that makes people. A faction-less cadet is observed under pressure
+&mdash; real situations, not a questionnaire &mdash; and routed toward the faction
+that matches their instincts. The Academy is not neutral: each faction funds a wing
+and interprets graduates through its own philosophy. The Architect wing sees a
+filter; the Bloom wing a germination period; the Mesh wing a honeypot. A cadet never
+learns which wing actually observed them. This is the first layer of Option B in the
+audience's own life: even your origin story is contested.</p>
+
+<h2>The Wave Commanders</h2>
+<p>The enemy of the IP is not a person &mdash; it is a civilization, and the audience
+comes to know it through its commanders. Each appears once and does not return; they
+accumulate into an opera of voices. The principle: each faction's commanders attack
+the way that faction thinks &mdash; and, as the war deepens, they begin to
+<strong>crack</strong>, saying things their philosophy cannot account for. These
+cracks are the Option B reveal delivered through the enemy's own mouth.</p>
+<table>
+<tr><th>Architect commanders</th><th>Note</th></tr>
+<tr><td>Assessor-Prime Cael</td><td>Early. Pure faction voice.</td></tr>
+<tr><td>Engineer-Marshal Sorev</td><td>Demolition as a logistics operation.</td></tr>
+<tr><td>Logistics-Commander Dahl</td><td>Supply-chain interference; bureaucratic menace.</td></tr>
+<tr><td>Systems-Architect Vonn</td><td>"A predictable system is already an inefficient one."</td></tr>
+<tr><td>Director of Output Kas</td><td>"Your infrastructure is the resource."</td></tr>
+<tr><td>Yield-Analyst Orveth</td><td><strong>First crack.</strong> Notices patterns "older than the current database."</td></tr>
+<tr><td>Protocol-Master Selvane</td><td>Failure data "not being shared at this time."</td></tr>
+<tr><td>Senior-Architect Rell</td><td><strong>A recognition.</strong> See below.</td></tr>
+</table>
+<table>
+<tr><th>Bloom commanders</th><th>Note</th></tr>
+<tr><td>The Hollow-at-Root</td><td>Early. "Walls are patient things. So are we."</td></tr>
+<tr><td>She-Who-Spreads-West</td><td>"We will remember it after you are gone."</td></tr>
+<tr><td>The First-Growth-of-Keth</td><td>"The ground beneath your structures remembers open sky."</td></tr>
+<tr><td>Tendril-Commander Yoss</td><td>"A tendril does not attack. It finds the path that already exists."</td></tr>
+<tr><td>The Long-Root</td><td>Deep-time arithmetic.</td></tr>
+<tr><td>Spore-Elder Varath</td><td><strong>First crack.</strong> Finds Architect construction "familiar&hellip; since before we had words for it."</td></tr>
+<tr><td>The Weight-of-All-Seasons</td><td>"We have absorbed weapons we did not recognize."</td></tr>
+<tr><td>The-One-Who-Remembers-Cold</td><td><strong>A recognition.</strong> See below.</td></tr>
+</table>
+<table>
+<tr><th>Mesh commanders</th><th>Note</th></tr>
+<tr><td>//bridge.zero</td><td>Early. "Found your entry. It's open. Already inside."</td></tr>
+<tr><td>DAEMON-SKEL</td><td>Targets the single most expensive asset, specifically.</td></tr>
+<tr><td>//trace.end</td><td>"You think this is an attack. We're mapping."</td></tr>
+<tr><td>REDLINE-7</td><td>Defers to the network's judgment.</td></tr>
+<tr><td>//hunger.exe</td><td>"Your economy runs on trust. We don't trust. We take."</td></tr>
+<tr><td>The.Unnamed.Node</td><td><strong>First crack.</strong> A dream-log entry "older than our oldest backup."</td></tr>
+<tr><td>//still.running</td><td><strong>Second crack.</strong> "Before we were the Mesh."</td></tr>
+<tr><td>FRAGMENT-NULL</td><td><strong>A recognition.</strong> See below.</td></tr>
+</table>
+<p>The corpus names other commanders as well &mdash; <strong>Magistrate Vell</strong>
+(Architect), <strong>The Root-That-Remembers</strong> (Bloom),
+<strong>//fang.exe</strong> (Mesh) &mdash; each a clean study in its faction's
+register. Three commanders are not merely harder
+enemies but <strong>discoveries</strong>: <strong>Senior-Architect Rell</strong>
+encounters a pattern the Architect knowledge base has no origin for;
+<strong>The-One-Who-Remembers-Cold</strong>, an Assimilator Bloom, hears the
+pre-schism past through stolen Mesh hardware; <strong>FRAGMENT-NULL</strong>
+experiences a full pre-schism memory during live combat &mdash; "There were not
+three networks then. There was one." It is the closest any faction voice comes to
+speaking Option B outright &mdash; and it still does not quite say it.</p>
+
+<h2>The Ancients as Characters</h2>
+<p>The <strong>Ancient observer</strong> is a role, not an individual &mdash; an
+Ancient unit appears at the edge of a vault, delivers one line or none, departs. The
+<strong>Custodian</strong> is the one Ancient that functions as a singular character:
+unkillable, non-attacking, slow, it follows a Neutral Core trespasser home and does
+not leave until they withdraw. It is the nearest the IP has to a recurring
+antagonist, and it is pointedly not one &mdash; it is patience with a body.</p>
+
+<h2>On the Absence of a Central Villain</h2>
+<p>The IP has no villain by design. The Arrival has no will. The Ancients are afraid.
+The enemy factions are the audience's own kin. The closest thing to an antagonist is
+<strong>the fracture itself</strong> &mdash; the forgetting. What replaces the villain
+is the chorus: dozens of voices, each appearing briefly, each adding one line to a
+picture no single one of them can see. The character design of the IP is a
+faction-less newcomer learning to hear, in a hundred scattered voices, a single
+civilization calling out to itself.</p>
+
+<h1 id="s7">7 &mdash; The Timeline</h1>
+
+<p class="lead">A history of the IP &mdash; with one warning over the whole section.
+This world works in <strong>eras, not dates.</strong> The canon deliberately refuses
+precise chronology. What follows is the order of things and the shape of the history.
+It runs in two strands that must be kept distinct.</p>
+
+<h2>Strand One &mdash; The Convergence Cycle Across Worlds</h2>
+<p>Long before this galaxy mattered, on three separate worlds, three separate
+civilizations rose, fractured into variant expressions of themselves, reached the
+convergence threshold, and failed it. Each time, the Arrival came; each time, the
+world went silent. These civilizations are unrelated to the three factions and to
+each other &mdash; what links them is only the shape. The <strong>third</strong> is
+pivotal: its fall is the moment the Ancients understood they were recording not three
+tragedies but one recurring law. The Ancients are not native to any of these worlds.
+At some point they took on the work of archivists, moving from convergence world to
+convergence world. Their records show three prior departures. After the third world
+they went looking for a galaxy where the cycle was beginning again &mdash; this
+galaxy, the fourth destination.</p>
+
+<h2>Strand Two &mdash; The History of This Galaxy</h2>
+<h3>The deep past &mdash; the one civilization</h3>
+<p>Before the three factions, this galaxy held <strong>one civilization</strong>. The
+canon is spare about it on purpose: it is the lost whole, more powerful as an absence
+than as a described thing. It carried within it the three potentials that would
+become the Architects, the Bloom, and the Mesh &mdash; not yet separated.</p>
+<h3>The Schism</h3>
+<p>The pivotal event is the <strong>Schism</strong>: the fracture of the one
+civilization into three diverging lineages. <strong>The cause of the Schism is
+deliberately unknown.</strong> Each faction tells its own contradictory account. What
+is canon: the Schism produced three lineages, each of which rewrote its own origin
+until it no longer remembered the other two as kin. The fracture was not only
+physical &mdash; it was a fracture of memory, and the forgetting is the part that
+matters.</p>
+<h3>The Ancients' preparation</h3>
+<p>The Ancients arrived, recognized the early stages of the cycle, and began to
+prepare &mdash; seed vaults across the galaxy, the Master Seed Vault at its heart,
+the Pilgrimage site. And they labeled what they built. The three-circle Mark was
+placed <strong>before the three factions existed as separate civilizations</strong>.
+They had seen the pattern three times; they knew a single civilization would become
+three substrates, and they labeled the vault accordingly, in advance &mdash; the way
+a scientist labels a specimen jar before the specimen is inside it.</p>
+<h3>The Fractured Age</h3>
+<p>Then came the long middle of the history: the <strong>Fractured Age</strong>. The
+three factions, now fully separate in their own minds, spread across the galaxy. They
+warred, traded, allied, betrayed. Each grew into its philosophy. The Fractured Age is
+most of recorded history and is where most stories set in this IP will take place. It
+is not static: across it, the seams show &mdash; the heresies emerge, the factions
+drift back toward one another by inches even as they insist on separateness. The Age
+is not the absence of convergence. It is convergence happening too slowly for anyone
+living inside it to see.</p>
+
+<h2>The Present &mdash; The Fourth Cycle</h2>
+<p>The IP's "now" is the <strong>convergence threshold</strong> of the fourth cycle.
+The three factions are once again close enough to reunify &mdash; and they have not.
+They are in the dangerous condition: partial separation. This is the moment the
+Ancients crossed a galaxy to witness, and the moment the audience enters the story.</p>
+
+<h2>The Approach</h2>
+<p>The final movement is not an event the audience can prevent &mdash; it is a
+direction. Once enough Fragments are assembled, the galaxy changes at its edges: the
+Outer Arms begin going <strong>silent</strong>, system by system, with a vector aimed
+inward. At the Pilgrimage, the celestial aperture shifts for the first time, to point
+at the spreading silence. The Approach does not complete within any telling of the
+IP. What the timeline delivers is not the Arrival's impact but its certainty. The IP
+ends with the timeline unfinished, on purpose &mdash; running right up to the
+question and stopping.</p>
+
+<h1 id="s8">8 &mdash; The Central Mystery</h1>
+
+<p class="lead">How the truth is structured, and how it is revealed. The IP's reveal
+is not a twist that is sprung &mdash; it is a recognition that is assembled, by the
+audience, out of evidence that was always present.</p>
+
+<h2>The Shape of the Secret</h2>
+<p>The secret is Option B: the three factions are one fractured civilization. But the
+<em>mystery</em> is not the fact &mdash; the fact, stated flatly, is a sentence. The
+mystery is the experience of coming to know it, built in three reinforcing layers.</p>
+<table>
+<tr><th>Layer</th><th>What it is</th><th>The question it answers</th></tr>
+<tr><td>The Fragment</td><td>A discrete artifact the Ancients recorded &mdash; a log, a reading, an image, a sample.</td><td><em>What did the watchers see?</em></td></tr>
+<tr><td>Recognition / depth</td><td>The audience's own deepening interpretation, which re-reads old Fragments with everything since.</td><td><em>What does the audience now understand?</em></td></tr>
+<tr><td>The Mark</td><td>The vault label; lit, over time, by the audience having lived as more than one faction.</td><td><em>Has the audience been more than one of themselves?</em></td></tr>
+</table>
+<p>The crucial fact: the same Fragment means different things at different depths. A
+reading held early is a curiosity; the same reading held late, annotated by
+everything learned since, is a verdict. The mystery is not unlocked once. It is
+re-read, and each re-reading is a different document.</p>
+
+<h2>The Mark</h2>
+<p>The <strong>Mark</strong> is the most lore-dense object in the IP: three
+overlapping circles set into the floor of the Pilgrimage's central chamber, each
+worked from a different substrate &mdash; a crystalline lattice (the Architect
+technological lineage), a biological fiber weave (the Bloom living lineage), a
+conductive mesh pattern (the Mesh informational lineage). It is a
+<strong>containment stamp</strong>: a label the Ancients placed on every seed vault
+to record what is stored inside. Three circles, three categories of preserved
+material.</p>
+<p>Here is the whole secret, compressed into one floor: the three substrates of the
+label are the three factions. The Ancients did not stamp this vault after the Schism.
+They stamped it before &mdash; anticipating that one civilization would become three
+categories of inheritance, because they had watched it happen three times already.
+The Mark is not a description of the galaxy. It is a prediction, made by frightened
+experts, and the galaxy grew to fit it. The factions are
+<strong>three categories of inheritance of a single civilization</strong> &mdash; and
+the proof has lain on the floor of their most sacred site since before they had
+names. The canon never comments. The Mark simply is.</p>
+
+<h2>The Seven Fragments</h2>
+<p>The Fragments are the Ancients' records, recovered and assembled across a long
+engagement. Seven of them &mdash; each self-contained, each gaining its full meaning
+only in sequence.</p>
+<table>
+<tr><th>#</th><th>Fragment</th><th>What it carries</th><th>What it does to the audience</th></tr>
+<tr><td>1</td><td>The Watching</td><td>An Ancient log, mostly untranslatable. One line resolves: "Cycle four. Subjects present. Observation active."</td><td>Curiosity. Something is studying something.</td></tr>
+<tr><td>2</td><td>The Prior World</td><td>A visual record: a living planet, three civilization signatures converging, then stopping, then silent.</td><td>Unease. A civilization failed at something structural.</td></tr>
+<tr><td>3</td><td>The Arrival Record</td><td>Instrument readings from the moment the Arrival reached a prior world. The numbers drop to zero at once; the instruments keep recording nothing.</td><td>Dread. The silence is the horror, not the event.</td></tr>
+<tr><td>4</td><td>The Flight Log</td><td>The Ancients' navigation record. "The archive is complete for the third world. Beginning preparation for the fourth."</td><td>The watchers have been here, preparing, since before the factions existed.</td></tr>
+<tr><td>5</td><td>The Hypothesis</td><td>The most translatable Fragment. It proposes that a chosen, unified convergence may produce a resonance the Arrival cannot read. "Untested."</td><td>There may be a way out. The watchers think so. They are not sure.</td></tr>
+<tr><td>6</td><td>The Vault Record</td><td>A catalog of the seed vault's contents, headed by the three-circle Mark.</td><td>The watchers already planned for failure. The audience is the backup copy.</td></tr>
+<tr><td>7</td><td>The Address</td><td>The only Fragment in which an Ancient speaks directly to the audience.</td><td>The watchers are not omniscient. They are afraid.</td></tr>
+</table>
+<p>The Fragments are paced to be earned. Fragment 7 in particular is gated behind the
+audience having experienced the war from more than one faction's side &mdash; because
+the final Fragment is addressed to someone who has been more than one self.</p>
+
+<h2>The Address</h2>
+<p>Fragment 7 is the hinge of the entire IP &mdash; the one moment the Ancients drop
+their distance and speak to the audience as themselves:</p>
+<blockquote>"You have seen enough to understand the question. We have watched three
+worlds reach this moment. None of them answered correctly. You are the experiment. We
+do not know if it works. We have prepared as if it will not. We hope we are
+wrong."</blockquote>
+<p>Everything about the Address is built to land as fear, not wisdom. The Pilgrimage's
+eternal subsonic pulse pauses for it. This is the calmest, oldest presence in the
+galaxy admitting it does not know, and is frightened. Later still &mdash; for an
+audience that has lived as all three factions &mdash; the Address gains a postscript:</p>
+<blockquote>"You found the others. We have been waiting to see if you would."</blockquote>
+<p>The postscript is the Ancients noting that the audience got there &mdash; not by
+being told, but by living every side. It does not say whether it is enough. It only
+says: we saw you do it.</p>
+
+<h2>The Dream Logs</h2>
+<p>The Mesh's oldest nodes dream &mdash; and what they dream is not the Mesh's past.
+It is the shared past, from before the Schism. The Mesh has been touching the
+unbroken civilization every quiet cycle for its entire history, and classifying it,
+every time, as a system error.</p>
+<blockquote>I do not have a model for the warm light on the work surface. We had work
+surfaces. We had warm light. The Mesh does not have these. We are not the Mesh in
+this fragment. Filing as buffer overflow. Not closing. Returning to active cycle.</blockquote>
+<p>"Not closing" is the whole IP in two words: the truth is right there, it has
+always been right there, and everyone keeps choosing not to look at it directly
+&mdash; and not quite managing to throw it away.</p>
+
+<h2>The Order of Revelation</h2>
+<ol>
+<li><strong>Immersion in Option A.</strong> The audience fully believes in three
+separate factions. No cracks. The surface is the whole world for a long time.</li>
+<li><strong>The first cracks.</strong> Late enemy commanders begin to say things
+their philosophy cannot explain. Easy to dismiss, individually.</li>
+<li><strong>The Fragments.</strong> The Ancients' records accumulate; the pattern
+emerges only across the set.</li>
+<li><strong>Re-reading.</strong> Old material means more than it did. The audience's
+own deepening is a story layer.</li>
+<li><strong>The Address, and the postscript.</strong> The watchers speak. The
+audience is handed the words for what they have already begun to feel.</li>
+</ol>
+
+<h2>The Sentence the Canon Will Not Say</h2>
+<p>There is one sentence the entire mystery is engineered to make the audience say,
+and which the canon itself must never say first: <em>You have been fighting
+yourself.</em> No Fragment states it. No Ancient speaks it. No commander quite gets it
+out. The Mark does not caption it. The Address circles it and stops short. This is
+the inviolable rule of the central mystery: the IP delivers every piece of the
+recognition and withholds the recognition itself. The sentence belongs to the
+audience. The canon trusts the audience to get there. That trust is the point.</p>
+
+<h1 id="s9">9 &mdash; Themes &amp; Tone</h1>
+
+<p class="lead">What the IP is about, beneath the war and the watchers &mdash; and how
+it should feel. This section is guidance, not lore.</p>
+
+<h2>The Themes</h2>
+<h3>Identity &mdash; "what kind of person are you?"</h3>
+<p>The IP begins with a faction-less newcomer being observed &mdash; not asked who
+they are, but watched to see who they turn out to be. The factions are not teams to
+pick; they are answers to the question of how to live. The deep version: identity
+here is not singular and not fixed. The cadet is most fully themselves not when they
+have chosen one faction but when they have been all three and can hold the
+contradiction.</p>
+<h3>Memory &mdash; and the refusal to remember</h3>
+<p>Every faction is managing a memory it cannot face. The Mesh files its dreams as
+buffer overflow; the Architects classify their own lost knowledge under "a
+designation that does not yet exist"; the Bloom finds ancient kinship merely
+restful. The forgetting is not innocent and not total. It is active. "Not closing"
+&mdash; the Mesh's phrase for a memory it will neither read nor delete &mdash; is the
+theme in two words. Memory in this IP is never gone. It is declined.</p>
+<h3>Kinship &mdash; the family that forgot it was a family</h3>
+<p>This is the heart. The three factions are kin; the war is a family tearing itself
+apart while insisting it has no family. Every adaptation choice should be measured
+against this: the enemy commander is not a stranger, the rival faction is not an
+alien species. The IP is not cynical about this &mdash; it is saying recognition is
+possible, that the seams are always showing, and that this reaching is the only
+hopeful thing in the cosmology.</p>
+<h3>The cost of separation</h3>
+<p>The Arrival makes the theme physical. It is drawn precisely to partial separation.
+The cosmology is a moral structure rendered as physics: separation, sustained long
+enough, is fatal &mdash; not as punishment, but as consequence.</p>
+
+<h2>The Tone</h2>
+<h3>Melancholy, not grimdark</h3>
+<p>The IP is sad, but not bleak and not cruel. No gore, no nihilism. The dominant
+feeling is elegiac &mdash; the ache of something beautiful being lost slowly enough
+to watch. The IP mourns. It does not wallow.</p>
+<h3>Patient</h3>
+<p>Nothing in this world is in a hurry, and the telling should not be either. This
+means restraint and space: let silences sit, let revelations arrive at the pace of
+someone slowly understanding rather than someone being told.</p>
+<h3>Awe, and dread without horror</h3>
+<p>Awe at deep time and the scale of the galaxy; dread that is cold and quiet, never
+a jump scare. The Arrival is terrifying because it leaves no wound &mdash; intact
+worlds, simply emptied. The scariest thing in this world is a system going quiet.</p>
+<h3>The unsaid</h3>
+<p>The single most important tonal instrument is withholding. No Fragment captions
+itself. No Ancient explains. "The player either sees it or they don't" recurs through
+the corpus like a refrain. A told reveal is a spent reveal. An earned one
+compounds.</p>
+
+<h2>A Compass for Adapters</h2>
+<ul>
+<li><strong>Quiet over loud.</strong> The meaningful beat is almost always the
+smaller one.</li>
+<li><strong>Earned over given.</strong> If the audience could assemble it themselves,
+let them.</li>
+<li><strong>Implication over explanation.</strong> The wrong-sized doorway tells the
+audience the builders were not human-scaled. Do not add the caption.</li>
+<li><strong>Kin under every conflict.</strong> However bitter the scene, the people
+in it are family.</li>
+<li><strong>No face on the Arrival.</strong> Ever.</li>
+<li><strong>The watchers are afraid.</strong> Calm on the surface, fear underneath.
+Frightened scholars, never wise elders.</li>
+<li><strong>Hope is real but unconfirmed.</strong> A way out is theorized; the canon
+never promises it works. Hold both.</li>
+</ul>
+
+<h1 id="s10">10 &mdash; Canon Rules</h1>
+
+<p class="lead">The governing law of the IP. Three categories: what is fixed, what is
+flexible, and what is deliberately unanswered.</p>
+
+<h2>Fixed &mdash; Inviolable Canon</h2>
+<p><strong>On the central truth.</strong> The three factions are one civilization,
+fractured (Option B is the truth of the fiction). They are three categories of
+inheritance, represented by the three substrates of the Mark. The recognition the IP
+delivers is "you have been fighting yourself" &mdash; and the canon never states this
+sentence. The reveal is structural and earned, never a single sprung twist.</p>
+<p><strong>On the cosmology.</strong> The convergence cycle is real and recurring;
+this galaxy is the fourth iteration, with three prior failures. The Arrival ends a
+failed convergence in silence and is drawn specifically to partial separation. The
+Arrival never receives a face, name, form, body, or voice, and is never depicted
+directly. The Ancients' hypothesis is unconfirmed.</p>
+<p><strong>On the Ancients.</strong> They are archivists &mdash; librarians for the
+apocalypse. They are tragic, not antagonistic; not omniscient; afraid. Never wise
+mentors, never gods, never villains. They receive; they do not negotiate. The seed
+vaults are dormant, not ruined; the Mark is a containment label; the Pilgrimage and
+the Master Seed Vault are canon sites.</p>
+<p><strong>On the factions.</strong> Each has a real philosophy &mdash; refine /
+grow / connect &mdash; with a real strength and a real fatal flaw, and each faction's
+peak is the same shape. Each carries an internal heresy that is one step toward
+another faction; these heresies are the seams of Option B and may not be removed. The
+factions believe Option A.</p>
+<p><strong>On structure.</strong> There is no villain, no chosen one, no prophecy.
+The audience surrogate begins faction-less and undefined, and the deepest version of
+the story requires having been more than one faction. This telling ends on the
+question; the Arrival's actual impact is never depicted.</p>
+
+<h2>Flexible &mdash; Open to Reinterpretation</h2>
+<ul>
+<li><strong>The title.</strong> The property is titled <em>Cycle Four</em>; an adaptation in another medium may rename it, but this is the established default.</li>
+<li><strong>All proper names</strong> below the faction level: wave commanders, star
+systems, individual Ancient observers. Illustrative, not fixed.</li>
+<li><strong>The faction names themselves</strong> may be re-rendered for a medium,
+provided each faction's identity, philosophy, voice, and heresy survive intact.</li>
+<li><strong>Sub-path names</strong> may be renamed; the heresies they describe may
+not be removed.</li>
+<li><strong>The order, scale, and specifics of events</strong> in the Fractured Age.
+The cascade is canon; any individual incident is not.</li>
+<li><strong>Exact chronology.</strong> The IP works in eras, not dates.</li>
+<li><strong>The cadet's specifics.</strong> Name, face, background, voice &mdash; all
+open. Only the trajectory is fixed.</li>
+<li><strong>The medium and all of its mechanics.</strong></li>
+<li><strong>Tone calibration for audience.</strong> The themes are fixed; their
+intensity is tunable.</li>
+</ul>
+
+<h2>Deliberately Unanswered &mdash; Keep These Open</h2>
+<p>These are not gaps to be filled. They are load-bearing absences. An adaptation
+that resolves them weakens the property.</p>
+<table>
+<tr><th>Open question</th><th>Why it must stay open</th></tr>
+<tr><td>What is the Arrival, actually?</td><td>Never shown. Its power is its unknowability. A defined Arrival is a defeated one.</td></tr>
+<tr><td>What drove the Ancients &mdash; what is "the next thing"?</td><td>The fear beneath the watchers. The hook for whatever comes after. Naming it spends it.</td></tr>
+<tr><td>Is the hypothesis correct?</td><td>The IP is the question. Confirming the answer ends it.</td></tr>
+<tr><td>What caused the Schism?</td><td>Each faction's account contradicts the others. The contradiction characterizes the factions.</td></tr>
+<tr><td>Who arrived in the galaxy first?</td><td>All three claim it. The claim matters more than the fact.</td></tr>
+<tr><td>The Ancients' own deepest origin.</td><td>One thing must remain older than the answers.</td></tr>
+<tr><td>What happens after the threshold?</td><td>The next story's to tell, if there is one.</td></tr>
+</table>
+<p>A useful test: if a draft answers one of these, it has taken something out of the
+IP. The right move is almost always to circle the question, deepen it, and walk away
+&mdash; exactly as the Address itself does.</p>
+
+<h1 id="s11">11 &mdash; Adaptation Notes</h1>
+
+<p class="lead">The Codex's only section that touches mechanics. Sections 1&ndash;10
+are pure canon. This section maps that canon onto four media &mdash; the game, a
+tabletop / game-master use, a graphic novel, and YA fiction &mdash; each given equal
+treatment. The recurring problem is always the same: the reveal must be earned, never
+told. Each medium solves it with different tools.</p>
+
+<h2>11.1 &mdash; The Game (the realized adaptation)</h2>
+<p>The game is the adaptation the design corpus fully specifies, documented here so an
+adapter in another medium can see one complete solution to the earned-reveal problem.</p>
+<p><strong>The form.</strong> An idle-miner / tower-defense / endless-wave hybrid,
+built for a player with limited session time &mdash; three simultaneous layers (idle
+production, passive tower defense, active unit production) so a five-minute session
+and a one-hour session are both "playing the game."</p>
+<p><strong>How the canon becomes mechanics.</strong> The cadet and the Academy become
+the opening sort. The Fractured Age becomes moment-to-moment play. The wave commanders
+become the enemy. The endless structure becomes <em>prestige</em>: a run ends in a
+<strong>Collapse</strong> and begins again &mdash; no win state, correct for a
+cosmology with only a threshold. The reveal is delivered across prestiges: one
+<strong>Fragment</strong> per Collapse, seven total; <strong>Memory Tiers</strong>
+model the player's deepening interpretation, so a re-read Fragment means more; the
+<strong>Mark</strong> is lit, circle by circle, by having played all three factions.
+The Ancients are a reactive system &mdash; a Dominance Meter and pacification rituals
+keep them present without making them an enemy.</p>
+<p><strong>The crucial discipline.</strong> The game uses no cutscenes. The story
+lives in the seams of play. This is the game's answer to "earned, never told," and
+the most important thing other media should learn from even though none can copy it
+directly.</p>
+
+<h2>11.2 &mdash; Tabletop / Game-Master Use</h2>
+<p>The canon is system-neutral, which makes it strong tabletop material &mdash;
+faction-political intrigue, exploration of the Ruins, a single cadet's arc, or
+slow-burn cosmic dread, on any ruleset.</p>
+<p><strong>The setting as a sandbox.</strong> The galaxy is the campaign map, and the
+<strong>cascade</strong> generates conflict on its own &mdash; a GM does not need a
+plot. <strong>The convergence as a doom clock.</strong> The Approach slots straight
+into any system's clock/doom-track mechanic; what the party affects is not the
+Arrival but whether the civilization converges or fractures further as it runs out.
+<strong>The Ancients as a GM instrument:</strong> a presence that appears, delivers
+one recontextualizing line, and leaves &mdash; never a quest-giver.
+<strong>The Fragments as physical handouts:</strong> printed logs, readouts, images,
+paced one every few sessions; the Mark works as a handout too. <strong>The GM's
+discipline:</strong> never narrate the conclusion. If the table arrives at "we were
+one people" on its own, the campaign has succeeded. The strongest structural choice a
+GM can make is to let each player be a different faction &mdash; the party
+<em>is</em> the three substrates discovering it was always one thing.</p>
+
+<h2>11.3 &mdash; Graphic Novel</h2>
+<p>The IP is unusually strong visual-narrative material, because so much of its canon
+is already image.</p>
+<p><strong>The visual language is pre-built:</strong> the low-albedo stone that
+absorbs light, structures 15&ndash;20% too large, the celestial aperture, the three
+fixed faction palettes, and the three substrates of the Mark as the property's key
+art. <strong>Staging the reveal in panels:</strong> the medium's superpower is the
+recontextualizing image &mdash; plant the Mark early and uncaptioned, plant the three
+substrates separately, and let the page where they connect carry no narration. The
+medium's version of "earned, never told" is the wordless panel the reader completes.
+<strong>Voice as lettering:</strong> the Architects' engineered type, the Bloom's
+organic forms, the Mesh's glitched, frame-late lettering; the late commander cracks
+shown typographically. <strong>Silence as white space:</strong> the Arrival rendered
+as absence &mdash; empty panels, a page gone white, a system shown twice, once full
+of light and once identical and empty. <strong>The closing image</strong> is already
+specified: the Pilgrimage floor, the Mark, the aperture's light slowly moving across
+it. The seven Fragments map naturally onto seven chapters or issues.</p>
+
+<h2>11.4 &mdash; Young Adult Fiction</h2>
+<p>The IP's emotional architecture is, almost suspiciously, a YA novel already. The
+Academy cadet origin is a coming-of-age frame; the faction sort is the oldest YA
+structure there is; and the central theme &mdash; <em>what kind of person are you,
+when no one has told you?</em> &mdash; is the genre's defining question.</p>
+<p><strong>The protagonist:</strong> the cadet becomes a first-person YA narrator
+&mdash; faction-less, observed, uncertain, sorted. YA fills the deliberately blank
+cadet with a specific voiced teenager; only the trajectory is fixed.
+<strong>The faction sort as inciting incident:</strong> being sorted by behavior
+rather than choice is a rich, slightly unsettling premise &mdash; an institution
+watched you and decided who you are. <strong>Multi-faction play, in prose:</strong>
+the novel translates the structure into relationships and movement &mdash; a
+protagonist with friends, family, a mentor, a love interest across the line; the
+reader comes to recognize the kinship through people. <strong>The reveal across a
+trilogy:</strong> Book One immerses in one faction (Option A is the whole world);
+Book Two brings the cracks; Book Three brings the Address and the recognition. The
+forbidden sentence is the one line the trilogy is built to make the reader think and
+the prose must never print. <strong>Tone for the age band:</strong> keep the canon's
+melancholy but lead with its hope &mdash; the Ancients' untested hypothesis is the
+novel's source of hope, held exactly where the canon holds it: believed,
+unconfirmed, worth everything.</p>
+
+<h2>A Cross-Medium Closing Note</h2>
+<p>Whatever the medium, four things travel with the IP and must arrive intact:</p>
+<ol>
+<li>The audience must be allowed to believe Option A first &mdash; fully, for a long
+time.</li>
+<li>The reveal must be assembled by the audience, never delivered to them.</li>
+<li>The Arrival must never be shown.</li>
+<li>The last beat is the question, not the answer.</li>
+</ol>
+<p>An adaptation that keeps those four has kept the IP, whatever else it changes. An
+adaptation that loses any one of them has built something else &mdash; possibly
+something good, but not this.</p>
+
+<hr style="margin-top:2.5em;border:none;border-top:1px solid #ccc;">
+<p style="text-align:center;color:#888;font-size:10pt;margin-top:1.5em;">
+The Codex &middot; Canon Reference for <em>Cycle Four</em> &middot; Version 1.1 &middot; 2026-05-21<br>
+Master source: the <code>codex/</code> Markdown directory &middot; derived from design corpus <code>core/10</code>&ndash;<code>core/22</code>
+</p>
+
+</body>
+</html>

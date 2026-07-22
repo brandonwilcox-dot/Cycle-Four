@@ -9,13 +9,28 @@ extends Node3D
 
 const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
+const ASSETS = preload("res://src/core/AssetLoader.gd")
 
-const RANGE        : float = 256.0
-## 2026-07-21: FOB one-shots small enemies (scouts/light line ≤120 HP). The enemy faction is
-## the one the player is weak against, so the FOB's shot usually takes the ×0.66 weak-type
-## multiplier — 150 still clears ~100 effective, one-shotting the small tier; T2+ survive.
-const DAMAGE       : float = 150.0
-const ATTACK_SPEED : float = 1.5
+## -- Bastion armament (playtest 2026-07-21): the fortress's four corner towers each carry
+## a SELECTABLE weapon; the player sets the defensive posture from the FOB panel.
+## Per weapon: display name, damage, interval (s), range (px), damage type (Combat enum),
+## tracer color, and optional special (chain / aoe). Rail-gun keeps the old one-shot-smalls
+## role (150 dmg clears ~100 effective through the weak-type ×0.66).
+const WEAPONS : Dictionary = {
+	"railgun":     {"name": "Rail-Gun",      "damage": 150.0, "interval": 2.0,  "range": 420.0, "dtype": 0, "color": Color(1.0, 0.93, 0.6)},
+	"laser":       {"name": "Laser",          "damage": 22.0,  "interval": 0.45, "range": 300.0, "dtype": 1, "color": Color(0.35, 0.95, 1.0)},
+	"lightning":   {"name": "Lightning Arc",  "damage": 34.0,  "interval": 1.25, "range": 280.0, "dtype": 1, "color": Color(0.78, 0.86, 1.0), "chain": 2, "chain_radius": 140.0},
+	"machine_gun": {"name": "Machine Gun",    "damage": 6.0,   "interval": 0.16, "range": 240.0, "dtype": 0, "color": Color(1.0, 0.82, 0.6)},
+	"rockets":     {"name": "Rockets",        "damage": 48.0,  "interval": 1.7,  "range": 360.0, "dtype": 0, "color": Color(1.0, 0.55, 0.25), "aoe": 90.0},
+}
+const WEAPON_ORDER : Array = ["railgun", "laser", "lightning", "machine_gun", "rockets"]
+## Bastion plane offsets from the base centre (± 1.5 cells ≈ the fortress corner towers).
+const BASTION_OFFSETS : Array = [
+	Vector2(-96.0, -96.0), Vector2(96.0, -96.0), Vector2(-96.0, 96.0), Vector2(96.0, 96.0),
+]
+const CHAIN_DAMAGE_FRAC  : float = 0.6   ## lightning chained hits / rocket splash fraction
+const UNIT_HIT_Y         : float = 16.0  ## target-side tracer height (unit mid-body)
+
 const MAX_HP : float = 300.0
 const CARGO_PER_RANK : float = 10.0
 
@@ -35,7 +50,9 @@ var _p        : Vector2 = Vector2.ZERO
 var _current_hp        : float  = MAX_HP
 var _hp_fill           : MeshInstance3D = null
 var _hp_mat            : StandardMaterial3D = null
-var _attack_timer      : float  = 0.0
+var _bastion_weapons   : Array = ["railgun", "laser", "rockets", "machine_gun"]
+var _bastion_timers    : Array = [0.0, 0.0, 0.0, 0.0]
+var _bastion_points    : Array = []   ## measured tower muzzles (game units) when a model is up
 var _is_destroyed      : bool   = false
 var _cargo_received    : float  = 0.0
 var _fortification_rank : int   = 0
@@ -60,6 +77,24 @@ func _ready() -> void:
 	EventBus.base_healed.connect(_on_base_healed)
 	EventBus.convoy_arrived.connect(_on_convoy_arrived)
 	call_deferred("_apply_influence")
+	call_deferred("_register_apron")
+
+## Perimeter path apron (2026-07-21): the FOB projects a worked-path pad + perimeter ring
+## (radius 3 ≈ the hi-fi fortress footprint + walkway) so incoming map corridors connect
+## visually from ANY side — no per-faction gate alignment needed. Visual-only (MapGrid).
+const APRON_RADIUS : int = 3
+
+func _register_apron() -> void:
+	if not is_inside_tree():
+		return
+	var grid : Node = _get_map_grid()
+	if grid != null and grid.has_method("add_structure_apron"):
+		grid.call("add_structure_apron", grid.call("world_to_cell", _p), APRON_RADIUS)
+
+func _exit_tree() -> void:
+	var grid : Node = get_tree().get_first_node_in_group("map_grid")
+	if grid != null and grid.has_method("remove_structure_apron"):
+		grid.call("remove_structure_apron", grid.call("world_to_cell", _p))
 
 const FOB_DETECTOR_RADIUS_CELLS : int = 6
 
@@ -119,11 +154,13 @@ func _process(delta: float) -> void:
 	if _doctrine == "bloom" and _current_hp < MAX_HP:
 		_current_hp = minf(MAX_HP, _current_hp + DOCTRINE_REGEN_PER_SEC * delta)
 		_update_hp_bar()
-	_attack_timer += delta
-	var rate : float = ATTACK_SPEED * (DOCTRINE_FIRE_RATE_MULT if _doctrine == "architects" else 1.0)
-	if _attack_timer >= 1.0 / rate:
-		_attack_timer = 0.0
-		_try_attack()
+	var rate_mult : float = DOCTRINE_FIRE_RATE_MULT if _doctrine == "architects" else 1.0
+	for i in _bastion_weapons.size():
+		_bastion_timers[i] += delta
+		var w : Dictionary = WEAPONS[_bastion_weapons[i]]
+		if _bastion_timers[i] >= float(w["interval"]) / rate_mult:
+			if _fire_bastion(i, w):
+				_bastion_timers[i] = 0.0
 
 func set_doctrine(doctrine_id: String) -> void:
 	_doctrine = doctrine_id
@@ -152,23 +189,89 @@ func _on_base_healed(amount: float) -> void:
 	_current_hp = minf(MAX_HP, _current_hp + amount)
 	_update_hp_bar()
 
-func _try_attack() -> void:
+## -- Bastion armament API (FOB panel) --
+
+func get_bastion_weapons() -> Array:
+	return _bastion_weapons.duplicate()
+
+func bastion_weapon_label(idx: int) -> String:
+	if idx < 0 or idx >= _bastion_weapons.size():
+		return ""
+	return str(WEAPONS[_bastion_weapons[idx]]["name"])
+
+func cycle_bastion_weapon(idx: int) -> void:
+	if idx < 0 or idx >= _bastion_weapons.size():
+		return
+	var cur : int = WEAPON_ORDER.find(_bastion_weapons[idx])
+	_bastion_weapons[idx] = WEAPON_ORDER[(cur + 1) % WEAPON_ORDER.size()]
+	_bastion_timers[idx] = 0.0
+
+func set_bastion_weapons(ids: Array) -> void:
+	for i in mini(ids.size(), _bastion_weapons.size()):
+		if WEAPONS.has(str(ids[i])):
+			_bastion_weapons[i] = str(ids[i])
+
+func _bastion_pos(idx: int) -> Vector2:
+	if idx < _bastion_points.size():
+		var v : Vector3 = _bastion_points[idx]
+		return _p + Vector2(v.x, v.z)
+	return _p + BASTION_OFFSETS[idx]
+
+## Tracer height: the measured tower-top when a model is up, else the wall top.
+func _bastion_y(idx: int) -> float:
+	if idx < _bastion_points.size():
+		return float((_bastion_points[idx] as Vector3).y)
+	return _height
+
+## Fires bastion `idx` at the nearest detectable enemy in its weapon range.
+## Returns false (no cooldown reset) when nothing is in range.
+func _fire_bastion(idx: int, w: Dictionary) -> bool:
+	var from : Vector2 = _bastion_pos(idx)
 	var nearest      : Node  = null
-	var nearest_dist : float = RANGE
+	var nearest_dist : float = float(w["range"])
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not is_instance_valid(unit):
 			continue
 		if unit.has_method("is_detectable") and not unit.call("is_detectable"):
 			continue
-		var dist : float = _p.distance_to(WORLD3D.node_plane(unit))
+		var dist : float = from.distance_to(WORLD3D.node_plane(unit))
 		if dist < nearest_dist:
 			nearest_dist = dist
 			nearest      = unit
-	if nearest != null and nearest.has_method("take_damage"):
-		var dt : int = _turret_damage_type()
-		Vfx.muzzle(_p, dt)
-		Vfx.bolt(_p, WORLD3D.node_plane(nearest), dt)
-		nearest.take_damage(DAMAGE, dt)
+	if nearest == null or not nearest.has_method("take_damage"):
+		return false
+	var col : Color = w["color"]
+	var dt  : int   = int(w["dtype"])
+	var target2 : Vector2 = WORLD3D.node_plane(nearest)
+	## Tracer leaves the corner tower-top and angles DOWN to the unit (mid-body height),
+	## instead of flying flat at wall height. Muzzle flash sits at the tower.
+	var my : float = _bastion_y(idx)
+	Vfx.pulse_at(from, col, 12.0, 0.1, my)
+	Vfx.bolt_from_to(from, my, target2, UNIT_HIT_Y, col)
+	nearest.take_damage(float(w["damage"]), dt)
+	## Lightning: arc onward to nearby enemies for fractional damage.
+	if w.has("chain"):
+		var chained : int = 0
+		for unit in get_tree().get_nodes_in_group("units"):
+			if chained >= int(w["chain"]) or not is_instance_valid(unit) or unit == nearest:
+				continue
+			if unit.has_method("is_detectable") and not unit.call("is_detectable"):
+				continue
+			var up : Vector2 = WORLD3D.node_plane(unit)
+			if target2.distance_to(up) <= float(w["chain_radius"]) and unit.has_method("take_damage"):
+				Vfx.bolt_styled(target2, up, col, 20.0)
+				unit.take_damage(float(w["damage"]) * CHAIN_DAMAGE_FRAC, dt)
+				chained += 1
+	## Rockets: splash around the impact point.
+	if w.has("aoe"):
+		Vfx.pulse_at(target2, col, float(w["aoe"]), 0.3)
+		for unit in get_tree().get_nodes_in_group("units"):
+			if not is_instance_valid(unit) or unit == nearest:
+				continue
+			var up : Vector2 = WORLD3D.node_plane(unit)
+			if target2.distance_to(up) <= float(w["aoe"]) and unit.has_method("take_damage"):
+				unit.take_damage(float(w["damage"]) * CHAIN_DAMAGE_FRAC, dt)
+	return true
 
 ## -- Visual (3D) --
 
@@ -186,6 +289,33 @@ func _update_hp_bar() -> void:
 			_hp_mat.albedo_color = Color(0.90, 0.20, 0.10)
 
 func _build_visual() -> void:
+	## Hi-fi Rodin fortress, when the active faction has one (Architects "Default" FOB).
+	## Design rule: the Commander must not out-height the external walls — enforced by
+	## AssetLoader.FACTION_BASE_SCALE. The model replaces apron/body/corners/turret
+	## (the sculptural fortress IS the turret; Vfx muzzle/bolt fire from the plane pos).
+	var faction : String = FactionManager.active_faction
+	var model : Node3D = ASSETS.load_base_model(faction)
+	if model != null:
+		add_child(model)
+		_height = ASSETS.base_wall_height(faction)      ## wall top drives derived layout
+		_bastion_points = ASSETS.base_bastion_points(faction)   ## measured tower muzzles
+		## 2026-07-21 playtest: the FOB needed a big local light boost — a warm-cyan omni
+		## above the walls washes the fortress + pad so it reads as the powered heart of
+		## the base (shadowless: it's a fill, the key light owns shadows).
+		var glow := OmniLight3D.new()
+		glow.light_color = Color(0.75, 0.92, 1.0)
+		glow.light_energy = 1.8
+		glow.omni_range = 520.0
+		glow.omni_attenuation = 1.4
+		glow.shadow_enabled = false
+		glow.position = Vector3(0.0, _height * 1.3, 0.0)
+		add_child(glow)
+		var bar_top : float = ASSETS.base_total_height(faction) + 18.0
+		_make_bar(Color(0.15, 0.15, 0.15), bar_top, 160.0)                    ## bg
+		_hp_fill = _make_bar(Color(0.20, 0.90, 0.20), bar_top + 0.1, 160.0)   ## fill
+		_hp_mat = _hp_fill.material_override as StandardMaterial3D
+		return
+
 	## Concrete apron (wide, low).
 	var apron : MeshInstance3D = MeshInstance3D.new()
 	var ab : BoxMesh = BoxMesh.new()
