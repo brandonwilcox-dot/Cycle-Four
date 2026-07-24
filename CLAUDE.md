@@ -33,9 +33,16 @@ now guarded to `state==ACTIVE` so the legacy 2D counter can't corrupt the 3D cou
 button re-enabled. Also cleaned ALL boot warnings (TerrainProps `_mat`/`basis`×3/int-div,
 FriendlyUnit `show`, Academy/CadetAvatar int-div) + `[debug] gdscript/warnings/unused_signal=0`
 (EventBus signal-bus false positives) → boot log now EMPTY. Lighting perf verified: 125-135 FPS
-(vsync off) at the 48-enemy cap, 819MB/11GB VRAM — the high profile is SAFE. **Pre-existing NOT
-fixed:** ~90-120ms CPU `_process` spikes on wave spawns (get_path_to_base A* + Unit GLB instance
-per spawn) — optional path-cache optimization. ⚠ EXES NOT RE-EXPORTED after these changes.
+(vsync off) at the 48-enemy cap, 819MB/11GB VRAM — the high profile is SAFE. **Spawn-CPU spike FIXED
+(2026-07-24, after the export):** profiled `_spawn_enemy_from` — path=~0ms, instantiate=~0ms,
+setup=~0ms; the whole ~100-130ms was in `add_child` for the FIRST 4 spawns only (then ~1ms),
+i.e. the enemy drone's RENDER-PIPELINE compiling on first VISIBLE render. Fix: `_warm_enemy_assets()`
+in `_setup_waves` keeps ONE enemy-faction model alive in a hidden holder at the FOB scaled to
+0.001 (a sub-pixel speck that RENDERS so the pipeline compiles up front, invisible to the player);
+re-runs per deploy. Verified: every spawn incl. the first is now ~1.2ms (was 100-130ms×4). Note:
+holding an INVISIBLE model did NOT warm it — it must render. ⚠ The two exes exported 2026-07-24
+13:04 (970MB release / 966MB debug, Desktop) include the wave-gating + warnings + lighting but
+NOT this spawn fix — RE-EXPORT to bake it in.
 
 ## Session 2026-07-23 — ASSET PROJECTILES VERIFIED + BOTH EXES RE-EXPORTED
 The asset-based projectile system (VfxBolt BULLET/ENERGY/PLASMA/ROCKET/ARC shaped rounds +

@@ -9,6 +9,7 @@ const WORLD3D     = preload("res://src/core/World3D.gd")
 const CAM_RIG     = preload("res://src/core/CameraRig3D.gd")
 const ATMOSPHERE  = preload("res://src/core/BattleAtmosphere.gd")
 const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
+const ASSET_LOADER   = preload("res://src/core/AssetLoader.gd")
 const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
 const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
@@ -963,6 +964,35 @@ func _cell_center2(cell: Vector2i) -> Vector2:
 ## Stage 6b: real waves — collect the map's spawn cells and trickle enemies down their A* paths.
 func _setup_waves() -> void:
 	_collect_spawns()
+	_warm_enemy_assets()
+
+## The enemy drone GLB (mesh + 2K textures) loads lazily on FIRST spawn (~100ms×~4 as its
+## sub-resources page in), which used to hitch wave 1. Warm it during world build (a loading
+## moment) by building ONE model of the enemy faction and KEEPING it alive in a hidden holder.
+## Holding the instance keeps its mesh/material/textures resident, so every real spawn
+## instantiates from a warm cache (~1ms). Freeing the warm models (as an earlier throwaway
+## version did) released the cache before the wave — hence they must persist. Re-runs per
+## deploy: the new territory's enemy faction warms its own model, the previous one is released.
+var _warm_holder : Node3D = null
+func _warm_enemy_assets() -> void:
+	var fac : String = _wave_faction()
+	if _warm_holder == null:
+		_warm_holder = Node3D.new()
+		_warm_holder.name = "AssetWarmHolder"
+		## Sits at the FOB, scaled to a sub-pixel speck: it RENDERS (so the drone's material
+		## pipeline compiles once, up front) but is invisible to the player. Kept alive so the
+		## compiled pipeline + resident mesh/textures serve every real spawn (~1ms each).
+		_warm_holder.position = _cell_center3(BASE_CELL, 40.0)
+		_warm_holder.scale = Vector3.ONE * 0.001
+		add_child(_warm_holder)
+	else:
+		for c in _warm_holder.get_children():
+			c.queue_free()   ## release the previous faction's warm model on deploy
+	var m : Node3D = ASSET_LOADER.load_unit_model(fac, Vfx.faction_color(fac), false)
+	if m != null:
+		var mat : StandardMaterial3D = ASSET_LOADER.prepare_unit_material(m, Vfx.faction_color(fac))
+		var _mat_ok : bool = mat != null   ## exercise the same material path a real spawn uses
+		_warm_holder.add_child(m)
 
 ## (Re)reads the current map's spawn cells for the wave driver — also after a galaxy deploy.
 func _collect_spawns() -> void:
