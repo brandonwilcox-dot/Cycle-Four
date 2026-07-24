@@ -190,8 +190,9 @@ func _run_map_scenario(idx: int) -> void:
 	## Spawn enemies — scenario 0 uses two flanks; others use one wave.
 	var count : int = SCENARIO_SPAWN_COUNTS[idx]
 	if idx == 0:
-		await _spawn_wave(0, count / 2)
-		await _spawn_wave(1, count - count / 2)
+		var half : int = int(count / 2.0)
+		await _spawn_wave(0, half)
+		await _spawn_wave(1, count - half)
 	else:
 		await _spawn_wave(SCENARIO_SPAWN_IDX[idx], count)
 

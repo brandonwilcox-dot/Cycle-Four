@@ -113,7 +113,6 @@ func _ready() -> void:
 	research_btn.pressed.connect(_on_research_pressed)
 	EventBus.research_stage_purchased.connect(_on_research_stage_purchased)
 	EventBus.offline_catch_up.connect(_on_offline_catch_up)
-	EventBus.wave_called_early.connect(_on_wave_called_early)
 	place_tower_btn.disabled    = true   ## Enabled once faction is chosen
 	place_building_btn.disabled = true
 	start_wave_btn.disabled     = false
@@ -270,8 +269,11 @@ func _on_placement_started(_tower_data: Resource) -> void:
 	place_tower_btn.text     = "Placing... [RMB/ESC]"
 	place_tower_btn.disabled = true
 
+## "Next Wave" — summon the next wave from STANDBY. Battle3D is the wave clock now, so emit the
+## request straight to it (WaveManager's legacy 2D clock no longer drives 3D spawns). The early-
+## call bonus + STANDBY guard live in Battle3D._on_wave_called_early.
 func _on_start_wave_pressed() -> void:
-	WaveManager.begin_waves()
+	EventBus.wave_called_early.emit()
 
 func _on_place_wall_pressed() -> void:
 	EventBus.wall_placement_requested.emit()
@@ -482,12 +484,6 @@ func _depth_label(d: HudDepth) -> String:
 
 # -- Offline catch-up --------------------------------------------------------
 
-## Reward for calling the next wave early (pressed Begin during the grace window).
-func _on_wave_called_early() -> void:
-	var primary : String = FactionManager.get_primary_resource()
-	var bonus   : float  = 10.0 + float(GameState.wave_number) * 2.0
-	EconomyManager.add_resource(primary, bonus)
-	_push_notification("Called early! +%d %s bonus." % [int(bonus), primary], Color(0.55, 0.75, 1.0))
 
 func _on_offline_catch_up(seconds_elapsed: float) -> void:
 	var hours   : int   = int(seconds_elapsed / 3600.0)

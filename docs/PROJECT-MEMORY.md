@@ -17,8 +17,9 @@ intended sequence at the start of the next session:
 
 1. Read `CLAUDE.md` — the project-state index and document map.
 2. Read this file — the narrative handoff and the open-threads list.
-3. Pick a next direction from "Where to Go Next" below.
-4. Begin.
+3. Read `docs/DESIGN-GUIDELINES.md` before importing or restyling visual assets.
+4. Pick a next direction from "Where to Go Next" below.
+5. Begin.
 
 If returning after a long gap, also skim `core/10_faction-lore.md` (the
 root lore document) and `codex/00_codex-index.md` (the canon reference).

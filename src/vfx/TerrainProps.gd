@@ -69,7 +69,6 @@ const FLORA_STYLES := [
 ]
 
 var _mmi        : MultiMeshInstance3D = null
-var _mat        : StandardMaterial3D = null
 var _seed       : int = -1
 var _cells      : PackedInt32Array = []      ## owning cell index per rock
 var _xforms     : Array[Transform3D] = []    ## full-size transforms (zero-scaled when fogged)
@@ -452,9 +451,9 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 				continue
 			var height : float = rng.randf_range(float(style["grass_min_h"]), float(style["grass_max_h"]))
 			var width : float = csize * rng.randf_range(0.28, 0.48)
-			var basis := Basis(Vector3.UP, rng.randf() * TAU)
-			basis = basis.scaled(Vector3(width, height, width))
-			grass_placed.append(Transform3D(basis, Vector3(wx, relief * relief * amp + 0.20, wz)))
+			var bmat := Basis(Vector3.UP, rng.randf() * TAU)
+			bmat = bmat.scaled(Vector3(width, height, width))
+			grass_placed.append(Transform3D(bmat, Vector3(wx, relief * relief * amp + 0.20, wz)))
 			var tint : float = rng.randf_range(0.78, 1.18)
 			grass_colors.append(Color(tint * rng.randf_range(0.92, 1.05), tint,
 				tint * rng.randf_range(0.86, 1.05), 1.0))
@@ -476,9 +475,9 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 			continue
 		var height : float = rng.randf_range(float(style["bush_min_h"]), float(style["bush_max_h"]))
 		var width : float = height * rng.randf_range(1.10, 1.55)
-		var basis := Basis(Vector3.UP, rng.randf() * TAU)
-		basis = basis.scaled(Vector3(width, height, width))
-		bush_placed.append(Transform3D(basis, Vector3(wx, relief * relief * amp + 0.18, wz)))
+		var bmat := Basis(Vector3.UP, rng.randf() * TAU)
+		bmat = bmat.scaled(Vector3(width, height, width))
+		bush_placed.append(Transform3D(bmat, Vector3(wx, relief * relief * amp + 0.18, wz)))
 		var tint : float = rng.randf_range(0.78, 1.16)
 		bush_colors.append(Color(tint * rng.randf_range(0.92, 1.05), tint,
 			tint * rng.randf_range(0.88, 1.04), 1.0))
@@ -514,9 +513,9 @@ func _build_vegetation(grid: Node, spawn_cells: Dictionary, tseed: float,
 		tree_taken[cell] = stack + 1
 		var height : float = rng.randf_range(float(style["tree_min_h"]), float(style["tree_max_h"]))
 		var width : float = height * rng.randf_range(0.42, 0.60)
-		var basis := Basis(Vector3.UP, rng.randf() * TAU)
-		basis = basis.scaled(Vector3(width, height, width))
-		tree_placed.append(Transform3D(basis, Vector3(wx, relief * relief * amp + 0.12, wz)))
+		var bmat := Basis(Vector3.UP, rng.randf() * TAU)
+		bmat = bmat.scaled(Vector3(width, height, width))
+		tree_placed.append(Transform3D(bmat, Vector3(wx, relief * relief * amp + 0.12, wz)))
 		var tint : float = rng.randf_range(0.82, 1.14)
 		tree_colors.append(Color(tint * rng.randf_range(0.94, 1.04), tint,
 			tint * rng.randf_range(0.90, 1.05), 1.0))
@@ -568,7 +567,7 @@ func _build_fireflies(style: Dictionary, trees: Array, cols: int, rows: int, csi
 	var em : Color = style.get("emission", Color(0.2, 0.5, 0.3))
 	var p := CPUParticles3D.new()
 	p.name = "GroveFireflies"
-	p.amount = clampi(trees.size() / 3, 40, 260)
+	p.amount = clampi(int(trees.size() / 3.0), 40, 260)
 	p.lifetime = 6.0
 	p.preprocess = 3.0
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX

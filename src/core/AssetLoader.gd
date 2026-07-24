@@ -90,6 +90,23 @@ const FACTION_BASE_YAW = {
 const FACTION_BASE_WALL_NORM = { "architects": 0.57 }
 const FACTION_BASE_TOTAL_NORM = { "architects": 1.55 }
 
+## Player GARRISON GLTF models. Missing factions retain Building.gd's procedural body.
+## The Architect Rodin keep is ground-aligned and centered: ~1.90u footprint, 1.218u high.
+const FACTION_GARRISON_MODELS = {
+	"architects": "res://assets/models/buildings/architect_garrison_keep_hifi.glb",
+}
+## x30 -> ~57 game-unit footprint and ~36.6 game-unit height: broad enough to read as a
+## fortified production node while staying inside the existing one-cell building envelope.
+const FACTION_GARRISON_SCALE = {
+	"architects": 30.0,
+}
+## Rodin fronts export toward +Z, matching the existing Architect FOB convention.
+const FACTION_GARRISON_YAW = {
+	"architects": 0.0,
+}
+const FACTION_GARRISON_TOTAL_NORM = { "architects": 1.218464 }
+const FACTION_GARRISON_RADIUS_NORM = { "architects": 0.951016 }
+
 ## Bastion muzzle points, NORMALIZED mesh units (x, muzzle_y, z) — MEASURED from the mesh
 ## (the four tall towers flanking the spire; muzzle sits at the tower-top band so tracers
 ## visibly leave the towers). Multiplied by FACTION_BASE_SCALE at runtime. NOTE: measured
@@ -137,6 +154,31 @@ static func base_wall_height(faction_id: String) -> float:
 
 static func base_total_height(faction_id: String) -> float:
 	return float(FACTION_BASE_TOTAL_NORM.get(faction_id, 0.0)) * float(FACTION_BASE_SCALE.get(faction_id, 0.0))
+
+## Load a faction Garrison model with scale + yaw applied, or null for procedural fallback.
+static func load_garrison_model(faction_id: String) -> Node3D:
+	var path : String = FACTION_GARRISON_MODELS.get(faction_id, "")
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	var resource = ResourceLoader.load(path)
+	if resource == null:
+		push_error("AssetLoader: Failed to load %s" % path)
+		return null
+	var model = resource.instantiate() as Node3D
+	if model == null:
+		push_error("AssetLoader: Garrison GLTF scene is not Node3D: %s" % path)
+		return null
+	var s : float = float(FACTION_GARRISON_SCALE.get(faction_id, 30.0))
+	model.scale = Vector3(s, s, s)
+	model.rotation_degrees = Vector3(0.0, float(FACTION_GARRISON_YAW.get(faction_id, 0.0)), 0.0)
+	return model
+
+## Imported Garrison dimensions in GAME units (0 when no authored model exists).
+static func garrison_total_height(faction_id: String) -> float:
+	return float(FACTION_GARRISON_TOTAL_NORM.get(faction_id, 0.0)) * float(FACTION_GARRISON_SCALE.get(faction_id, 0.0))
+
+static func garrison_radius(faction_id: String) -> float:
+	return float(FACTION_GARRISON_RADIUS_NORM.get(faction_id, 0.0)) * float(FACTION_GARRISON_SCALE.get(faction_id, 0.0))
 
 ## Load a rigged COMMANDER scene for `faction_id`, preserving its own materials
 ## and its AnimationPlayer. Returns the instanced Node3D, or null if unavailable.

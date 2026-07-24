@@ -12,6 +12,9 @@ const FriendlyUnitScript = preload("res://src/entities/FriendlyUnit.gd")
 const FriendlyRosterScript = preload("res://src/core/army/FriendlyRoster.gd")
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
+const ASSETS = preload("res://src/core/AssetLoader.gd")
+const ARCH_GARRISON_EMISSION_MASK = preload("res://assets/models/buildings/architect_garrison_keep_hifi_emission_mask.png")
+const STRUCTURE_LIGHTING = preload("res://src/vfx/StructureEmissionLighting.gd")
 
 const DETECT_RADIUS : float = 160.0
 
@@ -470,37 +473,50 @@ func adopt_unit(u: Node) -> void:
 
 func _build_visual() -> void:
 	_body_mats.clear()
+	_base_mats_emission.clear()
 	## V4 rising construction: body parts under _body_root, scaled up in Y with build progress.
 	_body_root = Node3D.new()
 	add_child(_body_root)
 	var col : Color = data.get("color_hint") if data.get("color_hint") else Color.WHITE
+	var visual_radius : float = 36.0
 
-	## Garrison body — a squat block.
-	var body : MeshInstance3D = MeshInstance3D.new()
-	var bx : BoxMesh = BoxMesh.new()
-	bx.size = Vector3(46.0, _height, 46.0)
-	body.mesh = bx
-	body.position = Vector3(0.0, _height * 0.5, 0.0)
-	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	body.material_override = _mat(col)
-	_body_root.add_child(body)
+	## Authored faction model when available; all other factions retain the procedural
+	## squat-block fallback below. The imported mesh is centered and ground-aligned.
+	var authored_model : Node3D = ASSETS.load_garrison_model(_faction)
+	if authored_model != null:
+		_body_root.add_child(authored_model)
+		_height = ASSETS.garrison_total_height(_faction)
+		visual_radius = ASSETS.garrison_radius(_faction) + 4.0
+		_capture_gltf_materials(authored_model)
+		if _faction == "architects":
+			STRUCTURE_LIGHTING.add_architect_garrison_lights(self, float(ASSETS.FACTION_GARRISON_SCALE[_faction]))
+	else:
+		## Procedural Garrison body — a squat block.
+		var body : MeshInstance3D = MeshInstance3D.new()
+		var bx : BoxMesh = BoxMesh.new()
+		bx.size = Vector3(46.0, _height, 46.0)
+		body.mesh = bx
+		body.position = Vector3(0.0, _height * 0.5, 0.0)
+		body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		body.material_override = _mat(col)
+		_body_root.add_child(body)
 
-	## Raised cross/plus on top — the building identity (distinct from towers/units).
-	var cross_col : Color = col.darkened(0.5)
-	var hbar : MeshInstance3D = MeshInstance3D.new()
-	var hb : BoxMesh = BoxMesh.new()
-	hb.size = Vector3(34.0, 8.0, 10.0)
-	hbar.mesh = hb
-	hbar.position = Vector3(0.0, _height + 5.0, 0.0)
-	hbar.material_override = _mat(cross_col)
-	_body_root.add_child(hbar)
-	var vbar : MeshInstance3D = MeshInstance3D.new()
-	var vb : BoxMesh = BoxMesh.new()
-	vb.size = Vector3(10.0, 8.0, 34.0)
-	vbar.mesh = vb
-	vbar.position = Vector3(0.0, _height + 5.0, 0.0)
-	vbar.material_override = _mat(cross_col)
-	_body_root.add_child(vbar)
+		## Raised cross/plus on top — the fallback building identity.
+		var cross_col : Color = col.darkened(0.5)
+		var hbar : MeshInstance3D = MeshInstance3D.new()
+		var hb : BoxMesh = BoxMesh.new()
+		hb.size = Vector3(34.0, 8.0, 10.0)
+		hbar.mesh = hb
+		hbar.position = Vector3(0.0, _height + 5.0, 0.0)
+		hbar.material_override = _mat(cross_col)
+		_body_root.add_child(hbar)
+		var vbar : MeshInstance3D = MeshInstance3D.new()
+		var vb : BoxMesh = BoxMesh.new()
+		vb.size = Vector3(10.0, 8.0, 34.0)
+		vbar.mesh = vb
+		vbar.position = Vector3(0.0, _height + 5.0, 0.0)
+		vbar.material_override = _mat(cross_col)
+		_body_root.add_child(vbar)
 
 	## Construction/repair bar — billboarded above; shown while building/damaged.
 	_build_bar = MeshInstance3D.new()
@@ -534,9 +550,50 @@ func _build_visual() -> void:
 
 	_con_rig = _CON_RIG.new()
 	add_child(_con_rig)
-	_con_rig.call("setup", FactionManager.active_faction, _body_root, _body_mats, _height + 10.0, 36.0)
+	_con_rig.call("setup", _faction, _body_root, _body_mats, _height + 10.0, visual_radius)
 
 	_refresh_build_visual()
+
+## Duplicate imported materials per Garrison so construction and hit-flash never mutate
+## the shared GLB resource. Architect keeps receive the same polished, lit-from-within
+## language as the FOB while retaining Rodin's albedo, normal, and metal/roughness maps.
+func _capture_gltf_materials(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			for surface_index in mesh_instance.mesh.get_surface_count():
+				var source : Material = mesh_instance.get_active_material(surface_index)
+				if source is StandardMaterial3D:
+					var mat := (source as StandardMaterial3D).duplicate() as StandardMaterial3D
+					if _faction == "architects":
+						_apply_architect_garrison_finish(mat)
+					elif not mat.emission_enabled:
+						mat.emission_enabled = true
+						mat.emission = Color(0.75, 0.92, 1.0)
+						mat.emission_energy_multiplier = 0.08
+					mesh_instance.set_surface_override_material(surface_index, mat)
+					_body_mats.append(mat)
+					_base_mats_emission.append(mat.emission_energy_multiplier)
+	for child in node.get_children():
+		_capture_gltf_materials(child)
+
+## Skin pass for the Rodin keep: neutral ceramic armor, dark recesses, and cyan emission
+## isolated to blue-biased openings/edge accents from the original Rodin paint. Small
+## aperture lights add local spill; no structure-wide fill is allowed to wash out the armor.
+func _apply_architect_garrison_finish(mat: StandardMaterial3D) -> void:
+	mat.albedo_color *= Color(0.98, 0.99, 1.0, 1.0)
+	mat.roughness = 0.42
+	mat.metallic = 0.22
+	mat.metallic_specular = 0.62
+	mat.rim_enabled = true
+	mat.rim = 0.14
+	mat.rim_tint = 0.20
+	mat.emission_enabled = true
+	mat.emission = Color(0.20, 0.82, 1.0)
+	mat.emission_texture = ARCH_GARRISON_EMISSION_MASK
+	mat.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+	mat.emission_energy_multiplier = 2.40
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 func _node_bar_color() -> Color:
 	match _faction:

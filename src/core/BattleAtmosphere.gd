@@ -20,11 +20,11 @@ const KEY_ENERGY         : float = 1.5    ## 2026-07-21 playtest: scene read dul
 const KEY_SHADOW_MAX_DIST: float = 6000.0                          ## pixel scale — default 100 is invisible here
 const FILL_ROTATION_DEG  : Vector3 = Vector3(-28.0, 140.0, 0.0)    ## opposes the key in yaw
 const FILL_COLOR         : Color = Color(0.45, 0.60, 0.90)         ## cool moonlight rim
-const FILL_ENERGY        : float = 0.38   ## cool rim only — must not lift the shadow side to noon
+const FILL_ENERGY        : float = 0.42   ## cool rim only — must not lift the shadow side to noon
 
 ## --- environment ---------------------------------------------------------------------
 const AMBIENT_COLOR      : Color = Color(0.38, 0.45, 0.58)
-const AMBIENT_ENERGY     : float = 0.42   ## lower than round-1: SSIL/SDFGI now fill the shadows
+const AMBIENT_ENERGY     : float = 0.48   ## lower than round-1: SSIL/SDFGI now fill the shadows
 const GLOW_INTENSITY     : float = 0.95
 ## Polished-lookdev stack (2026-07-21, user: "give me everything"):
 const SSIL_ENABLED       : bool  = true    ## screen-space indirect — emissives light nearby ground
@@ -95,8 +95,15 @@ func _build_lights() -> void:
 	key.rotation_degrees = KEY_ROTATION_DEG
 	key.light_color = KEY_COLOR
 	key.light_energy = KEY_ENERGY
+	key.light_indirect_energy = 0.90
+	key.light_angular_distance = 0.35   ## soft solar penumbra; one shadow caster keeps PCSS affordable
 	key.shadow_enabled = true
 	key.directional_shadow_max_distance = KEY_SHADOW_MAX_DIST
+	key.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	key.directional_shadow_split_1 = 0.08
+	key.directional_shadow_split_2 = 0.22
+	key.directional_shadow_split_3 = 0.50
+	key.directional_shadow_fade_start = 0.88
 	key.directional_shadow_blend_splits = true
 	key.light_volumetric_fog_energy = 1.0   ## E1: the key carves shafts through the haze
 	add_child(key)
@@ -108,6 +115,9 @@ func _build_lights() -> void:
 	fill.light_color = FILL_COLOR
 	fill.light_energy = FILL_ENERGY
 	fill.light_specular = 0.2
+	fill.light_indirect_energy = 0.20
+	fill.light_volumetric_fog_energy = 0.15
+	fill.shadow_enabled = false
 	add_child(fill)
 
 func _build_environment() -> void:
@@ -158,9 +168,14 @@ func _build_environment() -> void:
 		_env.ssil_enabled = true
 		_env.ssil_radius = SSIL_RADIUS
 		_env.ssil_intensity = SSIL_INTENSITY
+		_env.ssil_sharpness = 0.90
+		_env.ssil_normal_rejection = 0.95
 	if SDFGI_ENABLED:
 		_env.sdfgi_enabled = true
 		_env.sdfgi_min_cell_size = SDFGI_MIN_CELL
+		_env.sdfgi_cascades = 4
+		_env.sdfgi_y_scale = Environment.SDFGI_Y_SCALE_50_PERCENT
+		_env.sdfgi_use_occlusion = false   ## outdoor battlefield: avoids occlusion blotches
 		_env.sdfgi_bounce_feedback = 0.3
 		_env.sdfgi_energy = 1.0
 

@@ -552,7 +552,7 @@ func _update_health_visual() -> void:
 func _update_shield_visual() -> void:
 	if _shield_fill == null:
 		return
-	var show : bool = _shield_cap > 0.0 and _shield > 0.01
-	_shield_fill.visible = show
-	if show:
+	var shield_visible : bool = _shield_cap > 0.0 and _shield > 0.01
+	_shield_fill.visible = shield_visible
+	if shield_visible:
 		_shield_fill.scale.x = clampf(_shield / _shield_cap, 0.0, 1.0)

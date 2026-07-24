@@ -17,6 +17,13 @@ run/main_scene="res://scenes/Root.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://assets/sprites/icon.svg"
 
+[debug]
+
+; EventBus is a signal-bus autoload: every signal is emitted/connected in OTHER classes,
+; so the per-class analyzer flags them all as "unused". Ignore that one warning project-wide
+; (the ~90 benign EventBus warnings that dominated the boot log).
+gdscript/warnings/unused_signal=0
+
 [autoload]
 
 EventBus="*res://src/autoloads/EventBus.gd"
@@ -67,3 +74,27 @@ ui_accept={
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.05, 0.05, 0.08, 1)
+
+; GTX 1080 Ti / 1080p high presentation profile (DESIGN-GUIDELINES.md).
+rendering/anti_aliasing/quality/msaa_3d=1
+rendering/anti_aliasing/quality/screen_space_aa=2
+rendering/anti_aliasing/quality/use_debanding=true
+rendering/textures/default_filters/anisotropic_filtering_level=4
+rendering/environment/glow/upscale_mode=1
+rendering/environment/ssao/quality=3
+rendering/environment/ssao/half_size=false
+rendering/environment/ssao/fadeout_from=1600.0
+rendering/environment/ssao/fadeout_to=3400.0
+rendering/environment/ssil/quality=3
+rendering/environment/ssil/half_size=false
+rendering/environment/ssil/fadeout_from=1600.0
+rendering/environment/ssil/fadeout_to=3600.0
+rendering/environment/volumetric_fog/volume_size=96
+rendering/environment/volumetric_fog/volume_depth=64
+rendering/environment/volumetric_fog/use_filter=1
+rendering/global_illumination/gi/use_half_resolution=false
+rendering/global_illumination/sdfgi/probe_ray_count=2
+rendering/global_illumination/sdfgi/frames_to_converge=5
+rendering/global_illumination/sdfgi/frames_to_update_lights=3
+rendering/lights_and_shadows/directional_shadow/size=8192
+rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3

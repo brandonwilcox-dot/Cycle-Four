@@ -38,7 +38,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_moving = true
 
 func _draw() -> void:
-	var half : int = AVATAR_SIZE / 2
+	var half : float = AVATAR_SIZE / 2.0
 	draw_rect(Rect2(-half, -half, AVATAR_SIZE, AVATAR_SIZE), Color(0.95, 0.78, 0.20))
-	var pip_half : int = PIP_SIZE / 2
+	var pip_half : float = PIP_SIZE / 2.0
 	draw_rect(Rect2(-pip_half, -pip_half, PIP_SIZE, PIP_SIZE), Color(1.0, 1.0, 1.0))

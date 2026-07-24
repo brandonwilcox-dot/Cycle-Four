@@ -14,6 +14,44 @@ Design corpus lives in-repo at:
 Read docs\PROJECT-MEMORY.md and docs\core\23_open-questions-resolved.md before
 making any design decisions in code.
 
+## Session 2026-07-24 — WAVE SPAWN GATED (player-summoned) + warnings cleaned + lighting perf verified
+Reviewed the wave system: found TWO desynced clocks — `WaveManager` (autoload) drove the
+WavePanel display + was button-gated, but Battle3D's own `_process` spawner ran an INDEPENDENT
+auto-timer (grace 12s → wave → rest 22s → wave …) that ignored WaveManager entirely and flooded
+enemies regardless of the button. FIXED to **player-summoned + auto-fallback** (user pick):
+Battle3D is now the SOLE wave clock. STANDBY holds (no spawns) until the "Next Wave" button
+(`wave_called_early`) OR a long auto-fallback (`WAVE_GRACE=25` first / `WAVE_REST=50` between);
+a wave runs from first spawn until every enemy IT spawned is dead/breached (tracked by node ref
+in `_wave_units` / `_live_wave_count`), then returns to STANDBY. Battle3D now emits
+`wave_started`/`wave_ended`/`enemy_count_changed` so the panel is accurate AND this REVIVED
+features that were silently dead in 3D (Milestone-2/Ultimate unlock, FriendlyUnit wave-survival
+bonus). Button reliability: HUD "Next Wave" emits `wave_called_early` DIRECTLY (was routed
+through the dormant WaveManager); early-summon bonus moved into Battle3D; `WaveManager.report_*`
+now guarded to `state==ACTIVE` so the legacy 2D counter can't corrupt the 3D count. Button label
+"Begin Waves"→"Next Wave"; HUD disables it during a wave, re-enables on clear. VERIFIED in play:
+16s idle = empty field (no flood), press → Wave 1 INCOMING/10, count 10→7→0, VICTORY → standby,
+button re-enabled. Also cleaned ALL boot warnings (TerrainProps `_mat`/`basis`×3/int-div,
+FriendlyUnit `show`, Academy/CadetAvatar int-div) + `[debug] gdscript/warnings/unused_signal=0`
+(EventBus signal-bus false positives) → boot log now EMPTY. Lighting perf verified: 125-135 FPS
+(vsync off) at the 48-enemy cap, 819MB/11GB VRAM — the high profile is SAFE. **Pre-existing NOT
+fixed:** ~90-120ms CPU `_process` spikes on wave spawns (get_path_to_base A* + Unit GLB instance
+per spawn) — optional path-cache optimization. ⚠ EXES NOT RE-EXPORTED after these changes.
+
+## Session 2026-07-23 — ASSET PROJECTILES VERIFIED + BOTH EXES RE-EXPORTED
+The asset-based projectile system (VfxBolt BULLET/ENERGY/PLASMA/ROCKET/ARC shaped rounds +
+trails; `Vfx.bolt()` auto-maps damage type → kind; FOB bastion `"vfx"` kind per weapon) was
+already in the working tree and is now VERIFIED in play — F1 → Begin Waves → wave 1 engaged +
+VICTORY with impact bursts. **Both exes RE-EXPORTED 2026-07-23 17:43** via `run_export.bat`
+(temp wrapper, since removed) → `.\tools\export.ps1`: Release "Cycle Four.exe" 947.9 MB, Debug
+"Cycle Four (DEBUG).exe" 944.2 MB on the Desktop. This CLEARS the standing "EXES NOT
+RE-EXPORTED (sessions 2-6)" flag. ⚠ Build is ~948 MB — texture-compression pass is the obvious
+size win (many 2K PBR scans + FOB/prop/commander GLBs). Projectile-asset art (replacing the
+procedural VfxBolt meshes with real GLB ordnance) remains an optional future polish; the
+procedural shaped rounds read fine at RTS zoom.
+
+Read docs\DESIGN-GUIDELINES.md before importing, replacing, or materially restyling
+any visual asset; its selective-emission and localized-light recipe is permanent.
+
 ---
 
 ## Session 2026-07-21 (6) — PLAYTEST ROUND 3: corner-bastion fire, real PolyHaven rock/plant assets, better tree mesh

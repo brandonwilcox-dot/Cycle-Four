@@ -10,18 +10,21 @@ extends Node3D
 const Combat = preload("res://src/combat/Combat.gd")
 const WORLD3D = preload("res://src/core/World3D.gd")
 const ASSETS = preload("res://src/core/AssetLoader.gd")
+const STRUCTURE_LIGHTING = preload("res://src/vfx/StructureEmissionLighting.gd")
+const ARCH_FOB_EMISSION_MASK = preload("res://assets/models/buildings/architect_fob_hifi_emission_mask.png")
 
 ## -- Bastion armament (playtest 2026-07-21): the fortress's four corner towers each carry
 ## a SELECTABLE weapon; the player sets the defensive posture from the FOB panel.
 ## Per weapon: display name, damage, interval (s), range (px), damage type (Combat enum),
 ## tracer color, and optional special (chain / aoe). Rail-gun keeps the old one-shot-smalls
 ## role (150 dmg clears ~100 effective through the weak-type ×0.66).
+## vfx kind (VfxBolt enum): 0 BULLET · 1 ENERGY · 2 PLASMA · 3 ROCKET · 4 ARC.
 const WEAPONS : Dictionary = {
-	"railgun":     {"name": "Rail-Gun",      "damage": 150.0, "interval": 2.0,  "range": 420.0, "dtype": 0, "color": Color(1.0, 0.93, 0.6)},
-	"laser":       {"name": "Laser",          "damage": 22.0,  "interval": 0.45, "range": 300.0, "dtype": 1, "color": Color(0.35, 0.95, 1.0)},
-	"lightning":   {"name": "Lightning Arc",  "damage": 34.0,  "interval": 1.25, "range": 280.0, "dtype": 1, "color": Color(0.78, 0.86, 1.0), "chain": 2, "chain_radius": 140.0},
-	"machine_gun": {"name": "Machine Gun",    "damage": 6.0,   "interval": 0.16, "range": 240.0, "dtype": 0, "color": Color(1.0, 0.82, 0.6)},
-	"rockets":     {"name": "Rockets",        "damage": 48.0,  "interval": 1.7,  "range": 360.0, "dtype": 0, "color": Color(1.0, 0.55, 0.25), "aoe": 90.0},
+	"railgun":     {"name": "Rail-Gun",      "damage": 150.0, "interval": 2.0,  "range": 420.0, "dtype": 0, "color": Color(1.0, 0.93, 0.6), "vfx": 0},
+	"laser":       {"name": "Laser",          "damage": 22.0,  "interval": 0.45, "range": 300.0, "dtype": 1, "color": Color(0.35, 0.95, 1.0), "vfx": 1},
+	"lightning":   {"name": "Lightning Arc",  "damage": 34.0,  "interval": 1.25, "range": 280.0, "dtype": 1, "color": Color(0.78, 0.86, 1.0), "chain": 2, "chain_radius": 140.0, "vfx": 4},
+	"machine_gun": {"name": "Machine Gun",    "damage": 6.0,   "interval": 0.16, "range": 240.0, "dtype": 0, "color": Color(1.0, 0.82, 0.6), "vfx": 0},
+	"rockets":     {"name": "Rockets",        "damage": 48.0,  "interval": 1.7,  "range": 360.0, "dtype": 0, "color": Color(1.0, 0.55, 0.25), "aoe": 90.0, "vfx": 3},
 }
 const WEAPON_ORDER : Array = ["railgun", "laser", "lightning", "machine_gun", "rockets"]
 ## Bastion plane offsets from the base centre (± 1.5 cells ≈ the fortress corner towers).
@@ -246,8 +249,9 @@ func _fire_bastion(idx: int, w: Dictionary) -> bool:
 	## Tracer leaves the corner tower-top and angles DOWN to the unit (mid-body height),
 	## instead of flying flat at wall height. Muzzle flash sits at the tower.
 	var my : float = _bastion_y(idx)
+	var vk : int = int(w.get("vfx", 0))
 	Vfx.pulse_at(from, col, 12.0, 0.1, my)
-	Vfx.bolt_from_to(from, my, target2, UNIT_HIT_Y, col)
+	Vfx.bolt_from_to(from, my, target2, UNIT_HIT_Y, col, vk)
 	nearest.take_damage(float(w["damage"]), dt)
 	## Lightning: arc onward to nearby enemies for fractional damage.
 	if w.has("chain"):
@@ -259,7 +263,7 @@ func _fire_bastion(idx: int, w: Dictionary) -> bool:
 				continue
 			var up : Vector2 = WORLD3D.node_plane(unit)
 			if target2.distance_to(up) <= float(w["chain_radius"]) and unit.has_method("take_damage"):
-				Vfx.bolt_styled(target2, up, col, 20.0)
+				Vfx.bolt_styled(target2, up, col, 20.0, 4)   ## ARC beam
 				unit.take_damage(float(w["damage"]) * CHAIN_DAMAGE_FRAC, dt)
 				chained += 1
 	## Rockets: splash around the impact point.
@@ -299,17 +303,16 @@ func _build_visual() -> void:
 		add_child(model)
 		_height = ASSETS.base_wall_height(faction)      ## wall top drives derived layout
 		_bastion_points = ASSETS.base_bastion_points(faction)   ## measured tower muzzles
-		## 2026-07-21 playtest: the FOB needed a big local light boost — a warm-cyan omni
-		## above the walls washes the fortress + pad so it reads as the powered heart of
-		## the base (shadowless: it's a fill, the key light owns shadows).
-		var glow := OmniLight3D.new()
-		glow.light_color = Color(0.75, 0.92, 1.0)
-		glow.light_energy = 1.8
-		glow.omni_range = 520.0
-		glow.omni_attenuation = 1.4
-		glow.shadow_enabled = false
-		glow.position = Vector3(0.0, _height * 1.3, 0.0)
-		add_child(glow)
+		## Authored emission is mask-multiplied, then small measured aperture/core lights
+		## provide local spill. This replaces the old 520-unit blanket fill that flattened
+		## the entire fortress and now matches the Garrison's lighting rule.
+		if faction == "architects":
+			STRUCTURE_LIGHTING.tune_masked_emission(model, 2.60, ARCH_FOB_EMISSION_MASK)
+			STRUCTURE_LIGHTING.add_architect_fob_lights(self, float(ASSETS.FACTION_BASE_SCALE[faction]))
+			STRUCTURE_LIGHTING.add_architect_fob_portal_interior(
+				self, float(ASSETS.FACTION_BASE_SCALE[faction]))
+		else:
+			STRUCTURE_LIGHTING.enforce_masked_emission(model)
 		var bar_top : float = ASSETS.base_total_height(faction) + 18.0
 		_make_bar(Color(0.15, 0.15, 0.15), bar_top, 160.0)                    ## bg
 		_hp_fill = _make_bar(Color(0.20, 0.90, 0.20), bar_top + 0.1, 160.0)   ## fill

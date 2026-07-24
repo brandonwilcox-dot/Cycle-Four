@@ -78,13 +78,15 @@ var _pause_layer    : CanvasLayer = null   ## ESC game menu (Save/Load/Settings/
 var _menu_open      : bool = false         ## gates gameplay input; freeze via Engine.time_scale (NOT tree pause, which blocks the menu buttons)
 var _pause_status   : Label = null         ## in-menu confirmation line (e.g. "Game saved.")
 
-## Stage 6b waves — paced, finite waves with a grace period and rests (not an unending stream).
-## V2b feel pass (playtest 2026-07-01: "waves aren't waves — just a trickle"): units burst out
-## in a tight pack, waves are bigger, and the lull between them is a real lull. The REAL fix is
-## wave-system parity (WaveManager/WaveTableBuilder — backlog J1); these are placeholder tunables.
+## Waves are PLAYER-SUMMONED (2026-07-24). No wave spawns until the player presses "Next Wave"
+## (true STANDBY); an auto-fallback fires after a long idle so pressure never fully stops (the
+## idle/TD hybrid). A wave runs from its first spawn until every enemy it spawned is dead/breached
+## (tracked by node ref in `_wave_units`), then returns to STANDBY. Battle3D is the SOLE wave clock
+## and drives the WavePanel via wave_started/wave_ended/enemy_count_changed; WaveManager no longer
+## auto-advances or counts in 3D (see its report_* guards + HUD button → wave_called_early).
 const SPAWN_INTERVAL : float = 0.5    ## seconds between units within a wave — a pack, not a drip
-const WAVE_GRACE     : float = 12.0   ## quiet time before the first wave (build a defense)
-const WAVE_REST      : float = 22.0   ## quiet time between waves — a lull that means something
+const WAVE_GRACE     : float = 25.0   ## initial STANDBY auto-fallback (or press Next Wave)
+const WAVE_REST      : float = 50.0   ## between-wave STANDBY auto-fallback (or press Next Wave)
 const WAVE_SIZE_BASE : int   = 10     ## wave 1 size; +3 each subsequent wave
 const MAX_LIVE_ENEMIES : int = 48     ## hard cap on concurrent hostiles — never let the field flood
 ## V5.4 wave telegraphy: in the final seconds of a lull, the active spawn mouths glow in the
@@ -114,8 +116,10 @@ var _spawn_cells : Array[Vector2i] = []
 var _spawn_idx   : int   = 0
 var _wave_num    : int   = 0
 var _wave_left   : int   = 0          ## units still to spawn this wave
-var _resting     : bool  = true       ## true during grace / between-wave rests
+var _resting     : bool  = true       ## true during STANDBY (grace / between-wave)
 var _wave_timer  : float = WAVE_GRACE
+var _wave_units  : Array = []         ## live enemies spawned by the CURRENT wave (death/breach frees them)
+var _reported_count : int = -1        ## last enemy_count_changed value emitted (avoid spamming the panel)
 
 func _ready() -> void:
 	EventBus.enemy_base_destroyed.connect(_on_enemy_base_destroyed)   ## capture the deployed territory on clear
@@ -291,25 +295,30 @@ func _process(delta: float) -> void:
 		return   ## Academy scenarios drive their own spawns via EventBus — hold the wave cadence
 	_wave_timer -= delta
 	if _resting:
-		_update_telegraphy()   ## V5.4: spawn mouths glow as the wave draws near
+		## STANDBY: hold until the player presses Next Wave (_on_wave_called_early) OR the
+		## long auto-fallback elapses. No enemies spawn here — no more auto-flood.
+		_update_telegraphy()   ## V5.4: spawn mouths glow as the auto-fallback nears
 		if _wave_timer <= 0.0:
 			_start_next_wave()
 		return
-	if _wave_left <= 0:
-		_resting = true                  ## wave done — rest before the next
-		_wave_timer = WAVE_REST
-		return
-	if _wave_timer <= 0.0:
-		## Hard anti-flood cap: if the field is already full of hostiles, hold this spawn (don't
-		## consume the wave) until some die. Prevents any runaway/endless on-screen stream.
-		if get_tree().get_nodes_in_group("units").size() >= MAX_LIVE_ENEMIES:
-			return
-		_wave_timer = SPAWN_INTERVAL
-		for _i in 2:   ## playtest: units arrive in PAIRS — one at a time was free kills
-			if _wave_left <= 0:
-				break
-			_spawn_one_enemy()
-			_wave_left -= 1
+	## --- wave in progress ---
+	if _wave_left > 0:
+		## Still spawning this wave's pack.
+		if _wave_timer <= 0.0:
+			## Hard anti-flood cap: if the field is already full, hold the spawn until some die.
+			if get_tree().get_nodes_in_group("units").size() < MAX_LIVE_ENEMIES:
+				_wave_timer = SPAWN_INTERVAL
+				for _i in 2:   ## units arrive in PAIRS — one at a time was free kills
+					if _wave_left <= 0:
+						break
+					_spawn_one_enemy()
+					_wave_left -= 1
+		_report_wave_count()
+	else:
+		## Fully spawned — the wave is CLEARED only when every unit it spawned is gone.
+		_report_wave_count()
+		if _live_wave_count() == 0:
+			_end_wave()
 
 ## Stage 6 RTS controls: LEFT = select (Commander) or place tower; RIGHT = move (shift-chain) or
 ## cancel placement; B = toggle tower-build mode; ESC = cancel/deselect. All via 3D ground raycast.
@@ -1227,10 +1236,12 @@ func _start_next_wave() -> void:
 	_wave_num += 1
 	_wave_left = WAVE_SIZE_BASE + (_wave_num - 1) * 3
 	_wave_spawn_count = 0
+	_wave_units.clear()
 	_boss_pending = _wave_num % BOSS_EVERY == 0
 	_resting = false
 	_wave_timer = 0.0   ## first unit of the wave spawns right away
 	_hide_telegraphy()  ## the warning becomes the wave
+	EventBus.wave_started.emit(_wave_num, {})   ## WavePanel → INCOMING; Battle3D is the wave clock
 	## U5 telegraphy: from MISSION_FROM_WAVE on, the announcement says HOW this faction
 	## attacks (Units_Land §5) — the player can read the threat and adapt.
 	var flavor : String = ""
@@ -1244,11 +1255,41 @@ func _start_next_wave() -> void:
 	else:
 		EventBus.notification_pushed.emit("Wave %d incoming — %d hostiles.%s" % [_wave_num, _wave_left, flavor], "warning")
 
-## HUD "Begin Waves" button (→ WaveManager.begin_waves → wave_called_early): skip the rest of
-## the current grace/lull and bring the wave now. No-op mid-wave or during Academy scenarios.
+## HUD "Next Wave" button → EventBus.wave_called_early. Summons the next wave from STANDBY.
+## No-op while a wave is already in progress or during Academy scenarios. Summoning while the
+## auto-fallback still had real time left is rewarded (aggression bonus).
 func _on_wave_called_early() -> void:
-	if _battle_started and not _academy_scenarios_active and _resting:
-		_start_next_wave()
+	if not (_battle_started and not _academy_scenarios_active and _resting):
+		return
+	if _wave_timer > 1.0:
+		var primary : String = FactionManager.get_primary_resource()
+		var bonus : float = 10.0 + float(_wave_num) * 2.0
+		EconomyManager.add_resource(primary, bonus)
+		EventBus.notification_pushed.emit("Wave summoned early — +%d %s." % [int(bonus), primary.capitalize()], "positive")
+	_start_next_wave()
+
+## Live count of THIS wave's enemies (prunes freed nodes; a unit frees itself on death or breach).
+func _live_wave_count() -> int:
+	var n : int = 0
+	for u in _wave_units:
+		if is_instance_valid(u):
+			n += 1
+	return n
+
+## Push the current wave's remaining-hostiles count to the HUD/WavePanel when it changes.
+func _report_wave_count() -> void:
+	var total : int = _wave_left + _live_wave_count()
+	if total != _reported_count:
+		_reported_count = total
+		EventBus.enemy_count_changed.emit(total)
+
+## The wave is defeated — announce it and drop back to STANDBY (auto-fallback until the next call).
+func _end_wave() -> void:
+	_resting = true
+	_wave_timer = WAVE_REST
+	_reported_count = -1
+	EventBus.enemy_count_changed.emit(0)
+	EventBus.wave_ended.emit(_wave_num, "victory")   ## WavePanel → STANDBY
 
 ## -- V4 screen shake (quiet over loud: breaches thump, deaths land) --
 
@@ -1268,6 +1309,8 @@ func _reset_waves() -> void:
 	_wave_left  = 0
 	_resting    = true
 	_wave_timer = WAVE_GRACE
+	_wave_units.clear()
+	_reported_count = -1
 
 func _spawn_one_enemy() -> void:
 	var alive : Array[Vector2i] = _alive_spawn_cells()
@@ -1365,6 +1408,7 @@ func _spawn_enemy_from(cell: Vector2i, payload: Array = [], mission: String = ""
 		_:
 			u.call("setup", payload[0], wp)
 	_unit_layer.add_child(u)
+	_wave_units.append(u)   ## tracked so the wave clears only when all its enemies are gone
 	if float(payload[1]) != 1.0:
 		(u as Node3D).scale = Vector3.ONE * float(payload[1])
 

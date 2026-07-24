@@ -48,7 +48,12 @@ func begin_waves() -> void:
 	countdown_timer = WAVE_COUNTDOWN
 
 ## Called by Unit when it reaches the end of the path.
+## 2026-07-24: in the 3D game Battle3D is the wave clock and owns enemy_count_changed. This
+## legacy 2D counter only runs when a wave is genuinely ACTIVE here (2D Battle.tscn), so it
+## can't drive the count negative or emit phantom updates over Battle3D's panel.
 func report_base_breached() -> void:
+	if state != WaveState.ACTIVE:
+		return
 	_breaches += 1
 	enemies_remaining -= 1
 	EventBus.enemy_count_changed.emit(enemies_remaining)
@@ -56,6 +61,8 @@ func report_base_breached() -> void:
 
 ## Called by Unit when it is killed (health reaches zero).
 func report_enemy_killed() -> void:
+	if state != WaveState.ACTIVE:
+		return
 	enemies_remaining -= 1
 	EventBus.enemy_count_changed.emit(enemies_remaining)
 	_check_wave_complete()
