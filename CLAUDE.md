@@ -40,9 +40,9 @@ i.e. the enemy drone's RENDER-PIPELINE compiling on first VISIBLE render. Fix: `
 in `_setup_waves` keeps ONE enemy-faction model alive in a hidden holder at the FOB scaled to
 0.001 (a sub-pixel speck that RENDERS so the pipeline compiles up front, invisible to the player);
 re-runs per deploy. Verified: every spawn incl. the first is now ~1.2ms (was 100-130ms×4). Note:
-holding an INVISIBLE model did NOT warm it — it must render. ⚠ The two exes exported 2026-07-24
-13:04 (970MB release / 966MB debug, Desktop) include the wave-gating + warnings + lighting but
-NOT this spawn fix — RE-EXPORT to bake it in.
+holding an INVISIBLE model did NOT warm it — it must render. **Both exes RE-EXPORTED 2026-07-24
+16:58** (Cycle Four.exe 970MB / Cycle Four (DEBUG).exe 966MB, Desktop) — they now include EVERYTHING
+this session: wave-gating, warning cleanup, lighting profile, AND the spawn-CPU fix.
 
 ## Session 2026-07-23 — ASSET PROJECTILES VERIFIED + BOTH EXES RE-EXPORTED
 The asset-based projectile system (VfxBolt BULLET/ENERGY/PLASMA/ROCKET/ARC shaped rounds +
