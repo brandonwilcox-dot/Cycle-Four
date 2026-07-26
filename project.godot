@@ -17,13 +17,6 @@ run/main_scene="res://scenes/Root.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://assets/sprites/icon.svg"
 
-[debug]
-
-; EventBus is a signal-bus autoload: every signal is emitted/connected in OTHER classes,
-; so the per-class analyzer flags them all as "unused". Ignore that one warning project-wide
-; (the ~90 benign EventBus warnings that dominated the boot log).
-gdscript/warnings/unused_signal=0
-
 [autoload]
 
 EventBus="*res://src/autoloads/EventBus.gd"
@@ -38,6 +31,10 @@ ConvoyManager="*res://src/autoloads/ConvoyManager.gd"
 MilestoneManager="*res://src/autoloads/MilestoneManager.gd"
 SceneManager="*res://src/autoloads/SceneManager.gd"
 Vfx="*res://src/vfx/Vfx.gd"
+
+[debug]
+
+gdscript/warnings/unused_signal=0
 
 [display]
 
@@ -74,8 +71,6 @@ ui_accept={
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.05, 0.05, 0.08, 1)
-
-; GTX 1080 Ti / 1080p high presentation profile (DESIGN-GUIDELINES.md).
 rendering/anti_aliasing/quality/msaa_3d=1
 rendering/anti_aliasing/quality/screen_space_aa=2
 rendering/anti_aliasing/quality/use_debanding=true

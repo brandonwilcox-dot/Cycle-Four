@@ -10,6 +10,7 @@ const CAM_RIG     = preload("res://src/core/CameraRig3D.gd")
 const ATMOSPHERE  = preload("res://src/core/BattleAtmosphere.gd")
 const UNIT_SCENE     = preload("res://scenes/main/Unit.tscn")
 const ASSET_LOADER   = preload("res://src/core/AssetLoader.gd")
+const NAV_MARKER     = preload("res://src/vfx/NavMarker.gd")
 const TOWER_SCENE    = preload("res://scenes/main/Tower.tscn")
 const BUILDING_SCENE = preload("res://scenes/main/Building.tscn")
 const BUILDING_DATA  = preload("res://src/entities/BuildingData.gd")
@@ -43,8 +44,12 @@ const ROWS : int = 34
 const BASE_CELL : Vector2i = Vector2i(30, 17)
 
 var _rig       : Node3D = null
-var _marker    : MeshInstance3D = null
-var _marker_target : Vector2 = Vector2.ZERO   ## plane pos of the active move order; marker hides on arrival
+## Nav display (faction standards + GPS route ribbon) — see _setup_marker/_update_nav_display.
+var _standards  : Array[Node3D] = []
+var _route      : MeshInstance3D = null
+var _route_mesh : ImmediateMesh = null
+var _route_mat  : StandardMaterial3D = null
+var _nav_scroll : float = 0.0   ## crawling dash offset on the route ribbon
 var _commander : Node = null
 
 ## Stage 6 controls.
@@ -270,18 +275,87 @@ func _spawn_walls() -> void:
 		w.call("mark_built")
 		_wall_cells[cell] = w
 
+## Nav display: one animated faction STANDARD per queued destination (shift-chaining plants a
+## line of them) plus a persistent GPS-style route ribbon along the path the Commander will
+## walk. Both are rebuilt from the Commander's own queues each frame, so they stay truthful
+## (including mid-route re-paths around water) and consume themselves as it advances.
 func _setup_marker() -> void:
-	_marker = MeshInstance3D.new()
-	var bx : BoxMesh = BoxMesh.new()
-	bx.size = Vector3(CELL * 0.8, CELL * 0.8, CELL * 0.8)
-	_marker.mesh = bx
-	var mat : StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(1.0, 0.4, 0.3)
-	mat.emission_enabled = true
-	mat.emission = Color(0.8, 0.25, 0.2)
-	_marker.material_override = mat
-	_marker.visible = false
-	add_child(_marker)
+	_route = MeshInstance3D.new()
+	_route.name = "NavRoute"
+	_route_mesh = ImmediateMesh.new()
+	_route.mesh = _route_mesh
+	_route_mat = StandardMaterial3D.new()
+	_route_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_route_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_route_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_route_mat.emission_enabled = true
+	_route_mat.emission_energy_multiplier = 1.8
+	_route.material_override = _route_mat
+	_route.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_route)
+
+## Rebuild the standards + route from the Commander's queues (called every frame).
+func _update_nav_display() -> void:
+	if not is_instance_valid(_commander):
+		_clear_nav_display()
+		return
+	var goals : Array = _commander.call("nav_goals")
+	var route : Array = _commander.call("nav_route")
+	var col : Color = Vfx.faction_color(FactionManager.active_faction)
+
+	## --- standards: one per remaining destination ---
+	while _standards.size() < goals.size():
+		var s : Node3D = NAV_MARKER.new()
+		s.call("setup", col, _standards.size())
+		add_child(s)
+		_standards.append(s)
+	while _standards.size() > goals.size():
+		var dead : Node3D = _standards.pop_back()
+		if is_instance_valid(dead):
+			dead.queue_free()
+	for i in goals.size():
+		var st : Node3D = _standards[i]
+		if is_instance_valid(st):
+			st.position = WORLD3D.to3(goals[i], 0.0)
+
+	## --- route ribbon: Commander → every remaining waypoint ---
+	if _route_mesh == null:
+		return
+	_route_mesh.clear_surfaces()
+	if route.is_empty():
+		return
+	var pts : Array[Vector2] = [_commander.call("plane_pos")]
+	for wp in route:
+		pts.append(wp)
+	_route_mat.albedo_color = Color(col.r, col.g, col.b, 0.55)
+	_route_mat.emission = col
+	const HALF : float = 4.5   ## ribbon half-width (px)
+	_route_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	for i in pts.size():
+		## Perpendicular to the local heading, so the ribbon keeps a constant on-ground width.
+		var fwd : Vector2 = Vector2.RIGHT
+		if i < pts.size() - 1:
+			fwd = (pts[i + 1] - pts[i])
+		elif i > 0:
+			fwd = (pts[i] - pts[i - 1])
+		if fwd.length_squared() < 0.0001:
+			fwd = Vector2.RIGHT
+		var perp : Vector2 = fwd.normalized().orthogonal() * HALF
+		## A dash pattern that crawls toward the destination sells "planned route".
+		var v : float = float(i) * 0.5 - _nav_scroll
+		_route_mesh.surface_set_uv(Vector2(0.0, v))
+		_route_mesh.surface_add_vertex(WORLD3D.to3(pts[i] + perp, 2.0))
+		_route_mesh.surface_set_uv(Vector2(1.0, v))
+		_route_mesh.surface_add_vertex(WORLD3D.to3(pts[i] - perp, 2.0))
+	_route_mesh.surface_end()
+
+func _clear_nav_display() -> void:
+	for s in _standards:
+		if is_instance_valid(s):
+			s.queue_free()
+	_standards.clear()
+	if _route_mesh != null:
+		_route_mesh.clear_surfaces()
 
 func _process(delta: float) -> void:
 	if _menu_open:
@@ -291,7 +365,8 @@ func _process(delta: float) -> void:
 	## Stage 6b: paced waves down the map's real A* paths — grace, then bursts separated by rests.
 	if not _battle_started:
 		return   ## wait for the Academy / Continue to build the world
-	_update_marker_fade()
+	_nav_scroll += delta * 1.4   ## crawling dashes along the planned route
+	_update_nav_display()
 	if _academy_scenarios_active:
 		return   ## Academy scenarios drive their own spawns via EventBus — hold the wave cadence
 	_wave_timer -= delta
@@ -940,20 +1015,10 @@ func _setup_preview() -> void:
 	_preview.visible = false
 	add_child(_preview)
 
-## Brief flash at a Commander move order.
+## A move order plants a standard; the display itself is rebuilt from the Commander's queues
+## in _update_nav_display, so this only needs to spark a confirmation pulse at the click.
 func _flash_marker(world2: Vector2) -> void:
-	if _marker == null:
-		return
-	_marker.position = WORLD3D.to3(world2, CELL * 0.3)
-	_marker.visible = true
-	_marker_target = world2
-
-## Hide the move-order marker once the Commander has reached (or nearly reached) the target.
-func _update_marker_fade() -> void:
-	if _marker == null or not _marker.visible or not is_instance_valid(_commander):
-		return
-	if _commander.call("plane_pos").distance_to(_marker_target) <= CELL * 0.6:
-		_marker.visible = false
+	Vfx.pulse_at(world2, Vfx.faction_color(FactionManager.active_faction), 26.0, 0.28, 3.0)
 
 func _cell_center3(cell: Vector2i, height: float) -> Vector3:
 	return WORLD3D.to3(_cell_center2(cell), height)
@@ -1099,8 +1164,7 @@ func _reset_battlefield() -> void:
 	_tower_cells.clear()
 	_building_cells.clear()
 	_wall_cells.clear()
-	if _marker != null:
-		_marker.visible = false
+	_clear_nav_display()
 	if is_instance_valid(_commander):
 		var start2 : Vector2 = _cell_center2(Vector2i(28, 17))
 		_commander.call("place_at", start2)

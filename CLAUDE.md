@@ -14,6 +14,63 @@ Design corpus lives in-repo at:
 Read docs\PROJECT-MEMORY.md and docs\core\23_open-questions-resolved.md before
 making any design decisions in code.
 
+## Session 2026-07-25 — ARCHITECT T2 TOWER MODEL SHIPPED (Plasma Bastion GLB)
+The Rodin "Plasma Bastion" (`design/architect_defense_concepts/Plasma_Bastion/base_basic_pbr.glb`)
+is now the Architect **tier-2** tower (`architects_t2.tres` "Heavy Pulse"). Copied to
+`assets/models/buildings/architect_plasma_bastion_hifi.glb` (39k tris, diffuse/normal/MR, 1.888×
+1.45×1.778u, origin at base — **NO emissive map**, cyan channels dark until a mask is baked like
+the FOB got). Wiring: new `AssetLoader.FACTION_TOWER_MODELS` (keyed by tower resource_path) +
+`TOWER_MODEL_SCALE`(40 → ~76u footprint / ~58u tall) / `_YAW`(0, +Z front) / `_HEIGHT_NORM` /
+`_MUZZLES` (twin plasma emitters measured at ±0.40, 1.22, +0.49 norm) + `load_tower_model()` /
+`tower_model_height()` / `tower_model_muzzles()`. `Tower._build_visual` GLB branch: the fused
+sculpt replaces the procedural body + rotating turret (like the FOB); new `_static_turret` flag
+makes `_update_aim` NOT rotate the fused mesh; the twin emitters are FIXED muzzles and
+`_try_attack` fires each plasma bolt from its emitter at real height via `Vfx.bolt_from_to` +
+`pulse_at`. `upgrade()` resets `_static_turret` (T2→T3 goes back to the procedural rotating turret).
+Editor-imported; Battle3D run — boot clean, the Plasma Bastion renders at correct scale/orientation
+as a built T2 tower, wave cleared with zero errors.
+
+**EMISSIVE GLOW BAKED (same session).** Rodin's De-light leaves the bastion's cyan channels as
+DARK NAVY insets, so the FOB's HSV cyan-band recipe found almost nothing (0.2% coverage). Correct
+criterion here = **strong blue-dominance (b−r), not brightness**: ramp b−r 0.085→0.16 × a small
+saturation gate, then MaxFilter(3) + 1px blur + ×1.30 for mip-safe cores → 2.46% coverage (FOB was
+~1.8%). Saved as `assets/models/buildings/architect_plasma_bastion_hifi_emission_mask.png`
+(2048² grayscale L — the CYAN comes from `StructureEmissionLighting.ARCHITECT_BLUE`, the mask only
+gates intensity). ⚠ Godot first-imported it as `compress/mode=0, mipmaps=false, detect_3d=1`;
+hand-set to **mode=2 / mipmaps=true / detect_3d/compress_to=0** to match the FOB mask (guidelines
+require VRAM compression + mipmaps on emission masks) then re-imported.
+Wiring: new `ARCHITECT_PLASMA_BASTION_LIGHTS` (5 measured points — twin emitters ±0.40/1.22/0.49,
+crown core, front hex core 0/0.55/0.72, portal 0/0.15/0.78; ranges 40-46, energies 2.0-2.6) +
+`add_architect_plasma_bastion_lights()`. **`tune_masked_emission` WIDENED**: it previously required
+`source.emission_enabled`, so it silently skipped models with NO authored emissive (exactly this
+GLB) — now `has_authored OR override != null`, so an explicit baked mask enables emission on a
+non-emissive import. Safe: `enforce_masked_emission` (override=null) is unchanged.
+Tower.gd GLB branch calls `tune_masked_emission(model, 3.0, MASK)` + adds the light cluster.
+VERIFIED in play: placed T1 → Commander built it → upgraded to Heavy Pulse → the bastion renders
+with a bright cyan plasma core + channel accents (selective, NOT body-wide bloom) and real local
+spill; twin emitters muzzle-flash and the bolt descends onto the target; zero errors throughout.
+**CROWN NOW ROTATES (same session).** First pass shipped the bastion as a FUSED static sculpt
+(`_static_turret`), but the concept + `Rodin_Recipe_Sheets.md` are explicit: towers need the
+turret SEPARABLE to track. Fix = split the GLB offline in Python at the measured collar. Radius-
+by-height scan found a hard waist at **y≈1.03-1.05 (maxR 0.187** vs 0.48 below / 0.63 above) — the
+rotation collar. Partitioned triangles by centroid Y at **SEAM=1.04** into two meshes/nodes
+(`bastion_base` 31282 tris, `bastion_crown` 8135 tris, y 1.031-1.450, centroid x,z ≈ 0 so it spins
+true on the vertical axis). Both primitives REUSE the same attribute accessors + material + the 3
+images — only two new index accessors were appended, so the file grew just 0.25 MB (no texture
+duplication). Tower.gd: `_find_child_named(model,"crown")` lifts the crown out of the imported hull
+and reparents it under `_turret` (unscaled, at origin) carrying `scale = TOWER_MODEL_SCALE`; muzzles
+stay TURRET-LOCAL so `to_global` returns rotated emitter positions. `_static_turret` → `_glb_tower`
++ `_turret_origin`; `_update_aim` now yaws it with a **+90° offset** (authored cannons face model
++Z, procedural barrels face +X) and recoils along `basis.z` instead of `basis.x`. Emitter/crown
+lights moved to `ARCHITECT_PLASMA_BASTION_TURRET_LIGHTS` parented to `_turret` (they sweep with the
+barrels); CoreFront/PortalFront stay on the static hull as `..._BASE_LIGHTS`.
+VERIFIED by instrumented trace (temp print, since removed): target east → `crownYaw=90°
+facing=(1.00,-0.00)`; spawn target west → `aim=180°`, crown sweeps `90°→243°→270°`,
+`facing=(-1.00,0.00)`, **dot=1.00** — i.e. it rotates a full 180° and points EXACTLY at the target
+(no 90/180° facing error). Temp F5/F6 dev keys + the trace were removed; final boot log empty.
+**Follow-ups:** (1) only architects_t2 is wired — Sentry Spire (T1) / Siege Foundry (T3) / other
+factions still procedural; (2) ⚠ EXES NOT RE-EXPORTED after this.
+
 ## Session 2026-07-24 — WAVE SPAWN GATED (player-summoned) + warnings cleaned + lighting perf verified
 Reviewed the wave system: found TWO desynced clocks — `WaveManager` (autoload) drove the
 WavePanel display + was button-gated, but Battle3D's own `_process` spawner ran an INDEPENDENT

@@ -28,6 +28,21 @@ const ARCHITECT_FOB_LIGHTS := [
 	{"name": "UpperRear", "position": Vector3(-0.0100, 0.6990, -0.5378), "normal": Vector3(0.0, 0.0, -1.0), "offset": 8.0, "energy": 1.60, "range": 80.0},
 ]
 
+## Plasma Bastion (Architect tier-2 tower). Measured from the mesh: twin plasma emitters and
+## crown core on the turret crown, the hexagonal core and deployment portal on the front face.
+## Ranges are scaled to a tower-sized asset (model scale 40 → ~76u footprint, ~58u tall).
+## Split base/turret: the crown ROTATES to track targets, so its emitter + core lights must be
+## parented to the turret node and spin with it. The base lights stay on the static hull.
+const ARCHITECT_PLASMA_BASTION_TURRET_LIGHTS := [
+	{"name": "EmitterLeft", "position": Vector3(-0.40, 1.22, 0.49), "normal": Vector3(0.0, 0.1, 1.0), "offset": 4.0, "energy": 2.60, "range": 44.0},
+	{"name": "EmitterRight", "position": Vector3(0.40, 1.22, 0.49), "normal": Vector3(0.0, 0.1, 1.0), "offset": 4.0, "energy": 2.60, "range": 44.0},
+	{"name": "CrownCore", "position": Vector3(0.0, 1.26, 0.0), "normal": Vector3(0.0, 1.0, 0.0), "offset": 4.0, "energy": 2.00, "range": 46.0},
+]
+const ARCHITECT_PLASMA_BASTION_BASE_LIGHTS := [
+	{"name": "CoreFront", "position": Vector3(0.0, 0.55, 0.72), "normal": Vector3(0.0, 0.0, 1.0), "offset": 4.0, "energy": 2.20, "range": 42.0},
+	{"name": "PortalFront", "position": Vector3(0.0, 0.15, 0.78), "normal": Vector3(0.0, 0.0, 1.0), "offset": 4.0, "energy": 2.40, "range": 40.0},
+]
+
 const ARCHITECT_COMMANDER_LIGHTS := [
 	{"name": "ReactorChest", "position": Vector3(0.31, 1.72, 0.0), "normal": Vector3(1.0, 0.0, 0.0), "offset": 2.5, "energy": 2.60, "range": 44.0},
 	{"name": "CrownCore", "position": Vector3(0.0, 2.55, 0.0), "normal": Vector3(0.0, 1.0, 0.0), "offset": 2.5, "energy": 1.55, "range": 38.0},
@@ -42,6 +57,13 @@ static func add_architect_garrison_lights(parent: Node3D, model_scale: float) ->
 
 static func add_architect_fob_lights(parent: Node3D, model_scale: float) -> void:
 	_add_cluster_lights(parent, ARCHITECT_FOB_LIGHTS, model_scale, "FOB")
+
+## Turret lights go on the ROTATING crown node; base lights on the static hull.
+static func add_architect_plasma_bastion_turret_lights(parent: Node3D, model_scale: float) -> void:
+	_add_cluster_lights(parent, ARCHITECT_PLASMA_BASTION_TURRET_LIGHTS, model_scale, "PlasmaBastionTurret")
+
+static func add_architect_plasma_bastion_base_lights(parent: Node3D, model_scale: float) -> void:
+	_add_cluster_lights(parent, ARCHITECT_PLASMA_BASTION_BASE_LIGHTS, model_scale, "PlasmaBastion")
 
 ## The Rodin FOB's main gate is a true recessed opening, but its authored emissive atlas
 ## contains no luminous portal surface behind it. A depth-tested quad sits inside the
@@ -115,8 +137,11 @@ static func tune_masked_emission(node: Node, minimum_energy: float,
 		if mesh_instance.mesh != null:
 			for surface_index in mesh_instance.mesh.get_surface_count():
 				var source := mesh_instance.get_active_material(surface_index) as StandardMaterial3D
-				if source != null and source.emission_enabled and \
-						(source.emission_texture != null or emission_texture_override != null):
+				## Authored emissive asset (FOB/garrison/commander) OR an explicit mask override.
+				## The override path also covers models exported with NO emissive at all (Rodin's
+				## De-light leaves the cyan channels as dark insets) — the baked mask supplies them.
+				var has_authored : bool = source != null and source.emission_enabled and source.emission_texture != null
+				if source != null and (has_authored or emission_texture_override != null):
 					var mat := source.duplicate() as StandardMaterial3D
 					mat.emission_enabled = true
 					mat.emission = ARCHITECT_BLUE

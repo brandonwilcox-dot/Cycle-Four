@@ -66,6 +66,9 @@ const SELECT_RING_COLOR : Color = Color(0.40, 1.00, 0.55, 0.90)
 var _map_grid       : Node      = null
 var _p              : Vector2   = Vector2.ZERO
 var _move_queue     : Array[Vector2] = []
+## The player's clicked destinations (a standard is planted at each). Distinct from
+## _move_queue, which holds every per-cell pathfinding waypoint between them.
+var _nav_goals      : Array[Vector2] = []
 var _is_striding    : bool      = false   ## actually translating (vs turning in place)
 var _selected       : bool      = false
 var _claimed_count  : int       = 0
@@ -184,10 +187,16 @@ func _process(delta: float) -> void:
 			return
 		for wp in reroute:
 			_move_queue.append(wp)
+		## The reroute collapses to the FINAL destination, so intermediate standards are struck.
+		_nav_goals.clear()
+		_nav_goals.append(final_dest)
 		return
 	if dist <= step:
 		_set_plane(target)
 		_move_queue.pop_front()
+		## Reaching a clicked destination strikes that standard.
+		if not _nav_goals.is_empty() and target.distance_to(_nav_goals[0]) <= 1.0:
+			_nav_goals.pop_front()
 	else:
 		_set_plane(next_p)
 	_claim_around()
@@ -250,6 +259,7 @@ func aim_point() -> Vector2:
 func move_command(world_pos: Vector2, append: bool) -> void:
 	if not append:
 		_move_queue.clear()
+		_nav_goals.clear()
 	## F1: route AROUND water/obstacles via the friendly AStar (which excludes water) so the
 	## Commander navigates lakes instead of stalling at the shore. The straight destination is
 	## kept as a fallback when the grid can't path (open field with no water between).
@@ -259,8 +269,20 @@ func move_command(world_pos: Vector2, append: bool) -> void:
 		if not route.is_empty():
 			for wp in route:
 				_move_queue.append(wp)
+			_nav_goals.append(route[route.size() - 1])   ## the standard plants at the routed end
 			return
 	_move_queue.append(world_pos)
+	_nav_goals.append(world_pos)
+
+## -- Nav display (Battle3D renders a faction standard per goal + a GPS route ribbon) --
+
+## The player's ORDERED destinations (one per right-click), not the per-cell path waypoints.
+func nav_goals() -> Array[Vector2]:
+	return _nav_goals
+
+## The remaining path the Commander will walk, for the route ribbon.
+func nav_route() -> Array[Vector2]:
+	return _move_queue
 
 ## -- Territory claiming --
 

@@ -107,6 +107,60 @@ const FACTION_GARRISON_YAW = {
 const FACTION_GARRISON_TOTAL_NORM = { "architects": 1.218464 }
 const FACTION_GARRISON_RADIUS_NORM = { "architects": 0.951016 }
 
+## Player TOWER GLTF models, keyed by the tower's resource_path. Missing → Tower.gd's
+## procedural body. The Architect "Plasma Bastion" is the tier-2 tower (architects_t2).
+const FACTION_TOWER_MODELS = {
+	"res://resources/towers/architects_t2.tres": "res://assets/models/buildings/architect_plasma_bastion_hifi.glb",
+}
+## Import scale (Blender units -> game units). Bastion: 1.888u wide × 1.45u tall × 40 ->
+## ~76u footprint / ~58u tall — an imposing heavy T2, taller than units, well under the FOB.
+const TOWER_MODEL_SCALE = {
+	"res://resources/towers/architects_t2.tres": 40.0,
+}
+## Facing (deg about Y): Rodin fronts export toward +Z (matches FOB/garrison).
+const TOWER_MODEL_YAW = {
+	"res://resources/towers/architects_t2.tres": 0.0,
+}
+## Normalized model height + the twin plasma-emitter muzzle points (x, y, z), measured from
+## the mesh crown. Multiplied by TOWER_MODEL_SCALE at runtime.
+const TOWER_MODEL_HEIGHT_NORM = {
+	"res://resources/towers/architects_t2.tres": 1.45,
+}
+const TOWER_MODEL_MUZZLES = {
+	"res://resources/towers/architects_t2.tres": [
+		Vector3(-0.40, 1.22, 0.49),   ## left plasma emitter tip
+		Vector3(0.40, 1.22, 0.49),    ## right plasma emitter tip
+	],
+}
+
+## Load the tower model for `tower_res_path` with scale + yaw applied, or null.
+static func load_tower_model(tower_res_path: String) -> Node3D:
+	var path : String = FACTION_TOWER_MODELS.get(tower_res_path, "")
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	var resource = ResourceLoader.load(path)
+	if resource == null:
+		return null
+	var model = resource.instantiate() as Node3D
+	if model == null:
+		return null
+	var s : float = float(TOWER_MODEL_SCALE.get(tower_res_path, 40.0))
+	model.scale = Vector3(s, s, s)
+	model.rotation_degrees = Vector3(0.0, float(TOWER_MODEL_YAW.get(tower_res_path, 0.0)), 0.0)
+	return model
+
+static func tower_model_height(tower_res_path: String) -> float:
+	return float(TOWER_MODEL_HEIGHT_NORM.get(tower_res_path, 0.0)) * float(TOWER_MODEL_SCALE.get(tower_res_path, 0.0))
+
+## Emitter muzzle points in GAME units for this tower model ([] if none).
+static func tower_model_muzzles(tower_res_path: String) -> Array:
+	var pts : Array = TOWER_MODEL_MUZZLES.get(tower_res_path, [])
+	var s : float = float(TOWER_MODEL_SCALE.get(tower_res_path, 0.0))
+	var out : Array = []
+	for p : Vector3 in pts:
+		out.append(p * s)
+	return out
+
 ## Bastion muzzle points, NORMALIZED mesh units (x, muzzle_y, z) — MEASURED from the mesh
 ## (the four tall towers flanking the spire; muzzle sits at the tower-top band so tracers
 ## visibly leave the towers). Multiplied by FACTION_BASE_SCALE at runtime. NOTE: measured

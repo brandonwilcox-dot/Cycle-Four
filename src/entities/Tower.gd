@@ -13,6 +13,11 @@ extends Node3D
 
 const FACTION_PERKS = preload("res://src/core/FactionPerks.gd")
 const WORLD3D       = preload("res://src/core/World3D.gd")
+const ASSETS        = preload("res://src/core/AssetLoader.gd")
+const STRUCTURE_LIGHTING = preload("res://src/vfx/StructureEmissionLighting.gd")
+## Baked from the bastion's diffuse (Rodin De-light leaves the cyan channels as dark insets):
+## a mip-safe grayscale mask that multiply-gates the cyan emission. See DESIGN-GUIDELINES.md.
+const ARCH_BASTION_EMISSION_MASK = preload("res://assets/models/buildings/architect_plasma_bastion_hifi_emission_mask.png")
 
 ## Targeting priority the player can cycle from the InspectionPanel (TD staple).
 enum TargetMode { CLOSEST, FIRST, LAST, STRONGEST }
@@ -85,6 +90,11 @@ var _hijack_timer  : float = 2.0
 ## 3D visual nodes.
 var _turret    : Node3D = null
 var _muzzles   : Array[Vector3] = []   ## per-barrel tip, in TURRET-local space (fire origin per cannon)
+## Authored GLB tower: the crown mesh is split off the hull and parented to _turret so it
+## ROTATES to track targets. Its cannons face model +Z (Rodin front), where the procedural
+## turret's barrels face +X — hence the yaw offset and the +Z recoil axis.
+var _glb_tower     : bool    = false
+var _turret_origin : Vector3 = Vector3.ZERO   ## rest position of the turret node (recoil returns here)
 var _body_root : Node3D = null   ## body parts container (construction rig scales/tints it)
 var _con_rig   : Node3D = null   ## per-faction construction effect (grow / carve / assemble)
 var _recoil    : float = 0.0   ## V4: 1.0 on fire → decays; turret kicks back along the barrels
@@ -191,6 +201,8 @@ func upgrade(next_data: Resource) -> void:
 	_con_rig = null
 	_body_mats.clear()
 	_build_bar = null
+	_glb_tower = false       ## reset — the next tier decides (procedural barrels vs authored crown)
+	_turret_origin = Vector3.ZERO
 	_build_visual()
 	if _con_rig != null:
 		_con_rig.call("flourish")   ## the faction's construction signature marks the upgrade
@@ -209,9 +221,16 @@ func _try_attack() -> void:
 		## transforming each turret-local muzzle to world plane so the blast leaves the cannon, not center.
 		if _turret != null and not _muzzles.is_empty():
 			for mloc in _muzzles:
-				var mp : Vector2 = WORLD3D.to2(_turret.to_global(mloc))
-				Vfx.muzzle(mp, dt)
-				Vfx.bolt(mp, tpos, dt)
+				var mworld : Vector3 = _turret.to_global(mloc)
+				var mp : Vector2 = WORLD3D.to2(mworld)
+				if _glb_tower:
+					## Plasma bolt descends from the emitter (its real height) onto the target.
+					var col : Color = Vfx.damage_color(dt)
+					Vfx.pulse_at(mp, col, 13.0, 0.1, mworld.y)
+					Vfx.bolt_from_to(mp, mworld.y, tpos, 16.0, col)
+				else:
+					Vfx.muzzle(mp, dt)
+					Vfx.bolt(mp, tpos, dt)
 		else:
 			Vfx.muzzle(_p, dt)
 			Vfx.bolt(_p, tpos, dt)
@@ -422,11 +441,24 @@ func _update_aim(delta: float) -> void:
 			_aim_target_angle = (WORLD3D.node_plane(tgt) - _p).angle()
 	_aim_angle = lerp_angle(_aim_angle, _aim_target_angle, minf(1.0, AIM_TURN_RATE * delta))
 	if _turret != null:
-		_turret.rotation.y = -_aim_angle   ## plane angle → 3D yaw (barrels built along +X)
+		## plane angle → 3D yaw. Procedural barrels face local +X; the authored crown's cannons
+		## face local +Z, so it needs a quarter-turn offset to point the same way.
+		_turret.rotation.y = -_aim_angle + (PI * 0.5 if _glb_tower else 0.0)
 		## V4 recoil: the turret kicks back along the barrel line on fire and re-seats.
 		if _recoil > 0.0:
 			_recoil = maxf(0.0, _recoil - delta * 6.0)
-		_turret.position = Vector3(0.0, _base_height, 0.0) - _turret.basis.x * (5.0 * _recoil)
+		var fwd : Vector3 = _turret.basis.z if _glb_tower else _turret.basis.x
+		_turret.position = _turret_origin - fwd * (5.0 * _recoil)
+
+## Recursive case-insensitive node-name search (finds "bastion_crown" from "crown").
+func _find_child_named(node: Node, needle: String) -> Node3D:
+	for c in node.get_children():
+		if c is Node3D and needle.to_lower() in String(c.name).to_lower():
+			return c
+		var deeper : Node3D = _find_child_named(c, needle)
+		if deeper != null:
+			return deeper
+	return null
 
 func _tier_sides(t: int) -> int:
 	return [4, 6, 8][clampi(t - 1, 0, 2)]
@@ -476,6 +508,58 @@ func _build_visual() -> void:
 	## with build progress (the Commander raises the structure out of the ground).
 	_body_root = Node3D.new()
 	add_child(_body_root)
+
+	## Hi-fi authored tower model (Architect Plasma Bastion = tier-2), when one exists for this
+	## tower resource. The fused GLB IS the tower + turret (like the FOB) — no procedural body or
+	## rotating turret; the twin plasma emitters are FIXED muzzles, tracers leave them at height.
+	if data != null and String(data.resource_path) in ASSETS.FACTION_TOWER_MODELS:
+		var tpath : String = String(data.resource_path)
+		var model : Node3D = ASSETS.load_tower_model(tpath)
+		if model != null:
+			_body_root.add_child(model)
+			_base_height = ASSETS.tower_model_height(tpath)
+			_glb_tower = true
+			var mscale : float = float(ASSETS.TOWER_MODEL_SCALE.get(tpath, 40.0))
+			## The turret node sits at the tower origin (the crown's own verts carry its height)
+			## and yaws to track targets. The crown mesh is lifted out of the imported hull and
+			## reparented here, carrying the model scale itself since _turret is unscaled.
+			_turret = Node3D.new()
+			_turret_origin = Vector3.ZERO
+			_body_root.add_child(_turret)
+			var crown : Node3D = _find_child_named(model, "crown")
+			if crown != null:
+				crown.get_parent().remove_child(crown)
+				_turret.add_child(crown)
+				crown.transform = Transform3D.IDENTITY
+				crown.scale = Vector3(mscale, mscale, mscale)
+			## Muzzles are TURRET-local (game units) so they rotate with the crown.
+			for mp : Vector3 in ASSETS.tower_model_muzzles(tpath):
+				_muzzles.append(mp)
+			## Selective emission + compact local spill (the shared structure recipe). Applied to
+			## _body_root so BOTH the hull and the reparented crown get the masked cyan; the
+			## emitter/crown lights ride the turret so their spill sweeps with the barrels.
+			STRUCTURE_LIGHTING.tune_masked_emission(_body_root, 3.0, ARCH_BASTION_EMISSION_MASK)
+			STRUCTURE_LIGHTING.add_architect_plasma_bastion_turret_lights(_turret, mscale)
+			STRUCTURE_LIGHTING.add_architect_plasma_bastion_base_lights(self, mscale)
+			## Construction/repair bar above the bastion.
+			_build_bar = MeshInstance3D.new()
+			var gqm : QuadMesh = QuadMesh.new()
+			gqm.size = Vector2(70.0, 5.0)
+			_build_bar.mesh = gqm
+			_build_bar.position = Vector3(0.0, _base_height + 12.0, 0.0)
+			var gbm : StandardMaterial3D = StandardMaterial3D.new()
+			gbm.albedo_color = Color(0.45, 1.0, 0.7)
+			gbm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			gbm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+			_build_bar.material_override = gbm
+			_build_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(_build_bar)
+			_con_rig = _CON_RIG.new()
+			add_child(_con_rig)
+			_con_rig.call("setup", FactionManager.active_faction, _body_root, _body_mats, _base_height + 12.0, 44.0)
+			_refresh_build_visual()
+			return
+
 	var tier   : int   = int(data.get("tier")) if data.get("tier") else 1
 	var col    : Color = data.color_hint
 	var body_r : float = 18.0 + tier * 6.0          ## 24 / 30 / 36
@@ -508,7 +592,8 @@ func _build_visual() -> void:
 
 	## Turret + barrels (built along +X; yawed to the target in _update_aim).
 	_turret = Node3D.new()
-	_turret.position = Vector3(0.0, _base_height, 0.0)
+	_turret_origin = Vector3(0.0, _base_height, 0.0)
+	_turret.position = _turret_origin
 	_body_root.add_child(_turret)
 	var count  : int   = clampi(int(round(float(data.attack_speed))), 1, 4)
 	var blen   : float = clampf(remap(float(data.range), 150.0, 320.0, 18.0, 46.0), 18.0, 46.0)
