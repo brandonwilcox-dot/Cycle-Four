@@ -44,6 +44,33 @@ masked emission texture with additive emission across the whole material.
   energy and small/mobile assets near 3.0, then tune against the shared HDR glow threshold.
   Concentrated cores may be brighter than seams.
 
+#### 2a. Baking a mask — use `tools/bake_emission_mask.py` (canonical since 2026-07-26)
+
+Do NOT hand-roll a "find bright cyan, dilate, blur" mask. That recipe was replaced after it
+shipped three visible defects (splotchy noise dots, a solid glowing slab where the FOB's
+front gate should be a recessed opening, and soft mush — 82% of the FOB's lit mask pixels
+were mid-tone). The script's shape-aware pass fixes all three:
+
+- Threshold on **blue-dominance (b − r) gated by saturation**, never on brightness/hue.
+  De-light leaves some channels as dark navy insets that a hue test cannot see.
+- **No blur, no dilate.** Crisp edges are the point; mip-safety comes from full-value cores.
+- Classify each connected component by **shape**: noise is dropped by area; a component
+  fatter than ~9px half-width is a filled PANEL and becomes a glowing RIM (an opening reads
+  as a lit outline, not a slab); everything thinner is a real channel and stays solid.
+- Facet every outline with `approxPolyDP` so organic wobble becomes straight segments and
+  hard corners — the "solid angles" the Architect language calls for.
+
+Target 1.5–2.5% final coverage. The blue-dominance cut is **per model** (De-light drains the
+cyan by different amounts per generation) — add each new structure to the script's `PRESETS`
+table once tuned. Preserve the existing `.import` file when re-baking an existing mask so the
+UID is stable; only write a fresh one for a brand-new mask.
+
+**Known limit:** if a Rodin export comes back fully achromatic (max b − r below ~0.15), the
+cyan is gone and NO image-processing recipe can recover it — a black-hat recess pass just
+returns surface cracks. Re-export with De-light off, or author the channels as a second
+emissive material in Blender. Shipping a colour-derived mask for such a model produces pure
+noise. `architect_garrison_keep_hifi` is currently in this state.
+
 ### 3. Add physical-looking local spill
 
 - Emissive pixels provide visible glow; compact `OmniLight3D` sources provide dependable

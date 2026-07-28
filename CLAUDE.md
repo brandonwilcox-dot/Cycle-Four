@@ -14,6 +14,60 @@ Design corpus lives in-repo at:
 Read docs\PROJECT-MEMORY.md and docs\core\23_open-questions-resolved.md before
 making any design decisions in code.
 
+## Session 2026-07-26 (2) — EMISSION MASKS REBUILT: crisp architectural channels
+User zoomed in and called the structures "mushy soft… not hyper advanced architectural mastery",
+plus flagged the FOB front gate as unlit with "an arched doorway artifact that sticks out".
+DIAGNOSED (both are ONE defect): the masks were baked "bright-cyan → dilate → blur" off a
+painterly diffuse. That criterion (a) grabbed the big FLAT TEAL PANEL Rodin paints over the gate
+opening and emitted it as a solid glowing arch — reads as a decal, not a recess; (b) grabbed
+scatter noise → the splotches; (c) MISSED the actual thin recessed channels, which are DARK teal
+down in grooves. Then MaxFilter+blur rounded off every hard edge. Measured: **82% of the FOB's
+lit mask pixels were mid-tone, only 13% hot cores.**
+Also TESTED AND REJECTED a normal-map cavity/divergence signal — it fires on every panel seam,
+not just light channels (mean diffuse luminance in the top-1% cavity was 0.339 vs 0.364 overall,
+i.e. no real discrimination).
+**NEW canonical tool `tools/bake_emission_mask.py`** (documented in DESIGN-GUIDELINES §2a):
+blue-dominance (b−r) × saturation gate → morphological OPEN → per-connected-component SHAPE
+classification (area < 14px = noise, DROPPED; distance-transform half-width > 9px = filled PANEL,
+converted to a glowing RIM; else a true CHANNEL, kept solid) → `approxPolyDP` faceting so
+outlines become straight segments and hard corners. **No blur, no dilate anywhere.** Per-model
+`PRESETS` table because De-light drains the cyan differently per generation.
+RESULTS — FOB: coverage 7.76%→1.61%, mid-tone share of lit **82.3% → 0.0%**, 164 speckles dropped,
+22 panels rimmed. Plasma Bastion (`--blue-dominance 0.085`): 1.92%, 174 speckles dropped.
+VERIFIED in-engine on the FOB (fresh Battle3D run, boot log empty): channels now read as discrete
+hard-edged cyan bars along every buttress, no scattered dots, no glowing gate slab.
+⚠ **GARRISON KEEP IS BLOCKED, mask left on the OLD file:** its diffuse is fully achromatic
+(max b−r 0.125, p99 0.027) — De-light stripped every cyan channel, so no colour criterion works,
+and its existing ChatGPT-era mask is verifiably NOISE (lit-vs-unlit b−r delta only +0.014, i.e.
+unrelated to the architecture). Needs a Rodin re-export with De-light off OR the channels authored
+as a second emissive material in Blender. Do not ship a colour-derived mask for it.
+FOLLOW-UPS: (1) the FOB gate is still a FLAT TEAL PANEL in albedo — the Blender geometry fix
+(inset/recess it so it has depth) is the next step and is the one thing that genuinely needs
+Blender; (2) `ARCHITECT_FOB_LIGHTS.PortalFront` at energy 3.20 / range 90 is washing the front
+face flat — deliberately NOT changed yet so the mask could be judged on its own variable;
+(3) bastion mask verified as an image but NOT yet hands-on in play (needs a T1→T2 upgrade).
+⚠ EXES STILL NOT RE-EXPORTED.
+
+## Session 2026-07-26 — COMMANDER NAV: FACTION STANDARDS + PERSISTENT GPS ROUTE
+Replaced the red placeholder move-marker cube. **`src/vfx/NavMarker.gd`** (NEW) = an animated
+faction STANDARD: dark metallic pole + spinning glowing finial + an `ImmediateMesh` cloth flag
+rebuilt every frame as a travelling sine wave (amplitude ramps `u²` so it's pinned at the pole and
+snaps at the free edge, `CULL_DISABLED` so it reads from both sides) + a pulsing ground torus.
+The whole banner sways (`rotation.z/.y` sines); `setup(faction_color, index)` takes the color from
+`Vfx.faction_color()` and staggers each marker's phase so a chained row doesn't ripple in lockstep.
+**Commander.gd** now tracks `_nav_goals` (the player's CLICKED destinations) separately from
+`_move_queue` (every per-cell A* waypoint) — a standard belongs to a goal, not a waypoint. Cleared
+on a non-append order, appended per shift-chained click, and popped when the Commander reaches that
+exact point (the standard is struck as it passes). New accessors `nav_goals()` / `nav_route()`.
+**Battle3D** pools one standard per goal (`_standards`) and draws a persistent GPS-style route:
+an `ImmediateMesh` TRIANGLE_STRIP ribbon (HALF=4.5 wide, unshaded/alpha/cull-disabled, emissive
+1.8) from the Commander through every remaining waypoint, with a crawling UV dash (`_nav_scroll`
+advanced in `_process`). `_update_marker_fade` is gone; the reset path calls `_clear_nav_display()`.
+VERIFIED in play: single right-click → ribbon + one standard, struck on arrival; **shift-chained
+3-point order → multiple standards standing simultaneously along one continuous ribbon**; boot log
+empty. ⚠ EXES STILL NOT RE-EXPORTED (covers the Plasma Bastion, its emissive bake, the crown
+rotation, AND this nav pass).
+
 ## Session 2026-07-25 — ARCHITECT T2 TOWER MODEL SHIPPED (Plasma Bastion GLB)
 The Rodin "Plasma Bastion" (`design/architect_defense_concepts/Plasma_Bastion/base_basic_pbr.glb`)
 is now the Architect **tier-2** tower (`architects_t2.tres` "Heavy Pulse"). Copied to
