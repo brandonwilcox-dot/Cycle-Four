@@ -19,6 +19,30 @@ Universal rules (all sheets):
 - Export ticket (all assets): Quad Mesh 18000 (commanders/heroes) or 8000 (units/props) —
   see per-sheet; baked normal ON; Pack = Base Model only; .glb; PBR checked / Shaded unchecked;
   2K; De-light ON; PBR Temperature 7 (drop to 5 if over-shiny).
+- ⚠ **`texture_emissive.png` IS A LOTTERY OF THE MATERIAL GENERATION — check for it every run.**
+  (Established 2026-07-28.) Rodin's material pass sometimes authors an emissive map and sometimes
+  does not, and **nothing you control reliably forces it**: not the export format, not the prompt,
+  not the input art.
+  · Evidence: the Sentry Spire produced one on both runs. The Siege Foundry produced none across
+    **two material prompts × two export formats** (.glb and OBJ from the identical run — diffuse
+    md5 `78c92f43…` on both), despite concept crops carrying **twice** the Spire's cyan
+    (12.89 % vs 6.80 % of pixels above b−r 0.10) and a prompt written specifically to demand
+    self-illuminated channels.
+  · The emissive is the best mask source there is — authored intent instead of inferring channels
+    from colour (`bake_emission_mask.py --from-emissive`). Losing it can strand an asset:
+    see `architect_garrison_keep_hifi` and `architect_siege_foundry_hifi`.
+  · **If it is absent, re-roll the MATERIAL stage** (geometry stays confirmed, so this costs no
+    re-measuring). If a second roll also comes back empty, stop rolling and author the channels
+    as a second emissive material in Blender.
+  · **If it is present, it must be from the same generation AND the same Quad setting.**
+    Retopology rewrites the UV atlas — the Spire's Quad-18000 and Quad-8000 emissives are
+    different files (277 KB / 1.92 % coverage vs 336 KB / 2.18 %). Mixing them smears the mask.
+    Verify by sampling the map at the mesh's UV centroids and clustering lit texels in 3D: real
+    features land coherently and, on a symmetric model, in **mirrored pairs**. Scattered
+    asymmetric singletons mean noise — do not ship it.
+  · The "Shaded" checkbox is NOT this. It produces the lit albedo baked into an emissive slot
+    (a full-colour atlas, ~5 % black) rather than an emission map (~98 % black). Useful preview,
+    useless as a mask.
 - **Don't redo a good body over a small flaw.** Floating/disconnected pieces (stray arm, debris
   island) are trivially removed in cleanup (keep-largest-connected-component); a redo re-rolls
   the seed and risks losing a good generation. Redo only if the MAIN body is wrong.

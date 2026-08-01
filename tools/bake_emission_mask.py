@@ -75,13 +75,24 @@ MIN_AREA       = 14     # px. Components smaller than this are noise.
 MAX_HALFWIDTH  = 9.0    # px. Thicker than this => filled panel => convert to rim.
 RIM            = 3      # px. Stroke width of a panel's glowing outline.
 EPSILON        = 2.0    # px. approxPolyDP tolerance. Higher = harsher faceting.
+EMISSIVE_LUMA  = 0.05   # --from-emissive only: luminance cut on an AUTHORED emissive map.
 
 ## Per-model overrides, keyed by diffuse filename stem. How strongly Rodin's De-light pass
 ## drained the cyan varies per generation, so the blue-dominance cut has to be set per model.
 ## Matched by substring; add an entry whenever a new structure is baked.
 PRESETS = {
     "architect_fob_hifi":            {"blue_dominance": 0.100},   # -> 1.61% coverage
-    "architect_plasma_bastion_hifi": {"blue_dominance": 0.085},   # -> 1.92% coverage
+    ## Bastion is now baked with --from-emissive off its OBJ-pack emissive (2026-07-29) and the
+    ## blue-dominance path never runs. Kept as the fallback: its channels are DARK navy insets,
+    ## so colour returns them as short fragments — at min_area 14 that mask carried 476
+    ## components / 168 speckles and read as "splotchy" in play; 140 cut it to 122. The authored
+    ## emissive gets 47 clean components for comparison. Colour is mitigation, never the fix.
+    "architect_plasma_bastion_hifi": {"blue_dominance": 0.085, "min_area": 140,
+                                      "epsilon": 2.5},           # colour fallback only
+    ## Sentry Spire ships an AUTHORED emissive, so it is baked with --from-emissive and the
+    ## blue-dominance cut never runs. Its diffuse WOULD pass the colour gate (p99 0.275) if the
+    ## emissive were ever lost -- 0.090 is the tuned fallback.
+    "architect_sentry_spire_hifi":   {"blue_dominance": 0.090},
     # architect_garrison_keep_hifi: NOT BAKEABLE. Its diffuse is fully achromatic (max b-r
     # 0.125, p99 0.027) -- De-light stripped every cyan channel, so no colour criterion can
     # find them, and a black-hat recess pass just returns surface cracks. Needs either a
@@ -130,13 +141,20 @@ detect_3d/compress_to=0
 def bake(diffuse_path, out_path, cfg, preview_dir=None):
     img = Image.open(diffuse_path).convert("RGB")
     d = np.asarray(img).astype(np.float32) / 255.0
-    r, g, b = d[..., 0], d[..., 1], d[..., 2]
 
-    mx = d.max(2)
-    mn = d.min(2)
-    sat = np.where(mx > 1e-5, (mx - mn) / np.maximum(mx, 1e-5), 0.0)
+    if cfg.from_emissive:
+        ## HARDENING PATH. The regions are already authored; all we do is make them mip-safe.
+        ## Rodin's emissive is soft -- measured 70-72% mid-tone on the Sentry Spire, versus the
+        ## 82% that made the FOB's cyan vanish at gameplay distance. Thresholding to binary and
+        ## letting the component pass run drives every surviving pixel to full value.
+        raw = (d.max(2) > cfg.emissive_luma).astype(np.uint8)
+    else:
+        r, b = d[..., 0], d[..., 2]
+        mx = d.max(2)
+        mn = d.min(2)
+        sat = np.where(mx > 1e-5, (mx - mn) / np.maximum(mx, 1e-5), 0.0)
+        raw = (((b - r) > cfg.blue_dominance) & (sat > cfg.saturation)).astype(np.uint8)
 
-    raw = (((b - r) > cfg.blue_dominance) & (sat > cfg.saturation)).astype(np.uint8)
     raw_cov = raw.mean() * 100.0
     raw = cv2.morphologyEx(raw, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
@@ -221,8 +239,15 @@ def write_import(out_path, project_root):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("diffuse", help="path to the structure's *_texture_diffuse.png")
+    ap.add_argument("diffuse", help="path to the structure's *_texture_diffuse.png, "
+                                    "or its *_texture_emissive.png with --from-emissive")
     ap.add_argument("-o", "--out", help="output mask path (default: <model>_emission_mask.png)")
+    ap.add_argument("--from-emissive", action="store_true",
+                    help="input is an AUTHORED emissive map: skip blue-dominance and only "
+                         "harden (drop noise, drive cores to full, facet outlines). Also "
+                         "disables PANEL->RIM unless --max-halfwidth is given explicitly.")
+    ap.add_argument("--emissive-luma", type=float, default=EMISSIVE_LUMA,
+                    help="luminance cut for --from-emissive (default %(default)s)")
     ap.add_argument("--blue-dominance", type=float, default=BLUE_DOMINANCE)
     ap.add_argument("--saturation", type=float, default=SATURATION)
     ap.add_argument("--min-area", type=int, default=MIN_AREA)
@@ -236,6 +261,14 @@ def main():
     ap.add_argument("--project-root", default=os.path.join(os.path.dirname(__file__), ".."))
     ap.add_argument("--no-preset", action="store_true", help="ignore the PRESETS table")
     cfg = ap.parse_args()
+
+    ## An AUTHORED emissive means fat components are usually DELIBERATE (glowing lozenge
+    ## inserts, capacitor faces). The PANEL->RIM rule exists to defend against Rodin PAINTING a
+    ## slab over an opening in the DIFFUSE -- that assumption inverts here, and blanket
+    ## rim-conversion would gut the artist's design. Off unless asked for explicitly.
+    if cfg.from_emissive and "--max-halfwidth" not in sys.argv:
+        cfg.max_halfwidth = float("inf")
+        print("  --from-emissive: PANEL->RIM disabled (authored shapes kept solid)")
 
     ## Apply a per-model preset unless the user set the flag explicitly on the command line.
     if not cfg.no_preset:

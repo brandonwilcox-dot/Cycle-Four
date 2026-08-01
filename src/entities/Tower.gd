@@ -18,6 +18,7 @@ const STRUCTURE_LIGHTING = preload("res://src/vfx/StructureEmissionLighting.gd")
 ## Baked from the bastion's diffuse (Rodin De-light leaves the cyan channels as dark insets):
 ## a mip-safe grayscale mask that multiply-gates the cyan emission. See DESIGN-GUIDELINES.md.
 const ARCH_BASTION_EMISSION_MASK = preload("res://assets/models/buildings/architect_plasma_bastion_hifi_emission_mask.png")
+const ARCH_SPIRE_EMISSION_MASK = preload("res://assets/models/buildings/architect_sentry_spire_hifi_emission_mask.png")
 
 ## Targeting priority the player can cycle from the InspectionPanel (TD staple).
 enum TargetMode { CLOSEST, FIRST, LAST, STRONGEST }
@@ -50,9 +51,29 @@ const DAMAGE_CORE : Array[Color] = [
 ## Turret aim: _aim_angle (plane radians) lerps toward the target bearing; applied as the turret's yaw.
 const AIM_SCAN_PERIOD : float = 0.1
 const AIM_TURN_RATE   : float = 9.0
+## Authored crowns also ELEVATE. A tower muzzle sits 48-60u up while its targets stand at
+## UNIT_HIT_Y, so a barrel locked horizontal needs 22-26 degrees of depression at close range —
+## the tracer visibly kinks as it leaves the bore. Pitch removes that at every range; extending
+## the tower's range only helps the far shots (7.2 deg at 256 vs 22.0 deg at 80).
+const UNIT_HIT_Y        : float = 16.0    ## target mid-body height, matches the bolt endpoint
+## Wide enough that a real firing solution is never clipped. A clamp that bites is what broke
+## the first arc pass: the shell launched at 37° while the barrel sat at its 12° limit, so the
+## round visibly left the bore at the wrong angle. The barrel angle must BE the launch angle.
+const AIM_PITCH_MAX     : float = deg_to_rad(50.0)   ## depression (barrel down)
+const AIM_PITCH_MIN     : float = deg_to_rad(-55.0)  ## elevation (barrel up, for lobs)
 var _aim_angle        : float = 0.0
 var _aim_target_angle : float = 0.0
+var _aim_pitch        : float = 0.0
+var _aim_target_pitch : float = 0.0
 var _aim_scan_timer   : float = 0.0
+## Ballistic shell params (muzzle speed, drag rate, gravity). ZERO = flat direct fire.
+var _ballistics       : Vector3 = Vector3.ZERO
+## Cached solve for the current target: (vertical launch speed, flight time).
+var _shot_solution    : Vector2 = Vector2.ZERO
+## Separable barrel group, pitched about its trunnion. When present the housing stays level and
+## seated in its collar, and recoil slides the barrels back instead of lifting the whole crown.
+var _barrels          : Node3D = null
+var _barrel_origin    : Vector3 = Vector3.ZERO
 
 ## Construction (Phase 2B).
 const MAX_HEALTH   : float = 100.0
@@ -203,6 +224,12 @@ func upgrade(next_data: Resource) -> void:
 	_build_bar = null
 	_glb_tower = false       ## reset — the next tier decides (procedural barrels vs authored crown)
 	_turret_origin = Vector3.ZERO
+	_ballistics = Vector3.ZERO   ## only the siege battery lobs; other tiers are direct fire
+	_shot_solution = Vector2.ZERO
+	_barrels = null
+	_barrel_origin = Vector3.ZERO
+	_aim_pitch = 0.0
+	_aim_target_pitch = 0.0
 	_build_visual()
 	if _con_rig != null:
 		_con_rig.call("flourish")   ## the faction's construction signature marks the upgrade
@@ -217,17 +244,27 @@ func _try_attack() -> void:
 		var dt : int = int(data.damage_type)
 		var tpos : Vector2 = WORLD3D.node_plane(target)
 		_aim_target_angle = (tpos - _p).angle()
+		_aim_target_pitch = _aim_pitch_to(tpos)
 		## Cosmetic tracer/muzzle — fire one from each barrel tip (upgraded towers have 2+ cannons),
 		## transforming each turret-local muzzle to world plane so the blast leaves the cannon, not center.
 		if _turret != null and not _muzzles.is_empty():
+			var gun : Node3D = _gun_node()
+			## Flight parameters for a ballistic shell: (muzzle speed, vertical launch speed,
+			## gravity, drag). _shot_solution was cached by the same solve that set the barrel
+			## elevation, so the visual trajectory and the firing solution cannot disagree.
+			var flight : Vector4 = Vector4.ZERO
+			if _ballistics != Vector3.ZERO and _shot_solution.y > 0.0:
+				flight = Vector4(_ballistics.x, _shot_solution.x, _ballistics.z, _ballistics.y)
 			for mloc in _muzzles:
-				var mworld : Vector3 = _turret.to_global(mloc)
+				var mworld : Vector3 = gun.to_global(mloc)
 				var mp : Vector2 = WORLD3D.to2(mworld)
 				if _glb_tower:
-					## Plasma bolt descends from the emitter (its real height) onto the target.
 					var col : Color = Vfx.damage_color(dt)
 					Vfx.pulse_at(mp, col, 13.0, 0.1, mworld.y)
-					Vfx.bolt_from_to(mp, mworld.y, tpos, 16.0, col)
+					## A ballistic round reads as heavy ordnance, so it gets the ROCKET body +
+					## trail rather than the flat tracer the direct-fire towers use.
+					var kind : int = 3 if flight != Vector4.ZERO else 0   ## ROCKET / BULLET
+					Vfx.bolt_from_to(mp, mworld.y, tpos, UNIT_HIT_Y, col, kind, flight)
 				else:
 					Vfx.muzzle(mp, dt)
 					Vfx.bolt(mp, tpos, dt)
@@ -438,17 +475,73 @@ func _update_aim(delta: float) -> void:
 		_aim_scan_timer = AIM_SCAN_PERIOD
 		var tgt : Node = _select_target()
 		if tgt != null:
-			_aim_target_angle = (WORLD3D.node_plane(tgt) - _p).angle()
+			var tp : Vector2 = WORLD3D.node_plane(tgt)
+			_aim_target_angle = (tp - _p).angle()
+			_aim_target_pitch = _aim_pitch_to(tp)
 	_aim_angle = lerp_angle(_aim_angle, _aim_target_angle, minf(1.0, AIM_TURN_RATE * delta))
+	_aim_pitch = lerpf(_aim_pitch, _aim_target_pitch, minf(1.0, AIM_TURN_RATE * delta))
 	if _turret != null:
 		## plane angle → 3D yaw. Procedural barrels face local +X; the authored crown's cannons
-		## face local +Z, so it needs a quarter-turn offset to point the same way.
-		_turret.rotation.y = -_aim_angle + (PI * 0.5 if _glb_tower else 0.0)
-		## V4 recoil: the turret kicks back along the barrel line on fire and re-seats.
+		## face local +Z, so it needs a quarter-turn offset to point the same way. The turret
+		## ring only ever YAWS — elevation belongs to the trunnion below.
+		var yaw : float = -_aim_angle + (PI * 0.5 if _glb_tower else 0.0)
 		if _recoil > 0.0:
 			_recoil = maxf(0.0, _recoil - delta * 6.0)
-		var fwd : Vector3 = _turret.basis.z if _glb_tower else _turret.basis.x
-		_turret.position = _turret_origin - fwd * (5.0 * _recoil)
+		if _barrels != null:
+			## Split crown: housing stays level and seated, only the gun group elevates, and
+			## recoil slides the barrels back INTO the housing along their own axis.
+			_turret.rotation = Vector3(0.0, yaw, 0.0)
+			_turret.position = _turret_origin
+			_barrels.rotation = Vector3(_aim_pitch, 0.0, 0.0)
+			_barrels.position = _barrel_origin - _barrels.basis.z * (5.0 * _recoil)
+		else:
+			## Fused crown (no barrel group authored): pitch the whole thing, but recoil only
+			## along the HORIZONTAL barrel line. Following a pitched barrel adds a vertical
+			## kick that visibly lifts the crown out of its collar every time it fires.
+			_turret.rotation = Vector3(_aim_pitch if _glb_tower else 0.0, yaw, 0.0)
+			var fwd : Vector3 = _turret.basis.z if _glb_tower else _turret.basis.x
+			fwd.y = 0.0
+			if fwd.length_squared() > 0.001:
+				fwd = fwd.normalized()
+			_turret.position = _turret_origin - fwd * (5.0 * _recoil)
+
+## The node the barrels belong to — the pitching group when the model has one, else the crown.
+func _gun_node() -> Node3D:
+	return _barrels if _barrels != null else _turret
+
+## Barrel elevation to put a round on `tpos`, in local radians (+ = depression, barrel down).
+##
+## Direct-fire towers simply point at the target. A BALLISTIC tower solves the shot properly:
+## horizontal travel decays with drag, so x(s) = vx0·(1 − e^(−k·s))/k inverts to a closed-form
+## flight time, and the vertical launch speed follows from Δy = vy0·T − ½g·T². The barrel angle
+## is then atan2(vy0, vx0) — the TRUE launch direction, so the round always leaves collinear
+## with the bore. No search, no clamp that bites, no divergence.
+##
+## Also caches the solve so the shot fired this frame uses exactly the angle the barrel holds.
+func _aim_pitch_to(tpos: Vector2) -> float:
+	if not _glb_tower or _muzzles.is_empty():
+		return 0.0
+	var horiz : float = maxf(_p.distance_to(tpos), 1.0)
+	var rise : float = UNIT_HIT_Y - _muzzle_height()
+	if _ballistics == Vector3.ZERO:
+		return clampf(-atan2(rise, horiz), AIM_PITCH_MIN, AIM_PITCH_MAX)
+	var vx0 : float = _ballistics.x
+	var k : float = _ballistics.y
+	var g : float = _ballistics.z
+	## Beyond vx0/k the round can never arrive however it is aimed — hold max elevation.
+	if k * horiz >= vx0 * 0.995:
+		_shot_solution = Vector2.ZERO
+		return AIM_PITCH_MIN
+	var flight : float = -log(1.0 - k * horiz / vx0) / k
+	var vy0 : float = (rise + 0.5 * g * flight * flight) / flight
+	_shot_solution = Vector2(vy0, flight)
+	return clampf(-atan2(vy0, vx0), AIM_PITCH_MIN, AIM_PITCH_MAX)
+
+## Muzzle height above the tower's ground plane, taken at rest so it doesn't chase the pitch.
+func _muzzle_height() -> float:
+	if _muzzles.is_empty():
+		return _base_height
+	return float(_muzzles[0].y) + (_barrel_origin.y if _barrels != null else 0.0)
 
 ## Recursive case-insensitive node-name search (finds "bastion_crown" from "crown").
 func _find_child_named(node: Node, needle: String) -> Node3D:
@@ -520,11 +613,17 @@ func _build_visual() -> void:
 			_base_height = ASSETS.tower_model_height(tpath)
 			_glb_tower = true
 			var mscale : float = float(ASSETS.TOWER_MODEL_SCALE.get(tpath, 40.0))
+			_ballistics = ASSETS.TOWER_BALLISTICS.get(tpath, Vector3.ZERO)
 			## The turret node sits at the tower origin (the crown's own verts carry its height)
 			## and yaws to track targets. The crown mesh is lifted out of the imported hull and
 			## reparented here, carrying the model scale itself since _turret is unscaled.
 			_turret = Node3D.new()
-			_turret_origin = Vector3.ZERO
+			## The crown yaws about the ROTATION COLLAR, which is not always the model origin.
+			## Offsetting the turret to the collar and the crown back by the same amount makes
+			## the crown spin in place instead of orbiting the origin.
+			var pivot : Vector3 = ASSETS.tower_turret_pivot(tpath)
+			_turret_origin = pivot
+			_turret.position = pivot
 			_body_root.add_child(_turret)
 			var crown : Node3D = _find_child_named(model, "crown")
 			if crown != null:
@@ -532,15 +631,50 @@ func _build_visual() -> void:
 				_turret.add_child(crown)
 				crown.transform = Transform3D.IDENTITY
 				crown.scale = Vector3(mscale, mscale, mscale)
-			## Muzzles are TURRET-local (game units) so they rotate with the crown.
+				crown.position = -pivot
+			## Separable gun group (models split at the trunnion). It hangs off the yawing
+			## turret and owns elevation + recoil, so the housing never leaves its collar.
+			var trunnion : Vector3 = ASSETS.tower_trunnion(tpath)
+			var guns : Node3D = _find_child_named(model, "barrels")
+			if guns != null:
+				_barrels = Node3D.new()
+				_barrel_origin = trunnion - pivot
+				_barrels.position = _barrel_origin
+				_turret.add_child(_barrels)
+				guns.get_parent().remove_child(guns)
+				_barrels.add_child(guns)
+				guns.transform = Transform3D.IDENTITY
+				guns.scale = Vector3(mscale, mscale, mscale)
+				guns.position = -trunnion
+			## Muzzles live in the frame of whatever node carries the barrels, so they inherit
+			## that node's rotation: the gun group when one exists, else the crown itself.
+			var muzzle_base : Vector3 = trunnion if _barrels != null else pivot
 			for mp : Vector3 in ASSETS.tower_model_muzzles(tpath):
-				_muzzles.append(mp)
+				_muzzles.append(mp - muzzle_base)
 			## Selective emission + compact local spill (the shared structure recipe). Applied to
 			## _body_root so BOTH the hull and the reparented crown get the masked cyan; the
 			## emitter/crown lights ride the turret so their spill sweeps with the barrels.
-			STRUCTURE_LIGHTING.tune_masked_emission(_body_root, 3.0, ARCH_BASTION_EMISSION_MASK)
-			STRUCTURE_LIGHTING.add_architect_plasma_bastion_turret_lights(_turret, mscale)
-			STRUCTURE_LIGHTING.add_architect_plasma_bastion_base_lights(self, mscale)
+			## Per-model mask + light cluster: every authored tower has its own baked mask and its
+			## own measured emitter positions, so this cannot be one shared call.
+			match tpath:
+				"res://resources/towers/architects_t1.tres":
+					STRUCTURE_LIGHTING.tune_masked_emission(_body_root, 3.0, ARCH_SPIRE_EMISSION_MASK)
+					STRUCTURE_LIGHTING.add_architect_sentry_spire_turret_lights(_turret, mscale, pivot)
+					STRUCTURE_LIGHTING.add_architect_sentry_spire_base_lights(self, mscale)
+				"res://resources/towers/architects_t3.tres":
+					## NO MASK ON PURPOSE. This export has no emissive map and its diffuse cannot
+					## yield one, so a colour-derived mask would be noise (the Garrison Keep
+					## mistake). Passing null leaves emission off; the light cluster plus the
+					## procedural inserts below carry the cyan until a Blender emissive pass lands.
+					STRUCTURE_LIGHTING.tune_masked_emission(_body_root, 3.0, null)
+					STRUCTURE_LIGHTING.add_architect_siege_foundry_turret_lights(_turret, mscale, pivot)
+					STRUCTURE_LIGHTING.add_architect_siege_foundry_base_lights(self, mscale)
+					STRUCTURE_LIGHTING.add_architect_siege_foundry_inserts(
+						_gun_node(), _body_root, mscale, muzzle_base)
+				_:
+					STRUCTURE_LIGHTING.tune_masked_emission(_body_root, 3.0, ARCH_BASTION_EMISSION_MASK)
+					STRUCTURE_LIGHTING.add_architect_plasma_bastion_turret_lights(_turret, mscale, pivot)
+					STRUCTURE_LIGHTING.add_architect_plasma_bastion_base_lights(self, mscale)
 			## Construction/repair bar above the bastion.
 			_build_bar = MeshInstance3D.new()
 			var gqm : QuadMesh = QuadMesh.new()

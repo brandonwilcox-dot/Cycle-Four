@@ -26,8 +26,22 @@ var _life  : float = 0.1
 var _age   : float = 0.0
 var _done  : bool  = false
 var _spin  : Node3D = null
+## BALLISTIC FLIGHT WITH DRAG (siege ordnance), as Vector4(vx0, vy0, gravity, drag):
+##   horizontal  x(s) = vx0·(1 − e^(−k·s)) / k     — forward speed decays, the round SLOWS
+##   vertical    y(s) = vy0·s − ½·g·s²             — gravity keeps accumulating
+## Drag is the whole point. A plain parabola holds its horizontal speed, so its descent only
+## ever mirrors its climb; with drag the shell leaves fast and shallow, visibly loses way, and
+## the last third plunges. The firer solved its barrel elevation from these same numbers, so
+## the round leaves collinear with the bore. Zero vector -> ordinary straight tracer.
+var _vx0   : float = 0.0
+var _vy0   : float = 0.0
+var _grav  : float = 0.0
+var _drag  : float = 0.0
+var _flight: float = 0.0
+const MAX_FLIGHT : float = 2.5
 
-func setup(from3: Vector3, to3: Vector3, color: Color, kind: int = BULLET) -> void:
+func setup(from3: Vector3, to3: Vector3, color: Color, kind: int = BULLET,
+		flight_params: Vector4 = Vector4.ZERO) -> void:
 	_from = from3
 	_to = to3
 	_color = color
@@ -35,6 +49,18 @@ func setup(from3: Vector3, to3: Vector3, color: Color, kind: int = BULLET) -> vo
 	position = from3
 	var dist : float = from3.distance_to(to3)
 	_life = clampf(dist / float(SPEED.get(kind, 1900.0)), MIN_LIFE, MAX_LIFE)
+	if flight_params != Vector4.ZERO:
+		_vx0 = flight_params.x
+		_vy0 = flight_params.y
+		_grav = flight_params.z
+		_drag = flight_params.w
+		## Invert the horizontal law for the flight time so the shell lands exactly on target.
+		var flat : float = Vector2(to3.x - from3.x, to3.z - from3.z).length()
+		if _drag > 0.0 and _vx0 > 0.0 and _drag * flat < _vx0 * 0.995:
+			_flight = clampf(-log(1.0 - _drag * flat / _vx0) / _drag, 0.02, MAX_FLIGHT)
+			_life = _flight
+		else:
+			_grav = 0.0   ## unreachable or degenerate — fall back to a straight tracer
 	if dist > 0.01:
 		look_at(to3, Vector3.UP)   ## local -Z now points at the target
 
@@ -157,7 +183,22 @@ func _process(delta: float) -> void:
 	_age += delta
 	var t : float = clampf(_age / _life, 0.0, 1.0)
 	if _kind != ARC:
-		position = _from.lerp(_to, t)
+		if _grav > 0.0:
+			var s : float = t * _flight
+			var flat : Vector3 = Vector3(_to.x - _from.x, 0.0, _to.z - _from.z)
+			var span : float = flat.length()
+			var dir : Vector3 = flat / span if span > 0.001 else Vector3.FORWARD
+			## Horizontal distance covered so far, decaying with drag.
+			var travelled : float = _vx0 * (1.0 - exp(-_drag * s)) / _drag
+			position = _from + dir * travelled + Vector3.UP * (_vy0 * s - 0.5 * _grav * s * s)
+			## Nose along the CURRENT velocity — forward speed bleeding off while the vertical
+			## keeps building is what makes the shell tip over into its terminal plunge.
+			var vel : Vector3 = dir * (_vx0 * exp(-_drag * s)) \
+				+ Vector3.UP * (_vy0 - _grav * s)
+			if vel.length_squared() > 0.001:
+				look_at(position + vel, Vector3.UP)
+		else:
+			position = _from.lerp(_to, t)
 	if _spin != null and (_kind == ROCKET or _kind == PLASMA):
 		_spin.rotate_object_local(Vector3(0, 0, 1), delta * 12.0)
 	if _age >= _life:

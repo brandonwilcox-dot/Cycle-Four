@@ -73,13 +73,18 @@ func pulse_at(at2: Vector2, color: Color, radius: float, life: float = 0.3, y: f
 
 ## Weapon projectile with EXPLICIT start/end heights + kind — bastion fire descends from the
 ## tower top to the target unit's mid-body, so the round visibly angles down onto the enemy.
-func bolt_from_to(from2: Vector2, from_y: float, to2: Vector2, to_y: float, color: Color, kind: int = 0) -> void:
+## `flight_params` = Vector4(muzzle speed, vertical launch speed, gravity, drag) flies the round
+## as a real shell that sheds forward speed and plunges, instead of a straight tracer — used by
+## siege ordnance. The firer must solve its barrel elevation from these same numbers so the
+## round leaves collinear with the bore. ZERO = ordinary tracer.
+func bolt_from_to(from2: Vector2, from_y: float, to2: Vector2, to_y: float, color: Color,
+		kind: int = 0, flight_params: Vector4 = Vector4.ZERO) -> void:
 	var layer : Node3D = _layer_node()
 	if layer == null:
 		return
 	var b : Node3D = BOLT_SCRIPT.new()
 	layer.add_child(b)
-	b.setup(WORLD3D.to3(from2, from_y), WORLD3D.to3(to2, to_y), color, kind)
+	b.setup(WORLD3D.to3(from2, from_y), WORLD3D.to3(to2, to_y), color, kind, flight_params)
 
 ## Faction-tinted poof + sparks when a unit dies.
 func death(at2: Vector2, faction_col: Color, radius: float) -> void:

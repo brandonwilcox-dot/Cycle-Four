@@ -110,27 +110,116 @@ const FACTION_GARRISON_RADIUS_NORM = { "architects": 0.951016 }
 ## Player TOWER GLTF models, keyed by the tower's resource_path. Missing → Tower.gd's
 ## procedural body. The Architect "Plasma Bastion" is the tier-2 tower (architects_t2).
 const FACTION_TOWER_MODELS = {
+	"res://resources/towers/architects_t1.tres": "res://assets/models/buildings/architect_sentry_spire_hifi.glb",
 	"res://resources/towers/architects_t2.tres": "res://assets/models/buildings/architect_plasma_bastion_hifi.glb",
+	"res://resources/towers/architects_t3.tres": "res://assets/models/buildings/architect_siege_foundry_hifi.glb",
 }
 ## Import scale (Blender units -> game units). Bastion: 1.888u wide × 1.45u tall × 40 ->
 ## ~76u footprint / ~58u tall — an imposing heavy T2, taller than units, well under the FOB.
+## Sentry Spire: 1.612u wide × 1.894u tall × 32 -> ~52u footprint / ~61u tall. Deliberately a
+## NARROWER footprint but slightly GREATER height than the T2 — a spire beside a squat heavy,
+## so the tier reads at a glance without the T1 out-massing its own upgrade.
+## Siege Foundry: 1.886u wide × 1.221u tall × 48 -> ~90u footprint / ~59u tall. The widest
+## footprint of the three (T1 52u, T2 75u) so the T3 dominates, and its crown's long cannons
+## reach a further 0.88u forward again. Squat by design — the tier reads through mass and
+## barrel reach, not height.
 const TOWER_MODEL_SCALE = {
+	"res://resources/towers/architects_t1.tres": 32.0,
 	"res://resources/towers/architects_t2.tres": 40.0,
+	"res://resources/towers/architects_t3.tres": 48.0,
 }
 ## Facing (deg about Y): Rodin fronts export toward +Z (matches FOB/garrison).
 const TOWER_MODEL_YAW = {
+	"res://resources/towers/architects_t1.tres": 0.0,
 	"res://resources/towers/architects_t2.tres": 0.0,
+	"res://resources/towers/architects_t3.tres": 0.0,
 }
-## Normalized model height + the twin plasma-emitter muzzle points (x, y, z), measured from
-## the mesh crown. Multiplied by TOWER_MODEL_SCALE at runtime.
+## Normalized model height + the twin emitter muzzle points (x, y, z), measured from the mesh
+## crown. Multiplied by TOWER_MODEL_SCALE at runtime.
 const TOWER_MODEL_HEIGHT_NORM = {
-	"res://resources/towers/architects_t2.tres": 1.45,
+	"res://resources/towers/architects_t1.tres": 1.894,
+	"res://resources/towers/architects_t2.tres": 1.456,
+	"res://resources/towers/architects_t3.tres": 1.221,
 }
 const TOWER_MODEL_MUZZLES = {
-	"res://resources/towers/architects_t2.tres": [
-		Vector3(-0.40, 1.22, 0.49),   ## left plasma emitter tip
-		Vector3(0.40, 1.22, 0.49),    ## right plasma emitter tip
+	## Sentry Spire: Rodin fused the concept's twin auto-rifles into ONE central barrel at Quad
+	## 8000. tools/split_tower_glb.py cuts it at the root plane (z 0.36) and re-instances it at
+	## +/-0.235 — the separation measured off the Quad 18000 export, which reconstructed them
+	## correctly. These are the post-split tips.
+	"res://resources/towers/architects_t1.tres": [
+		Vector3(-0.235, 1.729, 0.584),   ## left auto-rifle muzzle
+		Vector3(0.235, 1.729, 0.584),    ## right auto-rifle muzzle
 	],
+	## Re-measured 2026-07-29 on the re-imported Quad-8000 pack: the twin emitters arrive
+	## ALREADY separated (x clusters -0.433..-0.252 and 0.252..0.432, clean gap either side of
+	## centre), so no barrel surgery was needed. Face at z 0.634.
+	"res://resources/towers/architects_t2.tres": [
+		Vector3(-0.343, 1.223, 0.634),   ## left plasma emitter tip
+		Vector3(0.343, 1.223, 0.634),    ## right plasma emitter tip
+	],
+	## Siege Foundry: the twin siege cannons share one housing block rather than protruding as
+	## two tubes, so no barrel surgery was needed — these are the two BORE centres measured off
+	## the forward face (x clusters -0.120..-0.081 and 0.081..0.120, face at z 0.881).
+	"res://resources/towers/architects_t3.tres": [
+		Vector3(-0.100, 1.008, 0.881),   ## left siege cannon bore
+		Vector3(0.100, 1.008, 0.881),    ## right siege cannon bore
+	],
+}
+
+## Rotation-collar center in NORMALIZED model coords, for a crown whose collar is genuinely
+## off the model axis. The crown is reparented at -pivot inside the turret so it spins about
+## the collar instead of the origin; anything else measured against the crown (muzzles, turret
+## light cluster) MUST carry the same correction or it detaches and sweeps on its own.
+##
+## Both current towers are ZERO. The Sentry Spire was briefly given +0.052 Z from a bounding
+## box over the collar band — that was noise: per-slice z-centers oscillate -0.042..+0.064
+## while the x-center holds at +0.0011 in every slice, and the densest slice reads +0.002.
+## A bbox over a sparse band tracks its extremes, not its axis. Measure a DENSE slice.
+## The Siege Foundry is the one model that genuinely needs this: its collar z-center reads
+## -0.105 CONSISTENTLY across every dense slice (n=149/74/71/42), which is the "rear-balanced
+## turret" the concept brief calls for — the pivot sits behind the cannons so the long barrels
+## counterweight. Contrast the Sentry Spire, whose apparent offset was slice noise.
+const TOWER_MODEL_TURRET_PIVOT = {
+	"res://resources/towers/architects_t1.tres": Vector3.ZERO,
+	"res://resources/towers/architects_t2.tres": Vector3.ZERO,
+	"res://resources/towers/architects_t3.tres": Vector3(0.0, 0.0, -0.105),
+}
+
+## Turret pivot in GAME units for this tower model.
+static func tower_turret_pivot(tower_res_path: String) -> Vector3:
+	var p : Vector3 = TOWER_MODEL_TURRET_PIVOT.get(tower_res_path, Vector3.ZERO)
+	return p * float(TOWER_MODEL_SCALE.get(tower_res_path, 0.0))
+
+## Trunnion (barrel elevation axis) in NORMALIZED model coords, for models whose GLB carries a
+## separate "<prefix>_barrels" node. Elevating the whole crown tilts the housing out of its
+## collar and makes recoil lift the crown off the tower; pitching only the barrel group about
+## its trunnion keeps the housing seated. Measured where the barrels step out of the housing.
+## Vector3.ZERO / absent = no barrel group, the whole crown pitches (T1, T2).
+const TOWER_MODEL_TRUNNION = {
+	"res://resources/towers/architects_t3.tres": Vector3(0.0, 1.006, 0.100),
+}
+
+## Trunnion in GAME units, or ZERO when the model has no separable barrel group.
+static func tower_trunnion(tower_res_path: String) -> Vector3:
+	var t : Vector3 = TOWER_MODEL_TRUNNION.get(tower_res_path, Vector3.ZERO)
+	return t * float(TOWER_MODEL_SCALE.get(tower_res_path, 0.0))
+
+## Ballistic shell parameters for towers that lob instead of firing a flat tracer:
+##   x = horizontal muzzle speed (units/s)
+##   y = horizontal DRAG rate k (1/s) — the round sheds forward speed as it flies
+##   z = gravity (units/s²)
+##
+## Drag is what a plain parabola cannot give: constant horizontal speed means the shell never
+## "loses velocity", so the descent only ever mirrors the climb. With drag the round leaves
+## fast and shallow, visibly slows, and the last third plunges.
+##
+## Horizontal travel is x(s) = vx0·(1 − e^(−k·s))/k, so maximum reach is vx0/k asymptotically.
+## 900 / 2.0 / 600 reaches 450 and gives: -13.7° launch at range 100 (barrel down, impact -23°),
+## flat at 200, +12.6° at 360 with impact -57° and forward speed down 900 → 180.
+## The firer solves its barrel elevation from these same numbers, so the shell always leaves
+## collinear with the bore.
+const TOWER_BALLISTICS = {
+	"res://resources/towers/architects_t3.tres": Vector3(900.0, 2.0, 600.0),
 }
 
 ## Load the tower model for `tower_res_path` with scale + yaw applied, or null.
