@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://ddermvw38x21n"
+path="res://.godot/imported/base.obj-458c4f443bc91edbbe3a7c071a9616c1.mesh"
+
+[deps]
+
+files=["res://.godot/imported/base.obj-458c4f443bc91edbbe3a7c071a9616c1.mesh"]
+
+source_file="res://design/architect_defense_concepts/Garrison_Keep/Smart-Poly v1 Delight OFF/1e7be304-1c90-40a1-a36c-0edb08cdb866/base.obj"
+dest_files=["res://.godot/imported/base.obj-458c4f443bc91edbbe3a7c071a9616c1.mesh", "res://.godot/imported/base.obj-458c4f443bc91edbbe3a7c071a9616c1.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

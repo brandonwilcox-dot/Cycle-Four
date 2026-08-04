@@ -69,7 +69,32 @@ UID is stable; only write a fresh one for a brand-new mask.
 cyan is gone and NO image-processing recipe can recover it — a black-hat recess pass just
 returns surface cracks. Re-export with De-light off, or author the channels as a second
 emissive material in Blender. Shipping a colour-derived mask for such a model produces pure
-noise. `architect_garrison_keep_hifi` is currently in this state.
+noise.
+
+**The De-light OFF re-export is the fix, and it is cheap** (proven on
+`architect_garrison_keep_hifi`, 2026-08-02). Re-generating the same Rodin job with De-light
+disabled ships a real `texture_emissive.png` and restores the cyan (p99 0.051 → 0.624). The
+mesh and UVs came back **byte-identical** between the ON and OFF jobs — `base.obj` md5 matched
+and the GLB POSITION/TEXCOORD\_0 accessors hashed the same — so De-light is purely a texture
+post-process. Take the albedo/MR/normal from the **De-lit** export and the emissive from the
+**OFF** export; they drop onto the same UVs.
+
+**But an authored emissive is not automatically a good mask.** Rodin paints much of it onto
+FLAT PLATING rather than into channels. On the Keep, 31 components fatter than 9px half-width
+carried **71% of the lit area** and read as splotches on the armour. Two consequences:
+
+- `--from-emissive` disables PANEL→RIM by default. For a Rodin emissive that default is wrong —
+  re-enable the fatness cut and DROP the fat components rather than rimming them, or you get
+  glowing outlines sitting on plating.
+- **Cavity/AO gating does not work as a filter.** Tested at 0.02/0.05/0.12 and global: mean AO
+  under the lit texels was **0.948 vs 0.605** elsewhere, i.e. the glow sits on the most EXPOSED
+  surfaces. The channels are painted, not modelled, so there is no geometric signal to gate on.
+  Do not spend time on this again unless the channels are authored as real recesses.
+
+Where the channels matter, hand-authoring beats derivation. The Keep's shipped mask was painted
+in Blender Texture Paint over a fat-dropped base, then hardened through the script's
+`--from-emissive` path: **2.20% coverage, 0% mid-tone, 77 components at a 795px median run**,
+versus 232 components at 76px for the purely algorithmic attempt.
 
 ### 3. Add physical-looking local spill
 

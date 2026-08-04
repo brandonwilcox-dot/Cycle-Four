@@ -93,11 +93,21 @@ PRESETS = {
     ## blue-dominance cut never runs. Its diffuse WOULD pass the colour gate (p99 0.275) if the
     ## emissive were ever lost -- 0.090 is the tuned fallback.
     "architect_sentry_spire_hifi":   {"blue_dominance": 0.090},
-    # architect_garrison_keep_hifi: NOT BAKEABLE. Its diffuse is fully achromatic (max b-r
-    # 0.125, p99 0.027) -- De-light stripped every cyan channel, so no colour criterion can
-    # find them, and a black-hat recess pass just returns surface cracks. Needs either a
-    # Rodin re-export with De-light off, or the channels authored as a second material in
-    # Blender. Do NOT ship a colour-derived mask for it; you get noise.
+    ## Garrison Keep — RESOLVED 2026-08-02. The old note said NOT BAKEABLE, and for the
+    ## De-light ON export that is still true (max b-r 0.090, p99 0.051). The fix was a Rodin
+    ## re-generation with DE-LIGHT OFF, which ships a real texture_emissive.png AND restores
+    ## the cyan (p99 0.624). Critically the mesh and UVs are byte-identical between the two
+    ## jobs, so the De-lit maps stay the albedo while the emissive comes from the OFF export.
+    ##
+    ## Do NOT bake this one from colour, and do NOT use the plain --from-emissive defaults:
+    ## Rodin painted most of its emissive onto FLAT PLATING, not into channels. 31 fat
+    ## components carried 71% of the lit area and read as splotches on the armour. Cavity
+    ## gating cannot fix it (AO under the lit texels is 0.948 vs 0.605 elsewhere — the glow
+    ## is on the MOST exposed surfaces), because the channels are painted, not modelled.
+    ## The shipped mask was hand-authored in Blender Texture Paint over a fat-dropped base,
+    ## then hardened through this script's --from-emissive path at --emissive-luma 0.5.
+    ## Result: 2.20% coverage, 0% mid-tone, 77 components. See DESIGN-GUIDELINES.md §2a.
+    "architect_garrison_keep_hifi":  {"emissive_luma": 0.5},
 }
 
 IMPORT_TEMPLATE = """[remap]

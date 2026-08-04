@@ -91,7 +91,7 @@ const FACTION_BASE_WALL_NORM = { "architects": 0.57 }
 const FACTION_BASE_TOTAL_NORM = { "architects": 1.55 }
 
 ## Player GARRISON GLTF models. Missing factions retain Building.gd's procedural body.
-## The Architect Rodin keep is ground-aligned and centered: ~1.90u footprint, 1.218u high.
+## The Architect Rodin keep is ground-aligned and centered: ~1.90u footprint, 1.205u high.
 const FACTION_GARRISON_MODELS = {
 	"architects": "res://assets/models/buildings/architect_garrison_keep_hifi.glb",
 }
@@ -104,8 +104,10 @@ const FACTION_GARRISON_SCALE = {
 const FACTION_GARRISON_YAW = {
 	"architects": 0.0,
 }
-const FACTION_GARRISON_TOTAL_NORM = { "architects": 1.218464 }
-const FACTION_GARRISON_RADIUS_NORM = { "architects": 0.951016 }
+## Re-measured 2026-08-02 against the Smart-Poly re-generation (10,271 tris, was 39,427).
+## The sculpt is fractionally shorter and narrower than the first export.
+const FACTION_GARRISON_TOTAL_NORM = { "architects": 1.204912 }
+const FACTION_GARRISON_RADIUS_NORM = { "architects": 0.950000 }
 
 ## Player TOWER GLTF models, keyed by the tower's resource_path. Missing → Tower.gd's
 ## procedural body. The Architect "Plasma Bastion" is the tier-2 tower (architects_t2).
@@ -179,9 +181,24 @@ const TOWER_MODEL_MUZZLES = {
 ## -0.105 CONSISTENTLY across every dense slice (n=149/74/71/42), which is the "rear-balanced
 ## turret" the concept brief calls for — the pivot sits behind the cannons so the long barrels
 ## counterweight. Contrast the Sentry Spire, whose apparent offset was slice noise.
+##
+## The Y COMPONENT IS NOT OPTIONAL for any model whose crown PITCHES (i.e. one with no
+## separate "_barrels" group — T1 and T2). Yaw is height-independent, so a y=0 pivot was
+## harmless while the crowns only rotated, and the original bastion verification only ever
+## exercised yaw. Once `_update_aim` gained elevation, a y=0 pivot began pitching the whole
+## crown about the tower's BASE: the Sentry Spire's crown sits ~54u up, so at the -55°..+50°
+## pitch limits it swung through an arc tens of units wide and visibly slid off the tower.
+## Set y to the crown's SEAM (its lowest vertex, where it meets the hull) so it tilts in its
+## collar instead of orbiting the footing. Measured from each GLB's crown primitive:
+##   Sentry Spire  crown y 1.5135..1.8939  -> seam 1.5135
+##   Plasma Bastion crown y 1.0280..1.4563 -> seam 1.0280
+## x/z stay ZERO for T1/T2 — the crown's bottom band centres on x +0.0016 / z +0.0127, i.e.
+## genuinely on-axis; only the Siege Foundry has a real rear-balanced z offset.
 const TOWER_MODEL_TURRET_PIVOT = {
-	"res://resources/towers/architects_t1.tres": Vector3.ZERO,
-	"res://resources/towers/architects_t2.tres": Vector3.ZERO,
+	"res://resources/towers/architects_t1.tres": Vector3(0.0, 1.5135, 0.0),
+	"res://resources/towers/architects_t2.tres": Vector3(0.0, 1.0280, 0.0),
+	## T3 pitches its BARRELS about the trunnion, not the crown, so the housing never leaves
+	## its collar and the turret node only yaws — a y pivot is unnecessary here.
 	"res://resources/towers/architects_t3.tres": Vector3(0.0, 0.0, -0.105),
 }
 

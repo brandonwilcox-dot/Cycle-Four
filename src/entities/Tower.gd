@@ -538,10 +538,16 @@ func _aim_pitch_to(tpos: Vector2) -> float:
 	return clampf(-atan2(vy0, vx0), AIM_PITCH_MIN, AIM_PITCH_MAX)
 
 ## Muzzle height above the tower's ground plane, taken at rest so it doesn't chase the pitch.
+##
+## Muzzles are stored RELATIVE to whichever node carries them, so rebuilding the absolute
+## height means adding every offset back: the barrel group's own origin (when the model has
+## one) AND the turret pivot. The pivot term used to be omissible because every pivot was
+## y=0; it no longer is, and without it a raised pivot silently under-reports muzzle height,
+## which feeds `_aim_pitch_to` a wrong `rise` and mis-aims every shot.
 func _muzzle_height() -> float:
 	if _muzzles.is_empty():
 		return _base_height
-	return float(_muzzles[0].y) + (_barrel_origin.y if _barrels != null else 0.0)
+	return float(_muzzles[0].y) + (_barrel_origin.y if _barrels != null else 0.0) + _turret_origin.y
 
 ## Recursive case-insensitive node-name search (finds "bastion_crown" from "crown").
 func _find_child_named(node: Node, needle: String) -> Node3D:
